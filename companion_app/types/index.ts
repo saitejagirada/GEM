@@ -187,7 +187,7 @@ export interface BidMatchEvaluation {
 // Module 6: Zero-PDF Instant Bid Fundamentals Model
 // -------------------------------------------------------------------------
 
-export type BidDocType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ';
+export type BidDocType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ' | 'RA';
 export type MiiClass = 'CLASS_1' | 'CLASS_2' | 'NON_LOCAL';
 
 export interface BoqLineItem {
@@ -205,12 +205,22 @@ export interface ConsigneeDestination {
   reportingOfficer?: string;
 }
 
+export interface ServiceContractDetails {
+  durationMonths: number;
+  manpowerCount?: number;
+  billingCycle?: string;
+  minimumWageCompliance?: boolean;
+}
+
 export interface DeconstructedBidDoc {
   bidNumber: string;
   title: string;
   department: string;
   ministry: string;
   type: BidDocType;
+  categoryDomain?: string; // e.g. "IT & Telecom", "Services & Manpower", "Defence & Security"
+  isRa?: boolean;
+  serviceDetails?: ServiceContractDetails;
   estimatedBidValueInr?: number;
   emdAmountInr: number;
   isEmdExemptForMse: boolean;
@@ -258,6 +268,10 @@ export interface ForwardAuctionLot {
 
 export interface MarketPulseStats {
   totalBidsToday: number;
+  productBidsCount?: number;
+  serviceBidsCount?: number;
+  boqBidsCount?: number;
+  customTendersCount?: number;
   liveReverseAuctions: number;
   liveForwardAuctions: number;
   closingIn24Hours: number;

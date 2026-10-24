@@ -10,6 +10,7 @@
 
 import type {
   DeconstructedBidDoc,
+  BidDocType,
   AuctionItem,
   ParticipatedBid,
   UserAgentProfile,
@@ -33,6 +34,7 @@ export interface SupabaseTender {
   ministry: string;
   department: string;
   bid_type: string;
+  category_domain?: string;
   estimated_value: number | null;
   emd_amount: number;
   emd_exemption_mse: boolean;
@@ -277,6 +279,8 @@ export class SupabaseClient {
   public static async getTenders(params?: {
     search?: string;
     state?: string;
+    bidType?: BidDocType | 'ALL';
+    categoryDomain?: string;
     limit?: number;
   }): Promise<DeconstructedBidDoc[]> {
     const limit = params?.limit ?? 50;
@@ -302,6 +306,20 @@ export class SupabaseClient {
         );
       }
 
+      if (params?.bidType && params.bidType !== 'ALL') {
+        const targetType = params.bidType;
+        filtered = filtered.filter((b) => b.type === targetType || (targetType === 'RA' && b.isRa));
+      }
+
+      if (params?.categoryDomain && params.categoryDomain !== 'All Domains') {
+        const cat = params.categoryDomain.toLowerCase();
+        filtered = filtered.filter((b) =>
+          (b.categoryDomain && b.categoryDomain.toLowerCase().includes(cat)) ||
+          b.title.toLowerCase().includes(cat) ||
+          b.ministry.toLowerCase().includes(cat)
+        );
+      }
+
       return filtered.slice(0, limit);
     }
 
@@ -312,12 +330,23 @@ export class SupabaseClient {
     searchParams.append('limit', String(limit));
 
     if (params?.search) {
-      // Use PostgreSQL websearch_to_tsquery or ilike
       searchParams.append('title', `ilike.*${params.search}*`);
     }
 
     if (params?.state) {
       searchParams.append('consignee_states', `cs.{${params.state}}`);
+    }
+
+    if (params?.bidType && params.bidType !== 'ALL') {
+      if (params.bidType === 'RA') {
+        searchParams.append('or', '(bid_type.eq.RA,bid_number.ilike.*RA*)');
+      } else {
+        searchParams.append('bid_type', `eq.${params.bidType}`);
+      }
+    }
+
+    if (params?.categoryDomain && params.categoryDomain !== 'All Domains') {
+      searchParams.append('category_domain', `ilike.*${params.categoryDomain}*`);
     }
 
     const rows = await this.safePostgrestFetch<any[]>(
@@ -743,6 +772,8 @@ export class SupabaseClient {
       department: row.department,
       ministry: row.ministry,
       type: row.bid_type,
+      categoryDomain: row.category_domain || 'General Goods & Supplies',
+      isRa: row.bid_type === 'RA' || Boolean(row.is_ra) || (row.bid_number && row.bid_number.includes('/R/')),
       estimatedBidValueInr: row.estimated_value ? Number(row.estimated_value) : undefined,
       emdAmountInr: Number(row.emd_amount ?? 0),
       isEmdExemptForMse: Boolean(row.emd_exemption_mse),

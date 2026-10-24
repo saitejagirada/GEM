@@ -36,14 +36,23 @@ def get_market_pulse():
 
 @portal_bp.route('/feed', methods=['GET'])
 def get_feed():
-    """Returns ranked tenders with AI fit scoring and category filtering."""
+    """Returns ranked opportunities with AI fit scoring, procurement type, and category filtering."""
     user_id = request.args.get('userId')
+    bid_type = request.args.get('bidType')
+    domain_category = request.args.get('domainCategory')
     category = request.args.get('category')
     state = request.args.get('state')
     min_score_raw = request.args.get('minScore')
     min_score = int(min_score_raw) if min_score_raw and min_score_raw.isdigit() else None
 
-    bids = GemPortalService.get_feed(user_id=user_id, category=category, state=state, min_score=min_score)
+    bids = GemPortalService.get_feed(
+        user_id=user_id,
+        bid_type=bid_type,
+        domain_category=domain_category,
+        category=category,
+        state=state,
+        min_score=min_score
+    )
     return jsonify({"success": True, "count": len(bids), "data": bids})
 
 

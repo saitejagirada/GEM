@@ -8,6 +8,7 @@ import {
   Modal,
   Alert,
   Share,
+  Linking,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
@@ -62,6 +63,65 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       onAddToParticipated(bid);
     }
     Alert.alert('Tracked in History', `Bid ${bid.bidNumber} added to your Participated Submissions.`);
+  };
+
+  const handleOpenDoc = () => {
+    if (!bid.docUrl) {
+      Alert.alert('Notice', 'No official document link available for this bid.');
+      return;
+    }
+    const isSafeGemUrl = bid.docUrl.startsWith('https://bidplus.gem.gov.in') || bid.docUrl.startsWith('https://gem.gov.in');
+    if (!isSafeGemUrl) {
+      Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
+      return;
+    }
+    Linking.canOpenURL(bid.docUrl)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(bid.docUrl);
+        } else {
+          Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}`);
+        }
+      })
+      .catch(() => {
+        Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}`);
+      });
+  };
+
+  const renderTypeBadge = () => {
+    if (bid.isRa || bid.type === 'RA') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>⚡ REVERSE AUCTION</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'SERVICE') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>🛠️ SERVICE CONTRACT</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'CUSTOM') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#D97706' }]}>📑 CUSTOM TENDER</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'BOQ') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#7C3AED' }]}>📊 BOQ TENDER</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.typeBadge, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+        <Text style={[styles.typeBadgeText, { color: '#2563EB' }]}>📦 PRODUCT BID</Text>
+      </View>
+    );
   };
 
   const checkedCount = bid.requiredDocuments.filter((d) => checkedDocs[d]).length;
@@ -170,10 +230,57 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
           {/* Tender Title & Ministry */}
           <View style={styles.card}>
+            <View style={styles.cardHeaderBadges}>
+              {renderTypeBadge()}
+              {bid.categoryDomain ? (
+                <View style={styles.domainBadge}>
+                  <Text style={styles.domainBadgeText}>{bid.categoryDomain}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={styles.deptBadge}>{bid.department}</Text>
             <Text style={styles.bidTitle}>{bid.title}</Text>
             <Text style={styles.ministryText}>{bid.ministry}</Text>
           </View>
+
+          {/* Service Contract Terms & SLA Standards */}
+          {(bid.serviceDetails || bid.type === 'SERVICE') && (
+            <View style={[styles.card, styles.serviceCard]}>
+              <View style={styles.serviceHeader}>
+                <Text style={styles.serviceHeaderTitle}>🛠️ Service Contract Terms &amp; SLAs</Text>
+                <Text style={styles.serviceSlaBadge}>GeM SLA Governed</Text>
+              </View>
+              <View style={styles.serviceGrid}>
+                <View style={styles.serviceCell}>
+                  <Text style={styles.serviceCellLabel}>Contract Duration</Text>
+                  <Text style={styles.serviceCellValue}>
+                    {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : '12 Months'}
+                  </Text>
+                </View>
+                <View style={styles.serviceCell}>
+                  <Text style={styles.serviceCellLabel}>Manpower / Staffing</Text>
+                  <Text style={styles.serviceCellValue}>
+                    {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'As per Scope'}
+                  </Text>
+                </View>
+                <View style={styles.serviceCell}>
+                  <Text style={styles.serviceCellLabel}>Billing Cycle</Text>
+                  <Text style={styles.serviceCellValue}>
+                    {bid.serviceDetails?.billingCycle || 'Monthly Invoice'}
+                  </Text>
+                </View>
+                <View style={styles.serviceCell}>
+                  <Text style={styles.serviceCellLabel}>Statutory Compliance</Text>
+                  <Text style={[styles.serviceCellValue, { color: '#059669' }]}>
+                    {bid.serviceDetails?.minimumWageCompliance !== false ? 'Central Min Wages Act' : 'Standard'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.serviceNote}>
+                • Monthly billing subject to attendance muster roll &amp; PF/ESI challan verification prior to CRAC sign-off.
+              </Text>
+            </View>
+          )}
 
           {/* Expected Winning L1 Benchmark Range */}
           <View style={styles.benchmarkCard}>
@@ -314,7 +421,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.officialLinkBtn}
-            onPress={() => Alert.alert('GeM Official Portal', `Direct official link: ${bid.docUrl}`)}
+            onPress={handleOpenDoc}
             activeOpacity={0.8}
           >
             <Text style={styles.officialLinkText}>Open GeM ↗</Text>
@@ -579,4 +686,90 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   copyProofBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  cardHeaderBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  domainBadge: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  domainBadgeText: {
+    color: '#374151',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  serviceCard: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  serviceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  serviceHeaderTitle: {
+    color: '#166534',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  serviceSlaBadge: {
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  serviceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  serviceCell: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  serviceCellLabel: {
+    color: '#6B7280',
+    fontSize: 10,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  serviceCellValue: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  serviceNote: {
+    color: '#15803D',
+    fontSize: 11,
+    lineHeight: 15,
+    fontStyle: 'italic',
+  },
 });

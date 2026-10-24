@@ -76,4 +76,13 @@ describe('BidDocService', () => {
     expect(completeVerification.completed).toBe(true);
     expect(completeVerification.missingDocs.length).toBe(0);
   });
+
+  it('correctly classifies all 5 GeM procurement vehicle types', () => {
+    expect(BidDocService.getProcurementTypeLabel(sampleBid).label).toBe('Product Bid');
+    expect(BidDocService.getProcurementTypeLabel({ ...sampleBid, type: 'SERVICE' }).label).toBe('Service Contract');
+    expect(BidDocService.getProcurementTypeLabel({ ...sampleBid, type: 'CUSTOM' }).label).toBe('Custom Tender');
+    expect(BidDocService.getProcurementTypeLabel({ ...sampleBid, type: 'BOQ' }).label).toBe('BOQ Tender');
+    expect(BidDocService.getProcurementTypeLabel({ ...sampleBid, type: 'RA' }).label).toBe('Reverse Auction');
+    expect(BidDocService.getProcurementTypeLabel({ ...sampleBid, isRa: true }).isRa).toBe(true);
+  });
 });

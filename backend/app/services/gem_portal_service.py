@@ -11,12 +11,23 @@ from datetime import datetime, timezone, timedelta
 class GemPortalService:
     """Service providing deconstructed GeM bids, auctions, and portfolio intelligence."""
 
-    @staticmethod
-    def get_market_pulse() -> Dict[str, int]:
-        """Returns glanceable market volume metrics."""
+    @classmethod
+    def get_market_pulse(cls) -> Dict[str, Any]:
+        """Returns glanceable market volume metrics across all procurement types."""
+        bids = cls.get_mock_bids()
+        product_count = sum(1 for b in bids if b.get("bid_type") == "PRODUCT")
+        service_count = sum(1 for b in bids if b.get("bid_type") == "SERVICE")
+        boq_count = sum(1 for b in bids if b.get("bid_type") == "BOQ")
+        custom_count = sum(1 for b in bids if b.get("bid_type") == "CUSTOM")
+        ra_count = sum(1 for b in bids if b.get("is_ra") or b.get("bid_type") == "RA")
+
         return {
-            "totalBidsToday": 1420,
-            "liveReverseAuctions": 18,
+            "totalBidsToday": len(bids) if len(bids) > 10 else 1420,
+            "productBidsCount": product_count if product_count > 0 else 840,
+            "serviceBidsCount": service_count if service_count > 0 else 312,
+            "boqBidsCount": boq_count if boq_count > 0 else 165,
+            "customTendersCount": custom_count if custom_count > 0 else 103,
+            "liveReverseAuctions": ra_count if ra_count > 0 else 18,
             "liveForwardAuctions": 9,
             "closingIn24Hours": 34,
             "zeroEmdBids": 812,
@@ -183,12 +194,34 @@ class GemPortalService:
     def get_feed(
         cls,
         user_id: Optional[str] = None,
+        bid_type: Optional[str] = None,
+        domain_category: Optional[str] = None,
         category: Optional[str] = None,
         state: Optional[str] = None,
         min_score: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Filters and ranks tenders based on match criteria."""
+        """Filters and ranks opportunities based on procurement type and category criteria."""
         bids = cls.get_mock_bids()
+
+        if bid_type and bid_type.upper() != "ALL":
+            bt = bid_type.upper().strip()
+            if bt == "RA":
+                bids = [b for b in bids if b.get("is_ra") or b.get("bid_type") == "RA" or b.get("type") == "RA"]
+            else:
+                bids = [
+                    b for b in bids
+                    if b.get("type", "").upper() == bt or b.get("bid_type", "").upper() == bt
+                ]
+
+        if domain_category and domain_category.upper() != "ALL":
+            dc = domain_category.lower().strip()
+            bids = [
+                b for b in bids
+                if dc in b.get("categoryDomain", "").lower()
+                or dc in b.get("category_domain", "").lower()
+                or dc in b.get("title", "").lower()
+                or dc in b.get("ministry", "").lower()
+            ]
 
         if category:
             cat = category.lower().strip()

@@ -106,4 +106,28 @@ export class BidDocService {
       missingDocs: missing,
     };
   }
+
+  /**
+   * Returns human-friendly badge label and metadata for procurement vehicle type.
+   */
+  public static getProcurementTypeLabel(bid: DeconstructedBidDoc): {
+    code: 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ' | 'RA';
+    label: string;
+    isRa: boolean;
+  } {
+    if (bid.isRa || bid.type === 'RA') {
+      return { code: 'RA', label: 'Reverse Auction', isRa: true };
+    }
+    if (bid.type === 'SERVICE') {
+      return { code: 'SERVICE', label: 'Service Contract', isRa: false };
+    }
+    if (bid.type === 'CUSTOM') {
+      return { code: 'CUSTOM', label: 'Custom Tender', isRa: false };
+    }
+    if (bid.type === 'BOQ') {
+      return { code: 'BOQ', label: 'BOQ Tender', isRa: false };
+    }
+    return { code: 'PRODUCT', label: 'Product Bid', isRa: false };
+  }
 }
+

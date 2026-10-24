@@ -173,4 +173,18 @@ describe('SupabaseClient', () => {
     expect(portfolio.some((b) => b.bidNumber === 'GEMC-511687712001')).toBe(true);
     expect(portfolio.some((b) => b.bidNumber === 'GEMC-511687712005')).toBe(true);
   });
+
+  it('filters opportunities by procurement type and domain category', async () => {
+    // Test SERVICE filter
+    const serviceBids = await SupabaseClient.getTenders({ bidType: 'SERVICE' });
+    expect(serviceBids.length).toBeGreaterThan(0);
+    expect(serviceBids.every((b) => b.type === 'SERVICE')).toBe(true);
+    expect(serviceBids.some((b) => b.bidNumber === 'GEM/2026/B/8124130')).toBe(true);
+
+    // Test Domain Category filter
+    const manpowerBids = await SupabaseClient.getTenders({ categoryDomain: 'Services & Manpower' });
+    expect(manpowerBids.length).toBeGreaterThan(0);
+    expect(manpowerBids[0].categoryDomain).toBe('Services & Manpower');
+  });
 });
+

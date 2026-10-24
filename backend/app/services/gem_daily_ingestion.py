@@ -145,7 +145,86 @@ class GemDailyIngestion:
         opening_times = doc.get("final_start_date_sort", [])
         opening_time = opening_times[0] if opening_times else datetime.now(timezone.utc).isoformat()
 
-        is_ra = bool(doc.get("b_bid_to_ra", [0])[0] or "RA" in bid_number)
+        # Step A: Determine exact GeM procurement type: PRODUCT, SERVICE, BOQ, CUSTOM, RA
+        b_type_val = doc.get("b_type", [0])
+        b_type_code = b_type_val[0] if isinstance(b_type_val, list) and b_type_val else (b_type_val if isinstance(b_type_val, int) else 0)
+        cat_ids = doc.get("b_cat_id", [""])
+        b_cat_id = str(cat_ids[0] if isinstance(cat_ids, list) and cat_ids else cat_ids).lower()
+        is_custom_item = bool(doc.get("b_is_custom_item", [0])[0] if isinstance(doc.get("b_is_custom_item"), list) else doc.get("b_is_custom_item", False))
+        is_boq_flag = bool(
+            (doc.get("bd_details_is_boq", [False])[0] if isinstance(doc.get("bd_details_is_boq"), list) else doc.get("bd_details_is_boq", False))
+            or "boq" in b_cat_id
+            or "/r/" in bid_number.lower()
+        )
+        is_service_flag = (
+            b_type_code == 1
+            or b_cat_id.startswith("services_")
+            or any(kw in title.lower() for kw in [
+                "service", "outsourcing", "manpower", "cleaning", "security",
+                "housekeeping", "painting", "maintenance", "overhauling",
+                "hiring", "canteen", "catering", "gardening"
+            ])
+        )
+        is_ra = bool(
+            (doc.get("b_bid_to_ra", [0])[0] if isinstance(doc.get("b_bid_to_ra"), list) else doc.get("b_bid_to_ra", 0))
+            or "RA" in bid_number
+            or (doc.get("b_bid_type", [1])[0] if isinstance(doc.get("b_bid_type"), list) else doc.get("b_bid_type", 1)) == 2
+        )
+
+        if is_service_flag:
+            bid_doc_type = "SERVICE"
+        elif is_boq_flag:
+            bid_doc_type = "BOQ"
+        elif is_custom_item or "custom" in title.lower():
+            bid_doc_type = "CUSTOM"
+        elif is_ra:
+            bid_doc_type = "RA"
+        else:
+            bid_doc_type = "PRODUCT"
+
+        # Step B: Categorize into industry domain
+        title_lower = title.lower()
+        min_lower = ministry.lower()
+
+        if any(w in title_lower or w in min_lower for w in ["laptop", "tablet", "computer", "router", "switch", "server", "telecom", "optical fiber", "software", "ups", "hardware kit", "electronics", "ntp", "clock"]):
+            domain_category = "IT & Telecom"
+        elif any(w in title_lower for w in ["manpower", "outsourcing", "security guard", "housekeeping", "sanitation", "hiring", "driver", "canteen", "catering", "gardening"]):
+            domain_category = "Services & Manpower"
+        elif any(w in title_lower or w in min_lower for w in ["defence", "military", "army", "navy", "air force", "bsf", "crpf", "police", "gun", "ammunition", "tactical", "fire", "extinguisher", "breathing"]):
+            domain_category = "Defence & Security"
+        elif any(w in title_lower or w in min_lower for w in ["solar", "power", "electricity", "transformer", "energy", "led", "lighting", "luminaire", "battery", "generator", "diesel generator"]):
+            domain_category = "Power & Solar Energy"
+        elif any(w in title_lower or w in min_lower for w in ["medical", "health", "hospital", "patient", "icu", "pharma", "medicine", "drug", "surgical", "diagnostic"]):
+            domain_category = "Medical & Healthcare"
+        elif any(w in title_lower or w in min_lower for w in ["railway", "train", "wagon", "locomotive", "track", "vehicle", "car", "truck", "bus", "transport", "ev", "ambulance", "tractor"]):
+            domain_category = "Railways & Transport"
+        elif any(w in title_lower for w in ["container", "civil", "construction", "repair", "overhauling", "maintenance", "pump", "fastener", "pipe", "steel", "fitting", "painting", "pulley", "stopper"]):
+            domain_category = "Civil & Industrial Works"
+        else:
+            domain_category = "General Goods & Supplies"
+
+        service_details = None
+        if bid_doc_type == "SERVICE":
+            service_details = {
+                "durationMonths": 12,
+                "manpowerCount": quantity if quantity > 1 else 10,
+                "billingCycle": "Monthly upon SLA verification",
+                "minimumWageCompliance": True,
+            }
+            required_docs = [
+                "Udyam Registration Certificate (MSE)",
+                "Minimum Wages & EPF/ESI Compliance Undertaking",
+                "Valid Labor License for Consignee State",
+                "Past Service Performance Certificates (3 Contracts)",
+                "CA Certified Annual Turnover Certificate",
+            ]
+        else:
+            required_docs = [
+                "Udyam MSE Registration Certificate",
+                "Past Performance Invoices",
+                "OEM Authorization (MAF)",
+                "CA Certified Annual Turnover Certificate",
+            ]
 
         # Realistic value estimation based on quantity & item type
         estimated_val = max(500000.0, float(quantity * 15000))
@@ -157,8 +236,11 @@ class GemDailyIngestion:
             "title": title,
             "ministry": ministry,
             "department": dept,
-            "type": "PRODUCT" if not is_ra else "CUSTOM",
-            "bid_type": "PRODUCT" if not is_ra else "CUSTOM",
+            "type": bid_doc_type,
+            "bid_type": bid_doc_type,
+            "categoryDomain": domain_category,
+            "category_domain": domain_category,
+            "serviceDetails": service_details,
             "estimatedBidValueInr": estimated_val,
             "estimated_value": estimated_val,
             "emdAmountInr": emd_amt,
@@ -169,7 +251,7 @@ class GemDailyIngestion:
             "minAnnualTurnoverInr": max(500000.0, estimated_val * 0.4),
             "yearsExperienceRequired": 2,
             "pastPerformancePercentage": 20.0,
-            "deliveryPeriodDays": 30,
+            "deliveryPeriodDays": 30 if bid_doc_type != "SERVICE" else 365,
             "closingTimeUtc": closing_time,
             "closing_datetime": closing_time,
             "openingTimeUtc": opening_time,
@@ -183,7 +265,7 @@ class GemDailyIngestion:
                 {
                     "itemTitle": title,
                     "quantity": quantity,
-                    "unit": "Units",
+                    "unit": "Units" if bid_doc_type != "SERVICE" else "Personnel/Months",
                     "specsSummary": f"Official GeM specification compliant with {dept} standards",
                 }
             ],
@@ -195,11 +277,7 @@ class GemDailyIngestion:
                     "quantity": quantity,
                 }
             ],
-            "requiredDocuments": [
-                "Udyam MSE Registration Certificate",
-                "Past Performance Invoices",
-                "OEM Authorization (MAF)",
-            ],
+            "requiredDocuments": required_docs,
             "splittingRatio": "100% to L1" if not is_ra else "70:30 MSE Preference",
             "makeInIndiaClass": "CLASS_1",
             "matchScore": 85,
@@ -239,7 +317,7 @@ class GemDailyIngestion:
                 "title": b["title"],
                 "ministry": b["ministry"],
                 "department": b["department"],
-                "bid_type": b["bid_type"],
+                "bid_type": b["bid_type"] if b["bid_type"] in ("PRODUCT", "SERVICE", "BOQ", "CUSTOM") else "CUSTOM",
                 "estimated_value": b["estimated_value"],
                 "emd_amount": b["emd_amount"],
                 "emd_exemption_mse": b["emd_exemption_mse"],

@@ -30,7 +30,27 @@ interface PhonePeHomeScreenProps {
   lastSyncedTime?: string;
 }
 
-const FEED_CATEGORIES = ['All', 'Defence', 'Railways', 'Medical', 'Power', 'Electronics'];
+type ProcurementTypeTab = 'ALL' | 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ' | 'RA';
+
+const PROCUREMENT_TABS: Array<{ key: ProcurementTypeTab; label: string; icon: string }> = [
+  { key: 'ALL', label: 'All Opportunities', icon: '✨' },
+  { key: 'PRODUCT', label: 'Product Bids', icon: '📦' },
+  { key: 'SERVICE', label: 'Service Contracts', icon: '🛠️' },
+  { key: 'CUSTOM', label: 'Custom Tenders', icon: '📑' },
+  { key: 'BOQ', label: 'BOQ Bids', icon: '📊' },
+  { key: 'RA', label: 'Reverse Auctions', icon: '⚡' },
+];
+
+const DOMAIN_CATEGORIES = [
+  'All Domains',
+  'IT & Telecom',
+  'Services & Manpower',
+  'Defence & Security',
+  'Power & Solar Energy',
+  'Medical & Healthcare',
+  'Railways & Transport',
+  'Civil & Industrial Works',
+];
 
 export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   userProfile,
@@ -48,16 +68,97 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   lastSyncedTime,
 }) => {
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
-  const [selectedFeedFilter, setSelectedFeedFilter] = useState<string>('All');
+  const [selectedProcurementType, setSelectedProcurementType] = useState<ProcurementTypeTab>('ALL');
+  const [selectedDomainCategory, setSelectedDomainCategory] = useState<string>('All Domains');
 
   const filteredBids = bids.filter((bid) => {
-    if (selectedFeedFilter === 'All') return true;
-    const catLower = selectedFeedFilter.toLowerCase();
-    const titleMatch = (bid.title || '').toLowerCase().includes(catLower);
-    const minMatch = (bid.ministry || '').toLowerCase().includes(catLower);
-    const deptMatch = (bid.department || '').toLowerCase().includes(catLower);
-    return titleMatch || minMatch || deptMatch;
+    // 1. Procurement Type Filter
+    if (selectedProcurementType !== 'ALL') {
+      if (selectedProcurementType === 'RA') {
+        if (!bid.isRa && bid.type !== 'RA') return false;
+      } else if (bid.type !== selectedProcurementType) {
+        return false;
+      }
+    }
+
+    // 2. Domain Category Filter
+    if (selectedDomainCategory !== 'All Domains') {
+      const catLower = selectedDomainCategory.toLowerCase();
+      const domainMatch = (bid.categoryDomain || '').toLowerCase().includes(catLower);
+      const titleMatch = (bid.title || '').toLowerCase().includes(catLower);
+      const minMatch = (bid.ministry || '').toLowerCase().includes(catLower);
+      const deptMatch = (bid.department || '').toLowerCase().includes(catLower);
+      if (!domainMatch && !titleMatch && !minMatch && !deptMatch) return false;
+    }
+
+    return true;
   });
+
+  const typeCounts = {
+    ALL: bids.length,
+    PRODUCT: bids.filter((b) => b.type === 'PRODUCT').length,
+    SERVICE: bids.filter((b) => b.type === 'SERVICE').length,
+    CUSTOM: bids.filter((b) => b.type === 'CUSTOM').length,
+    BOQ: bids.filter((b) => b.type === 'BOQ').length,
+    RA: bids.filter((b) => b.isRa || b.type === 'RA').length,
+  };
+
+  const handleOpenDoc = (url?: string, bidNumber?: string) => {
+    if (!url) return;
+    // Security audit: strictly whitelist official GeM domains
+    const isSafeGemUrl = url.startsWith('https://bidplus.gem.gov.in') || url.startsWith('https://gem.gov.in');
+    if (!isSafeGemUrl) {
+      Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
+      return;
+    }
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber}\n\nDocument Link:\n${url}`);
+        }
+      })
+      .catch(() => {
+        Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber}\n\nDocument Link:\n${url}`);
+      });
+  };
+
+  const renderTypeBadge = (bid: DeconstructedBidDoc) => {
+    if (bid.isRa || bid.type === 'RA') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>⚡ REVERSE AUCTION</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'SERVICE') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>🛠️ SERVICE CONTRACT</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'CUSTOM') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#D97706' }]}>📑 CUSTOM TENDER</Text>
+        </View>
+      );
+    }
+    if (bid.type === 'BOQ') {
+      return (
+        <View style={[styles.typeBadge, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' }]}>
+          <Text style={[styles.typeBadgeText, { color: '#7C3AED' }]}>📊 BOQ TENDER</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.typeBadge, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+        <Text style={[styles.typeBadgeText, { color: '#2563EB' }]}>📦 PRODUCT BID</Text>
+      </View>
+    );
+  };
 
   const featuredBid = bids[0];
   const acceptedOrders: AcceptedOrder[] =
@@ -307,15 +408,15 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
         </View>
       </View>
 
-      {/* SECTION 4: Live GeM Tenders Feed (Matched For You) */}
+      {/* SECTION 4: Live GeM Opportunities Feed (Bids, Services, Custom & RAs) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionTitle}>Live GeM Tenders Feed</Text>
-            <Text style={styles.sectionSubTitle}>Auto-matched with CVC Past Performance</Text>
+            <Text style={styles.sectionTitle}>Live GeM Opportunities</Text>
+            <Text style={styles.sectionSubTitle}>Bids, Service Contracts, Custom Tenders &amp; RAs</Text>
           </View>
           <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>{bids.length} Active Today</Text>
+            <Text style={styles.headerBadgeText}>{filteredBids.length} Matched</Text>
           </View>
         </View>
 
@@ -326,9 +427,9 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
               <View style={styles.liveGreenDot} />
               <Text style={styles.portalSyncTag}>PUBLIC PORTAL SYNC (GEM.GOV.IN)</Text>
             </View>
-            <Text style={styles.portalSyncTitle}>Auto-Ingested Daily Government Bids</Text>
+            <Text style={styles.portalSyncTitle}>Auto-Ingested Daily Government Opportunities</Text>
             <Text style={styles.portalSyncSub}>
-              {lastSyncedTime ? `Synced: ${lastSyncedTime}` : 'Synced with bidplus.gem.gov.in'} • {bids.length} Active Public Tenders
+              {lastSyncedTime ? `Synced: ${lastSyncedTime}` : 'Synced with bidplus.gem.gov.in'} • {bids.length} Active Public Bids &amp; Tenders
             </Text>
           </View>
           <TouchableOpacity
@@ -343,20 +444,51 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Quick Category Filter Chips */}
+        {/* Top Procurement Type Tabs Bar */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.procurementTabsScroll}
+          contentContainerStyle={styles.procurementTabsRow}
+        >
+          {PROCUREMENT_TABS.map((tab) => {
+            const isActive = selectedProcurementType === tab.key;
+            const count = typeCounts[tab.key];
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.procurementTab, isActive && styles.procurementTabActive]}
+                onPress={() => setSelectedProcurementType(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.procurementTabIcon}>{tab.icon}</Text>
+                <Text style={[styles.procurementTabText, isActive && styles.procurementTabTextActive]}>
+                  {tab.label}
+                </Text>
+                <View style={[styles.procurementCountBadge, isActive && styles.procurementCountBadgeActive]}>
+                  <Text style={[styles.procurementCountText, isActive && styles.procurementCountTextActive]}>
+                    {count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Industry Domain Filter Chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterChipsScroll}
           contentContainerStyle={styles.filterChipsRow}
         >
-          {FEED_CATEGORIES.map((cat) => {
-            const isActive = selectedFeedFilter === cat;
+          {DOMAIN_CATEGORIES.map((cat) => {
+            const isActive = selectedDomainCategory === cat;
             return (
               <TouchableOpacity
                 key={cat}
                 style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setSelectedFeedFilter(cat)}
+                onPress={() => setSelectedDomainCategory(cat)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
@@ -367,36 +499,45 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           })}
         </ScrollView>
 
-        {/* Tender Cards */}
+        {/* Opportunity Cards */}
         {filteredBids.length === 0 ? (
           <View style={styles.emptyFilterState}>
-            <Text style={styles.emptyFilterText}>No live tenders found for &quot;{selectedFeedFilter}&quot;</Text>
+            <Text style={styles.emptyFilterText}>
+              No opportunities found for &quot;{selectedProcurementType !== 'ALL' ? selectedProcurementType : ''} {selectedDomainCategory}&quot;
+            </Text>
             <TouchableOpacity
               style={styles.resetFilterBtn}
-              onPress={() => setSelectedFeedFilter('All')}
+              onPress={() => {
+                setSelectedProcurementType('ALL');
+                setSelectedDomainCategory('All Domains');
+              }}
               activeOpacity={0.7}
             >
-              <Text style={styles.resetFilterBtnText}>Show All Categories</Text>
+              <Text style={styles.resetFilterBtnText}>Reset All Filters</Text>
             </TouchableOpacity>
           </View>
         ) : (
           filteredBids.map((bid) => {
             const evalResult = UserAgentService.evaluateBid(userProfile, bid);
             const pastMatch = evalResult.pastExperienceMatch;
+            const isService = bid.type === 'SERVICE';
 
             return (
               <View key={bid.bidNumber} style={styles.tenderFeedCard}>
-                {/* Header: Bid # & Ministry */}
+                {/* Header: Type Badge + Bid # */}
                 <View style={styles.tenderFeedHeader}>
+                  {renderTypeBadge(bid)}
                   <Text style={styles.tenderBidNumber}>{bid.bidNumber}</Text>
-                  <Text style={styles.tenderDepartment} numberOfLines={1}>
-                    {bid.department}
-                  </Text>
                 </View>
 
                 {/* Title */}
                 <Text style={styles.tenderTitle} numberOfLines={2}>
                   {bid.title}
+                </Text>
+
+                {/* Buyer & Domain Subtitle */}
+                <Text style={styles.tenderDepartment} numberOfLines={1}>
+                  {bid.department} • {bid.categoryDomain || bid.ministry}
                 </Text>
 
                 {/* 3 Metric Pills */}
@@ -414,10 +555,21 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                     </Text>
                   </View>
                   <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>DELIVERY</Text>
-                    <Text style={styles.metricValue}>{bid.deliveryPeriodDays} Days</Text>
+                    <Text style={styles.metricLabel}>{isService ? 'DURATION' : 'DELIVERY'}</Text>
+                    <Text style={styles.metricValue}>
+                      {isService ? `${bid.serviceDetails?.durationMonths || 12} Mos` : `${bid.deliveryPeriodDays} Days`}
+                    </Text>
                   </View>
                 </View>
+
+                {/* Service Contract Special Details Pill */}
+                {isService && bid.serviceDetails ? (
+                  <View style={styles.serviceMetaPill}>
+                    <Text style={styles.serviceMetaPillText}>
+                      👥 Manpower: {bid.serviceDetails.manpowerCount || 10} Personnel • {bid.serviceDetails.billingCycle || 'Monthly SLA Verification'}
+                    </Text>
+                  </View>
+                ) : null}
 
                 {/* CVC Experience Match Badge */}
                 {pastMatch?.eligible ? (
@@ -451,27 +603,7 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                   {bid.docUrl ? (
                     <TouchableOpacity
                       style={styles.portalPdfBtn}
-                      onPress={() => {
-                        if (bid.docUrl) {
-                          Linking.canOpenURL(bid.docUrl)
-                            .then((supported) => {
-                              if (supported) {
-                                Linking.openURL(bid.docUrl!);
-                              } else {
-                                Alert.alert(
-                                  'Official GeM Portal Document',
-                                  `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
-                                );
-                              }
-                            })
-                            .catch(() => {
-                              Alert.alert(
-                                'Official GeM Portal Document',
-                                `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
-                              );
-                            });
-                        }
-                      }}
+                      onPress={() => handleOpenDoc(bid.docUrl, bid.bidNumber)}
                       activeOpacity={0.8}
                     >
                       <Text style={styles.portalPdfBtnText}>GeM Doc 📄</Text>
@@ -1086,5 +1218,82 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  procurementTabsScroll: {
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  procurementTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  procurementTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  procurementTabActive: {
+    backgroundColor: '#5F259F',
+    borderColor: '#5F259F',
+  },
+  procurementTabIcon: {
+    fontSize: 14,
+  },
+  procurementTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  procurementTabTextActive: {
+    color: '#FFFFFF',
+  },
+  procurementCountBadge: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  procurementCountBadgeActive: {
+    backgroundColor: '#4C1D95',
+  },
+  procurementCountText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  procurementCountTextActive: {
+    color: '#FFFFFF',
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  serviceMetaPill: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginVertical: 6,
+  },
+  serviceMetaPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#166534',
   },
 });

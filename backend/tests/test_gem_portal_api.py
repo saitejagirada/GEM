@@ -109,3 +109,41 @@ def test_alerts_endpoint(client):
     assert 'message' in alert
     assert 'bidNumber' in alert
 
+
+def test_procurement_type_and_domain_filtering(client):
+    """Verifies feed filtering across Product Bids, Service Contracts, and Domain Categories."""
+    # Test SERVICE filter
+    res_svc = client.get('/api/portal/feed?bidType=SERVICE')
+    assert res_svc.status_code == 200
+    svc_data = res_svc.get_json()['data']
+    assert len(svc_data) > 0
+    for b in svc_data:
+        assert b.get('bid_type') == 'SERVICE' or b.get('type') == 'SERVICE'
+
+    # Test PRODUCT filter
+    res_prod = client.get('/api/portal/feed?bidType=PRODUCT')
+    assert res_prod.status_code == 200
+    prod_data = res_prod.get_json()['data']
+    assert len(prod_data) > 0
+    for b in prod_data:
+        assert b.get('bid_type') == 'PRODUCT' or b.get('type') == 'PRODUCT'
+
+    # Test Domain Category filter
+    res_domain = client.get('/api/portal/feed?domainCategory=Defence')
+    assert res_domain.status_code == 200
+    domain_data = res_domain.get_json()['data']
+    assert len(domain_data) > 0
+    for b in domain_data:
+        assert 'defence' in (b.get('categoryDomain', '') + b.get('title', '') + b.get('ministry', '')).lower()
+
+    # Test Market Pulse multi-procurement counts
+    pulse_res = client.get('/api/portal/market-pulse')
+    assert pulse_res.status_code == 200
+    pulse = pulse_res.get_json()['data']
+    assert 'productBidsCount' in pulse
+    assert 'serviceBidsCount' in pulse
+    assert 'boqBidsCount' in pulse
+    assert 'customTendersCount' in pulse
+    assert pulse['productBidsCount'] > 0
+    assert pulse['serviceBidsCount'] > 0
+
