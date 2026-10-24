@@ -277,6 +277,27 @@ CREATE POLICY "Public corrigenda are viewable by all"
     ON public.corrigenda FOR SELECT
     USING (true);
 
+-- 1b. Public Crawler & Ingestion Policies for Live Government Bids
+DROP POLICY IF EXISTS "Public can insert live tenders" ON public.tenders;
+CREATE POLICY "Public can insert live tenders"
+    ON public.tenders FOR INSERT
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can update live tenders" ON public.tenders;
+CREATE POLICY "Public can update live tenders"
+    ON public.tenders FOR UPDATE
+    USING (true);
+
+DROP POLICY IF EXISTS "Public can insert live fundamentals" ON public.tender_fundamentals;
+CREATE POLICY "Public can insert live fundamentals"
+    ON public.tender_fundamentals FOR INSERT
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can update live fundamentals" ON public.tender_fundamentals;
+CREATE POLICY "Public can update live fundamentals"
+    ON public.tender_fundamentals FOR UPDATE
+    USING (true);
+
 -- 2. Authenticated Vendor Profile Isolation
 DROP POLICY IF EXISTS "Vendors can view their own profile" ON public.vendor_profiles;
 CREATE POLICY "Vendors can view their own profile"

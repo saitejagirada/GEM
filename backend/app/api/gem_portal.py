@@ -6,8 +6,24 @@ reverse/forward auctions, participated portfolios, keyword search, and real-time
 
 from flask import Blueprint, jsonify, request
 from ..services.gem_portal_service import GemPortalService
+from ..services.gem_daily_ingestion import GemDailyIngestion
 
 portal_bp = Blueprint('portal', __name__)
+
+
+@portal_bp.route('/sync-daily-bids', methods=['POST'])
+def sync_daily_bids():
+    """Triggers live crawl of public bids from bidplus.gem.gov.in and database sync."""
+    pages = request.args.get('pages', default=2, type=int)
+    result = GemDailyIngestion.sync_daily_bids(pages=pages)
+    return jsonify(result), 200
+
+
+@portal_bp.route('/live-bids', methods=['GET'])
+def get_live_bids():
+    """Returns freshly crawled live public tenders from gem.gov.in."""
+    bids = GemDailyIngestion.fetch_live_portal_bids(pages=2)
+    return jsonify({"success": True, "count": len(bids), "data": bids}), 200
 
 
 @portal_bp.route('/market-pulse', methods=['GET'])

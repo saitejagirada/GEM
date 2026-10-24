@@ -24,9 +24,11 @@ class GemPortalService:
 
     @staticmethod
     def get_mock_bids() -> List[Dict[str, Any]]:
-        """Returns realistic official GeM bids structured per DeconstructedBidDoc."""
+        """Returns live crawled public GeM bids along with baseline samples."""
+        from .gem_daily_ingestion import GemDailyIngestion
+        live_bids = GemDailyIngestion._load_cached_bids()
         now = datetime.now(timezone.utc)
-        return [
+        baseline = [
             {
                 "bidNumber": "GEM/2026/B/890123",
                 "title": "Supply and Commissioning of 40W Solar LED Street Lighting Systems",
@@ -175,6 +177,7 @@ class GemPortalService:
                 "verdictSummary": "Turnover threshold (₹80L) and 5-year experience requirement exceed your current profile. EMD is mandatory."
             }
         ]
+        return (live_bids + baseline) if live_bids else baseline
 
     @classmethod
     def get_feed(

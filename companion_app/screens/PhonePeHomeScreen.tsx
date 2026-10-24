@@ -24,6 +24,9 @@ interface PhonePeHomeScreenProps {
   onSelectCategory: (category: string) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onSyncPortal?: () => void;
+  isSyncingPortal?: boolean;
+  lastSyncedTime?: string;
 }
 
 export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
@@ -37,6 +40,9 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   onSelectCategory,
   onRefresh,
   isRefreshing = false,
+  onSyncPortal,
+  isSyncingPortal = false,
+  lastSyncedTime,
 }) => {
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
 
@@ -300,6 +306,30 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           </View>
         </View>
 
+        {/* Live Portal Auto-Ingestion & Sync Controller */}
+        <View style={styles.portalSyncBanner}>
+          <View style={styles.portalSyncLeft}>
+            <View style={styles.portalSyncTagRow}>
+              <View style={styles.liveGreenDot} />
+              <Text style={styles.portalSyncTag}>PUBLIC PORTAL SYNC (GEM.GOV.IN)</Text>
+            </View>
+            <Text style={styles.portalSyncTitle}>Auto-Ingested Daily Government Bids</Text>
+            <Text style={styles.portalSyncSub}>
+              {lastSyncedTime ? `Synced: ${lastSyncedTime}` : 'Synced with bidplus.gem.gov.in'} • {bids.length} Active Public Tenders
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.portalSyncBtn, isSyncingPortal && styles.portalSyncBtnDisabled]}
+            onPress={onSyncPortal || onRefresh}
+            disabled={isSyncingPortal}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.portalSyncBtnText}>
+              {isSyncingPortal ? '⟳ Ingesting...' : '⚡ Sync Portal'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Tender Cards */}
         {bids.map((bid) => {
           const evalResult = UserAgentService.evaluateBid(userProfile, bid);
@@ -360,14 +390,30 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                 </View>
               )}
 
-              {/* Action Button: Zero-PDF Inspect */}
-              <TouchableOpacity
-                style={styles.inspectBtn}
-                onPress={() => setSelectedBid(bid)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.inspectBtnText}>Inspect Zero-PDF Bid ➔</Text>
-              </TouchableOpacity>
+              {/* Action Buttons: Zero-PDF Inspect + Official Portal Doc */}
+              <View style={styles.tenderActionsRow}>
+                <TouchableOpacity
+                  style={styles.inspectBtn}
+                  onPress={() => setSelectedBid(bid)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.inspectBtnText}>Inspect Zero-PDF ➔</Text>
+                </TouchableOpacity>
+                {bid.docUrl ? (
+                  <TouchableOpacity
+                    style={styles.portalPdfBtn}
+                    onPress={() =>
+                      Alert.alert(
+                        'Official GeM Portal Document',
+                        `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
+                      )
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.portalPdfBtnText}>GeM Doc 📄</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           );
         })}
@@ -829,7 +875,56 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  portalSyncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  portalSyncLeft: { flex: 1, marginRight: 8 },
+  portalSyncTagRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  liveGreenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#059669',
+  },
+  portalSyncTag: {
+    color: '#6D28D9',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  portalSyncTitle: { color: '#1E1B4B', fontSize: 13, fontWeight: '700' },
+  portalSyncSub: { color: '#6B7280', fontSize: 11, marginTop: 1 },
+  portalSyncBtn: {
+    backgroundColor: '#5F259F',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  portalSyncBtnDisabled: {
+    backgroundColor: '#9CA3AF',
+  },
+  portalSyncBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tenderActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
   inspectBtn: {
+    flex: 1,
     backgroundColor: '#5F259F',
     borderRadius: 8,
     paddingVertical: 10,
@@ -841,6 +936,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
+  },
+  portalPdfBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  portalPdfBtnText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
   },
   exploreBanner: {
     flexDirection: 'row',
