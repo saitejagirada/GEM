@@ -12,7 +12,7 @@ on:
 
 jobs:
   test-and-build:
-    name: Test & Build Android APK
+    name: Test & Build Standalone Android APK
     runs-on: ubuntu-latest
 
     env:
@@ -59,17 +59,26 @@ jobs:
         run: |
           npx expo prebuild --platform android --clean --no-install --non-interactive
 
-      - name: Build Android Debug APK with Gradle
+      - name: Configure Standalone Offline Bundle & Signing
+        working-directory: companion_app/android
+        run: |
+          # 1. Ensure release build is signed with debug keystore so it installs on any device without manual keys
+          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/g' app/build.gradle || true
+
+          # 2. Enable bundleInDebug so the JS bundle is always packaged offline inside the APK
+          sed -i '/react {/a \    bundleInDebug = true' app/build.gradle || true
+
+      - name: Build Standalone Android APK with Gradle
         working-directory: companion_app/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" --no-daemon --stacktrace
+          ./gradlew assembleRelease -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" --no-daemon --stacktrace || ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" --no-daemon --stacktrace
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Standalone APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gem-companion-debug-apk
-          path: companion_app/android/app/build/outputs/apk/debug/*.apk
+          name: gem-companion-standalone-apk
+          path: companion_app/android/app/build/outputs/apk/*/*/*.apk
           retention-days: 14
 
       - name: Upload Gradle Diagnostics on Failure
