@@ -157,6 +157,12 @@ CREATE TABLE IF NOT EXISTS public.vendor_portfolio (
         'REJECTED',
         'PROVISIONAL_PRC'
     )),
+    contract_number VARCHAR(64),
+    invoice_number VARCHAR(64),
+    pfms_utr_number VARCHAR(64),
+    sla_compliance VARCHAR(64) DEFAULT 'ON_TIME',
+    order_date TIMESTAMPTZ,
+    crac_date TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     UNIQUE (user_id, bid_number)
@@ -392,6 +398,91 @@ INSERT INTO public.tenders (
     '100% to L1',
     'CLASS_2',
     'https://gem.gov.in/bids/GEM-2026-B-55410.pdf'
+),
+(
+    'GEMC-511687712001',
+    'Supply of 24-Port Industrial Gigabit PoE Switches',
+    'Ministry of Railways',
+    'Western Railway Headquarters, Mumbai',
+    'PRODUCT',
+    1850000.00,
+    37000.00,
+    TRUE,
+    '2026-01-20T10:00:00Z'::timestamptz,
+    '2026-01-20T11:00:00Z'::timestamptz,
+    '50x Industrial Gigabit PoE Switches 24-Port Ruggedized',
+    ARRAY['Maharashtra', 'Gujarat'],
+    '100% to L1',
+    'CLASS_1',
+    'https://gem.gov.in/contracts/GEMC-511687712001.pdf'
+),
+(
+    'GEMC-511687712002',
+    'Commercial LED Batten Luminaires 45W IP65 & High Mast',
+    'Ministry of Defence',
+    'Military Engineer Services (MES), Southern Command',
+    'PRODUCT',
+    2400000.00,
+    48000.00,
+    TRUE,
+    '2026-02-05T10:00:00Z'::timestamptz,
+    '2026-02-05T11:00:00Z'::timestamptz,
+    '800x Commercial LED Batten Luminaires 45W IP65',
+    ARRAY['Karnataka', 'Tamil Nadu'],
+    '70:30 MSE Preference',
+    'CLASS_1',
+    'https://gem.gov.in/contracts/GEMC-511687712002.pdf'
+),
+(
+    'GEMC-511687712003',
+    'ICU Patient Monitoring Consumables & High-Flow Circuits',
+    'Ministry of Health & Family Welfare',
+    'AIIMS New Delhi',
+    'PRODUCT',
+    1275000.00,
+    25500.00,
+    TRUE,
+    '2026-02-22T10:00:00Z'::timestamptz,
+    '2026-02-22T11:00:00Z'::timestamptz,
+    '1500x ICU Patient Monitoring Consumables',
+    ARRAY['Delhi'],
+    '100% to L1',
+    'CLASS_1',
+    'https://gem.gov.in/contracts/GEMC-511687712003.pdf'
+),
+(
+    'GEMC-511687712004',
+    'High-Tensile Structural Fasteners & Hex Bolts (M24 Grade 8.8)',
+    'Ministry of Defence',
+    'Bharat Dynamics Limited, Hyderabad',
+    'PRODUCT',
+    3120000.00,
+    62400.00,
+    TRUE,
+    '2026-03-15T10:00:00Z'::timestamptz,
+    '2026-03-15T11:00:00Z'::timestamptz,
+    '25000x High-Tensile Structural Fasteners M24',
+    ARRAY['Telangana'],
+    '100% to L1',
+    'CLASS_1',
+    'https://gem.gov.in/contracts/GEMC-511687712004.pdf'
+),
+(
+    'GEMC-511687712005',
+    '40W Solar LED Street Lighting Systems with LiFePO4 Battery',
+    'Ministry of Rural Development',
+    'Department of Rural Development, Andhra Pradesh',
+    'PRODUCT',
+    4550000.00,
+    91000.00,
+    TRUE,
+    '2026-04-10T10:00:00Z'::timestamptz,
+    '2026-04-10T11:00:00Z'::timestamptz,
+    '150x 40W Solar LED Street Lighting Systems',
+    ARRAY['Andhra Pradesh'],
+    '100% to L1',
+    'CLASS_1',
+    'https://gem.gov.in/contracts/GEMC-511687712005.pdf'
 )
 ON CONFLICT (bid_number) DO UPDATE SET
     title = EXCLUDED.title,
@@ -547,9 +638,11 @@ ON CONFLICT (user_id) DO UPDATE SET
     annual_turnover = EXCLUDED.annual_turnover,
     updated_at = timezone('utc'::text, now());
 
--- Mock Vendor Portfolio Seed
+-- Mock Vendor Portfolio Seed (Including 5 Accepted GeM Orders GEMC-511687712001 to 12005)
 INSERT INTO public.vendor_portfolio (
-    user_id, bid_number, status, quoted_l1, expected_l1_benchmark, current_rank, pfms_stage, crac_status
+    user_id, bid_number, status, quoted_l1, expected_l1_benchmark, current_rank, 
+    pfms_stage, crac_status, contract_number, invoice_number, pfms_utr_number, 
+    sla_compliance, order_date, crac_date
 ) VALUES
 (
     '00000000-0000-0000-0000-000000000001'::uuid,
@@ -559,7 +652,13 @@ INSERT INTO public.vendor_portfolio (
     2750000.00,
     1,
     'ORDER_PLACED',
-    'PENDING'
+    'PENDING',
+    'GEM/2026/B/89012',
+    NULL,
+    NULL,
+    'ON_TIME',
+    timezone('utc'::text, now() - interval '2 days'),
+    NULL
 ),
 (
     '00000000-0000-0000-0000-000000000001'::uuid,
@@ -569,9 +668,97 @@ INSERT INTO public.vendor_portfolio (
     3850000.00,
     2,
     'ORDER_PLACED',
-    'PENDING'
+    'PENDING',
+    'GEM/2026/B/99201',
+    NULL,
+    NULL,
+    'ON_TIME',
+    timezone('utc'::text, now() - interval '5 days'),
+    NULL
+),
+(
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'GEMC-511687712001',
+    'AWARDED_L1',
+    1850000.00,
+    1850000.00,
+    1,
+    'BANK_UTR_CREDITED',
+    'ACCEPTED',
+    'GEMC-511687712001',
+    'INV-2026-081',
+    'RBI260281982736',
+    'EARLY_DELIVERY',
+    '2026-01-15T00:00:00Z'::timestamptz,
+    '2026-01-28T00:00:00Z'::timestamptz
+),
+(
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'GEMC-511687712002',
+    'AWARDED_L1',
+    2400000.00,
+    2400000.00,
+    1,
+    'BANK_UTR_CREDITED',
+    'ACCEPTED',
+    'GEMC-511687712002',
+    'INV-2026-094',
+    'SBIN00293817264',
+    'ON_TIME',
+    '2026-02-02T00:00:00Z'::timestamptz,
+    '2026-02-16T00:00:00Z'::timestamptz
+),
+(
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'GEMC-511687712003',
+    'AWARDED_L1',
+    1275000.00,
+    1275000.00,
+    1,
+    'BANK_UTR_CREDITED',
+    'ACCEPTED',
+    'GEMC-511687712003',
+    'INV-2026-105',
+    'HDFC26061928374',
+    'ON_TIME',
+    '2026-02-20T00:00:00Z'::timestamptz,
+    '2026-02-28T00:00:00Z'::timestamptz
+),
+(
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'GEMC-511687712004',
+    'AWARDED_L1',
+    3120000.00,
+    3120000.00,
+    1,
+    'BANK_UTR_CREDITED',
+    'ACCEPTED',
+    'GEMC-511687712004',
+    'INV-2026-118',
+    'UBIN00482716253',
+    'EARLY_DELIVERY',
+    '2026-03-12T00:00:00Z'::timestamptz,
+    '2026-03-26T00:00:00Z'::timestamptz
+),
+(
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'GEMC-511687712005',
+    'AWARDED_L1',
+    4550000.00,
+    4550000.00,
+    1,
+    'BANK_UTR_CREDITED',
+    'ACCEPTED',
+    'GEMC-511687712005',
+    'INV-2026-132',
+    'APGB26093817265',
+    'ON_TIME',
+    '2026-04-05T00:00:00Z'::timestamptz,
+    '2026-04-19T00:00:00Z'::timestamptz
 )
 ON CONFLICT (user_id, bid_number) DO UPDATE SET
     status = EXCLUDED.status,
     quoted_l1 = EXCLUDED.quoted_l1,
+    pfms_stage = EXCLUDED.pfms_stage,
+    crac_status = EXCLUDED.crac_status,
     updated_at = timezone('utc'::text, now());

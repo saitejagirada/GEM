@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Linking,
+  TextInput,
 } from 'react-native';
 import type { AuctionItem } from '../types/index';
 
@@ -96,6 +97,7 @@ const REALISTIC_REVERSE_AUCTIONS: (AuctionItem & {
 
 export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSelectBid }) => {
   const [auctions] = useState(REALISTIC_REVERSE_AUCTIONS);
+  const [costFloors, setCostFloors] = useState<Record<string, string>>({});
 
   const handleOpenGemRA = (raNumber: string) => {
     Alert.alert(
@@ -177,6 +179,41 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
               <Text style={styles.ruleNoticeText}>
                 ⏱ 10-Min Auto Extension Rule: Bids in last 10 mins extend auction window by 10 mins.
               </Text>
+            </View>
+
+            {/* Real GeM Concealed L1 Standings Banner */}
+            <View style={styles.concealedStandingsBox}>
+              <Text style={styles.concealedTitle}>
+                {isL1 ? '👑 You hold the L1 Leading Bid' : `⚠️ GeM Concealed Standings: You are Rank L${ra.sellerRank}`}
+              </Text>
+              <Text style={styles.concealedDesc}>
+                {isL1
+                  ? 'Competitors cannot see your unit breakdown. They must drop by at least ₹' + ra.minimumDecrement.toLocaleString('en-IN') + ' to challenge your lead.'
+                  : `Competitor bid values are encrypted by GeM. Required decrement: Decrement at least ₹${ra.minimumDecrement.toLocaleString('en-IN')} to take the L1 lead.`}
+              </Text>
+            </View>
+
+            {/* Cost Floor Guard (Prevents Suicide Bidding) */}
+            <View style={styles.costGuardBox}>
+              <View style={styles.costGuardHeader}>
+                <Text style={styles.costGuardTitle}>🛡️ Safe Cost Floor Guard</Text>
+                <Text style={styles.costGuardHint}>Protect against suicide bidding</Text>
+              </View>
+              <TextInput
+                style={styles.costGuardInput}
+                placeholder="Enter minimum profitable cost in ₹ (e.g. 3500000)"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                value={costFloors[ra.id] || ''}
+                onChangeText={(val) => setCostFloors({ ...costFloors, [ra.id]: val })}
+              />
+              {Boolean(costFloors[ra.id]) && Number(costFloors[ra.id]) > (ra.currentLowestBid - ra.minimumDecrement) && (
+                <View style={styles.suicideAlert}>
+                  <Text style={styles.suicideAlertText}>
+                    🛑 DANGER: Next decrement (₹{(ra.currentLowestBid - ra.minimumDecrement).toLocaleString('en-IN')}) drops below your break-even floor of ₹{Number(costFloors[ra.id]).toLocaleString('en-IN')}! Bidding lower causes negative profit.
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Action Buttons */}
@@ -287,4 +324,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   openPortalBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  concealedStandingsBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  concealedTitle: { color: '#1E40AF', fontSize: 12, fontWeight: '800', marginBottom: 2 },
+  concealedDesc: { color: '#2563EB', fontSize: 11, lineHeight: 15 },
+  costGuardBox: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  costGuardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  costGuardTitle: { color: '#92400E', fontSize: 11, fontWeight: '800' },
+  costGuardHint: { color: '#B45309', fontSize: 9, fontWeight: '600' },
+  costGuardInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  suicideAlert: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 6,
+  },
+  suicideAlertText: { color: '#DC2626', fontSize: 11, fontWeight: '700', lineHeight: 15 },
 });

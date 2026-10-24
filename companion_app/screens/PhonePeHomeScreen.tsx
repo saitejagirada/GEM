@@ -64,12 +64,15 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
             <Text style={styles.circleLabel}>Live RA</Text>
           </TouchableOpacity>
 
-          {/* Button 3: Forward Auctions */}
-          <TouchableOpacity style={styles.circleItem} onPress={onOpenAuctions} activeOpacity={0.7}>
-            <View style={styles.purpleCircle}>
-              <Text style={styles.circleIcon}>♻</Text>
+          {/* Button 3: Ending Soon (<24h) */}
+          <TouchableOpacity style={styles.circleItem} onPress={() => onNavigateTab('SEARCH')} activeOpacity={0.7}>
+            <View style={[styles.purpleCircle, { backgroundColor: '#EA580C', shadowColor: '#EA580C' }]}>
+              <Text style={styles.circleIcon}>⏳</Text>
+              <View style={styles.circlePillBadge}>
+                <Text style={styles.circlePillBadgeText}>{marketPulse.closingIn24Hours}</Text>
+              </View>
             </View>
-            <Text style={styles.circleLabel}>e-Scrap Lots</Text>
+            <Text style={styles.circleLabel}>Ending Soon</Text>
           </TouchableOpacity>
 
           {/* Button 4: Eligibility Check */}
@@ -344,6 +347,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  circlePillBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  circlePillBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
   },
   promoBanner: {
     flexDirection: 'row',

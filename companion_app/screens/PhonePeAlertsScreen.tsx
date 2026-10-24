@@ -41,25 +41,36 @@ export const PhonePeAlertsScreen: React.FC<PhonePeAlertsScreenProps> = ({
         </View>
       </View>
 
-      {/* Alert Item 2: Corrigendum Amendment */}
-      <View style={styles.alertCard}>
-        <View style={[styles.alertIconCircle, { backgroundColor: '#E0F2FE' }]}>
-          <Text style={styles.alertIcon}>📝</Text>
+      {/* Alert Item 2: Urgent Corrigendum Re-Confirmation Action Banner */}
+      <View style={[styles.alertCard, styles.alertCardUrgent]}>
+        <View style={[styles.alertIconCircle, { backgroundColor: '#FEE2E2' }]}>
+          <Text style={styles.alertIcon}>🚨</Text>
         </View>
         <View style={styles.alertBody}>
           <View style={styles.alertHeaderRow}>
-            <Text style={styles.alertTitle}>Corrigendum: LED Luminaires</Text>
+            <View style={styles.urgentBadge}>
+              <Text style={styles.urgentBadgeText}>ACTION REQUIRED</Text>
+            </View>
             <Text style={styles.alertTime}>2h</Text>
           </View>
-          <Text style={styles.alertDesc}>
-            Military Engineer Services (MES) added revised technical specs and extended closing by 48 hours.
+          <Text style={styles.alertTitleUrgent}>Corrigendum #2: LED Luminaires (#89012)</Text>
+          <Text style={styles.alertDescUrgent}>
+            MES revised technical specs and extended closing. In GeM, previously submitted bids are marked INVALIDATED until you re-confirm acceptance before the deadline.
           </Text>
-          <TouchableOpacity
-            style={styles.alertActionBtn}
-            onPress={() => Alert.alert('Corrigendum Details', 'Specification amended: LM79/LM80 test report validity extended to 5 years.')}
-          >
-            <Text style={styles.alertActionText}>View Corrigendum Document ➔</Text>
-          </TouchableOpacity>
+          <View style={styles.urgentActionRow}>
+            <TouchableOpacity
+              style={styles.reconfirmBtn}
+              onPress={() =>
+                Alert.alert(
+                  'Re-Confirm Bid on GeM',
+                  'Opening bidplus.gem.gov.in/bids/GEM-2026-B-89012 to re-confirm your technical compliance and validate your quotation under amended specs.'
+                )
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.reconfirmBtnText}>Re-Confirm on GeM Portal ➔</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -225,4 +236,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  alertCardUrgent: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+  },
+  urgentBadge: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  urgentBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  alertTitleUrgent: { color: '#991B1B', fontSize: 13, fontWeight: '800', marginTop: 4, marginBottom: 2 },
+  alertDescUrgent: { color: '#B91C1C', fontSize: 11, lineHeight: 16 },
+  urgentActionRow: { marginTop: 8 },
+  reconfirmBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  reconfirmBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 });

@@ -84,6 +84,20 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         </View>
 
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+          {/* Bid Closing Cutoff & Freeze Protection Banner */}
+          <View style={styles.cutoffBanner}>
+            <View style={styles.cutoffLeft}>
+              <Text style={styles.cutoffIcon}>⏱️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cutoffTitle}>Closing: 28-Oct-2026, 03:00 PM</Text>
+                <Text style={styles.cutoffSubtitle}>18h 42m remaining • GeM portal freezes in final 15 mins</Text>
+              </View>
+            </View>
+            <View style={styles.cutoffBadge}>
+              <Text style={styles.cutoffBadgeText}>SUBMIT EARLY</Text>
+            </View>
+          </View>
+
           {/* Eligibility Verdict Banner */}
           <View
             style={[
@@ -105,6 +119,54 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             </View>
             <Text style={styles.verdictSummary}>{evaluation.verdictSummary}</Text>
           </View>
+
+          {/* Reseller OEM Authorization (MAF) Mandatory Warning */}
+          {userProfile && !userProfile.isOem && (
+            <View style={styles.oemWarningCard}>
+              <Text style={styles.oemWarningIcon}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.oemWarningTitle}>OEM Authorization (MAF) Mandatory for Resellers</Text>
+                <Text style={styles.oemWarningText}>
+                  Your profile is registered as Reseller. Ensure you upload a valid Manufacturer Authorization Form (MAF), or technical scrutiny will disqualify this bid immediately.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* CVC Past Performance Qualification Card based on Accepted Orders */}
+          {evaluation.pastExperienceMatch && (
+            <View style={styles.pastPerfCard}>
+              <View style={styles.pastPerfHeader}>
+                <Text style={styles.pastPerfBadge}>
+                  {evaluation.pastExperienceMatch.qualifiesCriteria
+                    ? '★ CVC PAST PERFORMANCE QUALIFIED'
+                    : '⚠ EXPERIENCE CRITERIA SHORTFALL'}
+                </Text>
+                <Text style={styles.pastPerfStatus}>CRAC Verified</Text>
+              </View>
+              <Text style={styles.pastPerfDesc}>
+                {evaluation.pastExperienceMatch.ruleDescription}
+              </Text>
+              {evaluation.pastExperienceMatch.matchingOrderNumber && (
+                <View style={styles.pastPerfFooter}>
+                  <Text style={styles.pastPerfContract}>
+                    Verified GeM Order: {evaluation.pastExperienceMatch.matchingOrderNumber}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.copyProofBtn}
+                    onPress={() =>
+                      Alert.alert(
+                        'CRAC Proof Copied',
+                        `Contract: ${evaluation.pastExperienceMatch?.matchingOrderNumber}\nAmount: ₹${((evaluation.pastExperienceMatch?.matchingOrderValueInr || 0) / 100000).toFixed(1)} Lakhs\nStatus: CRAC Accepted & PFMS UTR Cleared`
+                      )
+                    }
+                  >
+                    <Text style={styles.copyProofBtnText}>Copy Proof 📋</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Tender Title & Ministry */}
           <View style={styles.card}>
@@ -153,6 +215,12 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               <View style={styles.gridCell}>
                 <Text style={styles.cellLabel}>Delivery Timeline</Text>
                 <Text style={styles.cellValueSecondary}>{fundamentals.deliveryPeriodLabel}</Text>
+              </View>
+              <View style={styles.gridCell}>
+                <Text style={styles.cellLabel}>e-PBG Bank Guarantee</Text>
+                <Text style={[styles.cellValueSecondary, { color: '#B45309' }]}>
+                  {bid.epbgPercentage || 3}% (₹{(((bid.estimatedBidValueInr || 2850000) * (bid.epbgPercentage || 3)) / 10000000).toFixed(2)}L)
+                </Text>
               </View>
               <View style={styles.gridCell}>
                 <Text style={styles.cellLabel}>Splitting Rule</Text>
@@ -435,4 +503,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   officialLinkText: { color: '#374151', fontSize: 13, fontWeight: '700' },
+  cutoffBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  cutoffLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
+  cutoffIcon: { fontSize: 22, marginRight: 8 },
+  cutoffTitle: { color: '#92400E', fontSize: 13, fontWeight: '800' },
+  cutoffSubtitle: { color: '#B45309', fontSize: 11, fontWeight: '600', marginTop: 1 },
+  cutoffBadge: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  cutoffBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  oemWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  oemWarningIcon: { fontSize: 20, marginRight: 8, marginTop: 1 },
+  oemWarningTitle: { color: '#991B1B', fontSize: 13, fontWeight: '800', marginBottom: 2 },
+  oemWarningText: { color: '#B91C1C', fontSize: 11, lineHeight: 16 },
+  pastPerfCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  pastPerfHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  pastPerfBadge: { color: '#166534', fontSize: 12, fontWeight: '800' },
+  pastPerfStatus: {
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pastPerfDesc: { color: '#15803D', fontSize: 12, lineHeight: 17, marginBottom: 8 },
+  pastPerfFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#DCFCE7',
+    paddingTop: 8,
+  },
+  pastPerfContract: { color: '#166534', fontSize: 11, fontWeight: '700', flex: 1, marginRight: 8 },
+  copyProofBtn: {
+    backgroundColor: '#166534',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  copyProofBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
 });

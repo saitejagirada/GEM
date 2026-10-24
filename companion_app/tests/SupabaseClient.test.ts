@@ -159,4 +159,18 @@ describe('SupabaseClient', () => {
     SupabaseClient.emitMockRealtimeEvent('reverse_auctions', mockRaUpdate);
     expect(receivedRa).toBe(null);
   });
+
+  it('retrieves the 5 accepted GeM orders with full CRAC and PFMS fields', async () => {
+    const orders = await SupabaseClient.getAcceptedOrders();
+    expect(orders.length).toBe(5);
+    expect(orders[0].contractNumber).toBe('GEMC-511687712001');
+    expect(orders[0].cracStatus).toBe('CRAC_ACCEPTED');
+    expect(orders[0].orderValueInr).toBe(1850000);
+    expect(orders[4].contractNumber).toBe('GEMC-511687712005');
+
+    // Also verify getVendorPortfolio contains the accepted orders
+    const portfolio = await SupabaseClient.getVendorPortfolio('usr-agent-001');
+    expect(portfolio.some((b) => b.bidNumber === 'GEMC-511687712001')).toBe(true);
+    expect(portfolio.some((b) => b.bidNumber === 'GEMC-511687712005')).toBe(true);
+  });
 });

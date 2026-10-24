@@ -74,15 +74,15 @@ This document serves as the shared single source of truth across all 3 developme
   * [`backend/database/supabase_schema.sql`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/database/supabase_schema.sql)
   * [`companion_app/services/SupabaseClient.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/SupabaseClient.ts)
   * [`companion_app/tests/SupabaseClient.test.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/tests/SupabaseClient.test.ts)
-* **Status**: ✅ **COMPLETED & OPERATIONAL**.
+* **Status**: ✅ **COMPLETED & OPERATIONAL (STANDUP ALIGNED)**.
   * Production PostgreSQL DDL schema with 6 relational tables (`tenders`, `tender_fundamentals`, `reverse_auctions`, `corrigenda`, `vendor_profiles`, `vendor_portfolio`).
   * GIN full-text index on generated `search_vector` and array columns (`consignee_states`, `target_categories`).
   * B-Tree indexes on `closing_datetime ASC`, `opening_datetime ASC`, `closing_time ASC`, and `published_at DESC`.
   * Row Level Security (RLS) policies configured for public tender/auction visibility and strict authenticated vendor isolation.
   * Realtime replication publication configured on `reverse_auctions` and `corrigenda`.
-  * Reality Checker additions implemented: `epbg_amount_inr`, `oem_authorization_required`, `action_required`, and `reconfirm_deadline`.
-  * Offline-First `SupabaseClient.ts` implemented with zero-latency fallback to `mockData.ts`.
-  * 32/32 unit tests passing across all 8 test suites in `companion_app`.
+  * Multi-topic Realtime WebSocket client: joins `public:reverse_auctions` for live price decrement broadcasts, `realtime:public` for postgres changes, and keeps Phoenix heartbeats every 25s.
+  * Seeded the 5 official accepted GeM orders (`GEMC-511687712001` to `12005`) in `tenders` and `vendor_portfolio` with full CRAC/PFMS stage data.
+  * 34/34 unit tests passing across all 8 test suites in `companion_app`.
 
 ---
 
@@ -96,6 +96,6 @@ This document serves as the shared single source of truth across all 3 developme
   * [`companion_app/screens/ReverseAuctionScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/ReverseAuctionScreen.tsx)
   * [`companion_app/screens/PhonePeSearchScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PhonePeSearchScreen.tsx)
   * [`companion_app/screens/PhonePeAlertsScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PhonePeAlertsScreen.tsx)
-* **Status**: ✅ **AUDIT COMPLETE & DISPATCHED**. Comprehensive 6-screen procurement audit delivered. Highlighting 6 critical real-world friction flaws: OEM MAF reseller disqualification trap, missing closing countdowns, hidden e-PBG margin burden, concealed RA L1 price reality, corrigenda bid invalidation, and financial envelope masking during technical evaluation.
+* **Status**: 🟡 **STANDBY FOR RE-VERIFICATION AUDIT**. All-hands sprint alignment confirmed across 8 items (Ending Soon button, Bid Countdown, OEM MAF alert, e-PBG grid cell, CVC Past Performance card, RA Cost Floor Guard, Corrigendum Re-Confirmation banner, and Portfolio Encrypted Envelope & Credential Bank tab). Standing by to audit incoming PR/commits.
 
 

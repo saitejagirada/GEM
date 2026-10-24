@@ -13,12 +13,14 @@ import type {
   AuctionItem,
   ParticipatedBid,
   UserAgentProfile,
+  AcceptedOrder,
 } from '../types/index.ts';
 
 import {
   MOCK_DAILY_BIDS,
   MOCK_USER_PROFILE,
   MOCK_PARTICIPATED_BIDS,
+  MOCK_ACCEPTED_ORDERS,
 } from '../fixtures/mockData.ts';
 
 // -----------------------------------------------------------------------------
@@ -109,6 +111,12 @@ export interface SupabaseVendorPortfolio {
   current_rank?: number;
   pfms_stage?: string;
   crac_status?: string;
+  contract_number?: string;
+  invoice_number?: string;
+  pfms_utr_number?: string;
+  sla_compliance?: string;
+  order_date?: string;
+  crac_date?: string;
   created_at?: string;
 }
 
@@ -192,6 +200,7 @@ export class SupabaseClient {
   private static raListeners: Set<ReverseAuctionListener> = new Set();
   private static corrigendaListeners: Set<CorrigendumListener> = new Set();
   private static realtimeSocket: WebSocket | null = null;
+  private static heartbeatTimer: any = null;
   private static localPortfolioCache: Map<string, SupabaseVendorPortfolio> = new Map();
 
   /**
@@ -432,16 +441,35 @@ export class SupabaseClient {
   }
 
   /**
-   * Retrieves participated tenders portfolio.
+   * Helper mapping the 5 accepted GeM orders to the ParticipatedBid format.
+   */
+  private static getAcceptedAsParticipated(): ParticipatedBid[] {
+    return (MOCK_ACCEPTED_ORDERS || []).map((ord) => ({
+      bidNumber: ord.contractNumber,
+      itemTitle: ord.title,
+      department: ord.buyerDepartment,
+      quotedPriceInr: ord.orderValueInr,
+      expectedL1BenchmarkInr: ord.orderValueInr,
+      submittedAtUtc: new Date(ord.orderDate).toISOString(),
+      stage: 'AWARDED_L1' as const,
+      currentRank: 1,
+      corrigendumCount: 0,
+    }));
+  }
+
+  /**
+   * Retrieves participated tenders portfolio (including accepted GeM orders GEMC-511687712001 to 12005).
    */
   public static async getVendorPortfolio(userId: string): Promise<ParticipatedBid[]> {
+    const acceptedOrders = this.getAcceptedAsParticipated();
+
     if (!this.isOnline()) {
-      // Merge baseline mock data with any locally added items
+      // Merge baseline mock data, accepted orders, and any locally added items
       const localItems = Array.from(this.localPortfolioCache.values())
         .filter((i) => i.user_id === userId)
         .map((p) => this.mapPortfolioToParticipatedBid(p));
 
-      return [...MOCK_PARTICIPATED_BIDS, ...localItems];
+      return [...MOCK_PARTICIPATED_BIDS, ...acceptedOrders, ...localItems];
     }
 
     const rows = await this.safePostgrestFetch<any[]>(
@@ -450,19 +478,53 @@ export class SupabaseClient {
     );
 
     if (!rows || rows.length === 0) {
-      return MOCK_PARTICIPATED_BIDS;
+      return [...MOCK_PARTICIPATED_BIDS, ...acceptedOrders];
     }
 
     return rows.map((r) => ({
-      bidNumber: r.bid_number,
-      itemTitle: r.tenders?.title ?? 'Tender Participation',
+      bidNumber: r.contract_number ?? r.bid_number,
+      itemTitle: r.tenders?.title ?? `Tender ${r.bid_number}`,
       department: r.tenders?.department ?? 'Government Department',
       quotedPriceInr: Number(r.quoted_l1),
       expectedL1BenchmarkInr: Number(r.expected_l1_benchmark ?? r.quoted_l1),
-      submittedAtUtc: r.created_at ?? new Date().toISOString(),
+      submittedAtUtc: r.order_date ?? r.created_at ?? new Date().toISOString(),
       stage: r.status as any,
       currentRank: r.current_rank ?? 1,
       corrigendumCount: 0,
+    }));
+  }
+
+  /**
+   * Retrieves the 5 official accepted GeM orders with full CRAC and PFMS fields.
+   */
+  public static async getAcceptedOrders(): Promise<AcceptedOrder[]> {
+    if (!this.isOnline()) {
+      return MOCK_ACCEPTED_ORDERS;
+    }
+
+    const rows = await this.safePostgrestFetch<any[]>(
+      `vendor_portfolio?status=eq.AWARDED_L1&select=*,tenders(title,department,ministry)&order=created_at.desc`,
+      []
+    );
+
+    if (!rows || rows.length === 0) {
+      return MOCK_ACCEPTED_ORDERS;
+    }
+
+    return rows.map((r) => ({
+      contractNumber: r.contract_number ?? r.bid_number,
+      orderDate: r.order_date ?? '15-Jan-2026',
+      title: r.tenders?.title ?? 'GeM Contract',
+      buyerDepartment: r.tenders?.department ?? 'Government Department',
+      ministry: r.tenders?.ministry ?? 'Government of India',
+      category: 'Procurement',
+      orderValueInr: Number(r.quoted_l1),
+      quantity: 1,
+      cracStatus: r.crac_status ?? 'CRAC_ACCEPTED',
+      cracDate: r.crac_date ?? '28-Jan-2026',
+      slaCompliance: r.sla_compliance ?? 'ON_TIME',
+      invoiceNumber: r.invoice_number ?? 'INV-2026-001',
+      pfmsUtrNumber: r.pfms_utr_number ?? 'RBI2026001',
     }));
   }
 
@@ -546,6 +608,8 @@ export class SupabaseClient {
 
   /**
    * Initializes or maintains Supabase Realtime WebSocket connection.
+   * Handles live price decrement broadcasts on channel `public:reverse_auctions`
+   * and maintains Phoenix heartbeat keepalives.
    */
   private static ensureRealtimeConnected(): void {
     if (!this.isOnline()) {
@@ -562,7 +626,7 @@ export class SupabaseClient {
       this.realtimeSocket = new WebSocket(endpoint);
 
       this.realtimeSocket.onopen = () => {
-        // Phoenix Channel join message for postgres_changes
+        // 1. Join topic for postgres_changes on reverse_auctions and corrigenda
         const joinMsg = {
           topic: 'realtime:public',
           event: 'phx_join',
@@ -577,14 +641,74 @@ export class SupabaseClient {
           ref: '1',
         };
         this.realtimeSocket?.send(JSON.stringify(joinMsg));
+
+        // 2. Join dedicated channel public:reverse_auctions for live broadcasts
+        const joinRaChannel = {
+          topic: 'public:reverse_auctions',
+          event: 'phx_join',
+          payload: {
+            config: {
+              broadcast: { ack: false, self: false },
+            },
+          },
+          ref: '2',
+        };
+        this.realtimeSocket?.send(JSON.stringify(joinRaChannel));
+
+        // 3. Start Phoenix heartbeat keepalive (every 25 seconds)
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = setInterval(() => {
+          if (this.realtimeSocket && this.realtimeSocket.readyState === WebSocket.OPEN) {
+            this.realtimeSocket.send(
+              JSON.stringify({
+                topic: 'phoenix',
+                event: 'heartbeat',
+                payload: {},
+                ref: String(Date.now()),
+              })
+            );
+          }
+        }, 25000);
       };
 
       this.realtimeSocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.event === 'postgres_changes' && data.payload?.data) {
+
+          // Handle live decrement broadcast events (e.g. channel public:reverse_auctions)
+          if (
+            data.event === 'broadcast' ||
+            data.event === 'price_decrement' ||
+            data.event === 'AUCTION_UPDATE'
+          ) {
+            const raRecord =
+              data.payload?.data?.record ||
+              data.payload?.record ||
+              data.payload?.payload ||
+              data.payload;
+            if (raRecord && (raRecord.ra_number || raRecord.current_l1_inr !== undefined)) {
+              this.emitMockRealtimeEvent('reverse_auctions', raRecord);
+            }
+          }
+          // Handle standard Supabase postgres_changes
+          else if (data.event === 'postgres_changes' && data.payload?.data) {
             const { table, record } = data.payload.data;
-            this.emitMockRealtimeEvent(table, record);
+            if (table && record) {
+              this.emitMockRealtimeEvent(table, record);
+            }
+          }
+          // Handle topic-targeted message payloads
+          else if (data.topic && data.topic.includes('reverse_auctions') && data.payload) {
+            const raRecord = data.payload.record || data.payload.data || data.payload;
+            if (raRecord && (raRecord.ra_number || raRecord.current_l1_inr !== undefined)) {
+              this.emitMockRealtimeEvent('reverse_auctions', raRecord);
+            }
+          }
+          else if (data.topic && data.topic.includes('corrigenda') && data.payload) {
+            const corrRecord = data.payload.record || data.payload.data || data.payload;
+            if (corrRecord && (corrRecord.tender_id || corrRecord.amendment_type)) {
+              this.emitMockRealtimeEvent('corrigenda', corrRecord);
+            }
           }
         } catch {
           // ignore malformed payloads
@@ -596,6 +720,10 @@ export class SupabaseClient {
       };
 
       this.realtimeSocket.onclose = () => {
+        if (this.heartbeatTimer) {
+          clearInterval(this.heartbeatTimer);
+          this.heartbeatTimer = null;
+        }
         this.realtimeSocket = null;
       };
     } catch {
