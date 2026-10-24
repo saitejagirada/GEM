@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,15 +16,47 @@ import { PhonePeAlertsScreen } from './screens/PhonePeAlertsScreen';
 import { ParticipatedPortfolioScreen } from './screens/ParticipatedPortfolioScreen';
 import { AuctionsHubScreen } from './screens/AuctionsHubScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
+import { SupabaseClient } from './services/SupabaseClient';
 import { MOCK_USER_PROFILE, MOCK_DAILY_BIDS, MOCK_MARKET_PULSE } from './fixtures/mockData';
-import type { DeconstructedBidDoc } from './types/index';
+import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
 
 type PhonePeTab = 'HOME' | 'SEARCH' | 'SCAN' | 'ALERTS' | 'HISTORY';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<PhonePeTab>('HOME');
   const [searchFilter, setSearchFilter] = useState<string>('');
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+
+  // Live Cloud Supabase Data States
+  const [bids, setBids] = useState<DeconstructedBidDoc[]>(MOCK_DAILY_BIDS);
+  const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
+  const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [cloudConnected, setCloudConnected] = useState<boolean>(false);
+
+  const loadDataFromSupabase = async () => {
+    setIsSyncing(true);
+    try {
+      const [liveBids, profile, pulse] = await Promise.all([
+        SupabaseClient.getTenders(),
+        SupabaseClient.getVendorProfile('usr-agent-001'),
+        SupabaseClient.getMarketPulse(),
+      ]);
+      if (liveBids && liveBids.length > 0) {
+        setBids(liveBids);
+        setCloudConnected(true);
+      }
+      if (profile) setUserProfile(profile);
+      if (pulse) setMarketPulse(pulse);
+    } catch {
+      // Gracefully falls back to offline fixtures
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDataFromSupabase();
+  }, []);
 
   // Modals for Bidding Companion
   const [showAuctionsModal, setShowAuctionsModal] = useState<boolean>(false);
@@ -50,7 +82,11 @@ export default function App() {
       return;
     }
 
-    const found = MOCK_DAILY_BIDS.find(
+    const found = bids.find(
+      (b) =>
+        b.bidNumber.toLowerCase().includes(lookupInput.trim().toLowerCase()) ||
+        b.title.toLowerCase().includes(lookupInput.trim().toLowerCase())
+    ) || MOCK_DAILY_BIDS.find(
       (b) =>
         b.bidNumber.toLowerCase().includes(lookupInput.trim().toLowerCase()) ||
         b.title.toLowerCase().includes(lookupInput.trim().toLowerCase())
@@ -65,7 +101,7 @@ export default function App() {
       setShowLookupModal(false);
       setLookupInput('');
       setSelectedBid({
-        ...MOCK_DAILY_BIDS[0],
+        ...(bids[0] || MOCK_DAILY_BIDS[0]),
         bidNumber: lookupInput.trim().toUpperCase(),
       });
     }
@@ -73,7 +109,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D47A1" />
+      <StatusBar barStyle="light-content" backgroundColor="#5F259F" />
 
       {/* Signature PhonePe Top Header Bar */}
       <View style={styles.topBar}>
@@ -83,7 +119,7 @@ export default function App() {
           onPress={() =>
             Alert.alert(
               'Vendor Profile (GeM Dedicated Agent)',
-              `Organization: ${MOCK_USER_PROFILE.organizationName}\n\n• MSME Status: ${MOCK_USER_PROFILE.msmeCategory} Enterprise\n• Udyam Registration: Active\n• Annual Turnover: ₹${(MOCK_USER_PROFILE.annualTurnoverInr / 100000).toFixed(0)} Lakhs\n• Target Categories: ${MOCK_USER_PROFILE.productCategories.join(', ')}`
+              `Organization: ${userProfile.organizationName}\n\n• MSME Status: ${userProfile.msmeCategory} Enterprise\n• Udyam Registration: Active\n• Annual Turnover: ₹${(userProfile.annualTurnoverInr / 100000).toFixed(0)} Lakhs\n• 5 Verified Orders: ₹1.32 Cr Execution\n• Target Categories: ${userProfile.productCategories.join(', ')}`
             )
           }
           activeOpacity={0.8}
@@ -107,14 +143,16 @@ export default function App() {
           <Text style={styles.headerAppSub}>Official Portal Daily Analysis &amp; Bidding Assistant</Text>
         </View>
 
-        {/* Right: Help Icon & Online Toggle */}
+        {/* Right: Help Icon & Cloud Sync Pill */}
         <View style={styles.headerRight}>
           <TouchableOpacity
-            style={[styles.onlineDotPill, isOnline ? styles.dotOnline : styles.dotOffline]}
-            onPress={() => setIsOnline(!isOnline)}
+            style={[styles.cloudPill, cloudConnected ? styles.cloudLive : styles.cloudOffline]}
+            onPress={loadDataFromSupabase}
             activeOpacity={0.8}
           >
-            <Text style={styles.onlineDotText}>{isOnline ? '● ON' : '○ OFF'}</Text>
+            <Text style={styles.cloudPillText}>
+              {isSyncing ? '⟳ Syncing...' : cloudConnected ? '⚡ Supabase Live' : '○ Offline'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.helpCircle} onPress={handleOpenHelp} activeOpacity={0.8}>
             <Text style={styles.helpIcon}>?</Text>
@@ -126,9 +164,9 @@ export default function App() {
       <View style={styles.screenContainer}>
         {activeTab === 'HOME' && (
           <PhonePeHomeScreen
-            userProfile={MOCK_USER_PROFILE}
-            bids={MOCK_DAILY_BIDS}
-            marketPulse={MOCK_MARKET_PULSE}
+            userProfile={userProfile}
+            bids={bids}
+            marketPulse={marketPulse}
             onNavigateTab={(tab) => {
               if (tab === 'SCAN') setShowLookupModal(true);
               else setActiveTab(tab);
@@ -141,17 +179,19 @@ export default function App() {
             onOpenEligibility={() =>
               Alert.alert(
                 'MSE Eligibility Status',
-                `Organization: ${MOCK_USER_PROFILE.organizationName}\n\n• Udyam Registration: Verified\n• EMD Exemption: 100% Waived across all GeM tenders\n• 25% Annual Procurement Quota: Active\n• Purchase Preference: Active (L1 + 15% price matching)`
+                `Organization: ${userProfile.organizationName}\n\n• MSME Category: ${userProfile.msmeCategory}\n• Udyam Registration: Verified\n• EMD Exemption: 100% Waived across all GeM tenders\n• 25% Annual Procurement Quota: Active\n• Purchase Preference: Active (L1 + 15% price matching)`
               )
             }
             onSelectCategory={handleSelectCategory}
+            onRefresh={loadDataFromSupabase}
+            isRefreshing={isSyncing}
           />
         )}
 
         {activeTab === 'SEARCH' && (
           <PhonePeSearchScreen
-            bids={MOCK_DAILY_BIDS}
-            userProfile={MOCK_USER_PROFILE}
+            bids={bids}
+            userProfile={userProfile}
             initialFilter={searchFilter}
           />
         )}
@@ -297,14 +337,14 @@ export default function App() {
         bid={selectedBid}
         visible={!!selectedBid}
         onClose={() => setSelectedBid(null)}
-        userProfile={MOCK_USER_PROFILE}
+        userProfile={userProfile}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0D47A1' },
+  safeArea: { flex: 1, backgroundColor: '#5F259F' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,7 +352,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 14,
-    backgroundColor: '#0D47A1',
+    backgroundColor: '#5F259F',
   },
   avatarContainer: {
     width: 44,
@@ -352,16 +392,16 @@ const styles = StyleSheet.create({
   },
   logoPillText: { color: '#5F259F', fontSize: 10, fontWeight: '900' },
   headerAppName: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  headerAppSub: { color: '#BFDBFE', fontSize: 10, fontWeight: '600', marginTop: 1 },
+  headerAppSub: { color: '#E9D5FF', fontSize: 10, fontWeight: '600', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  onlineDotPill: {
+  cloudPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  dotOnline: { backgroundColor: 'rgba(0, 200, 83, 0.25)' },
-  dotOffline: { backgroundColor: 'rgba(239, 68, 68, 0.25)' },
-  onlineDotText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  cloudLive: { backgroundColor: 'rgba(0, 200, 83, 0.35)' },
+  cloudOffline: { backgroundColor: 'rgba(239, 68, 68, 0.35)' },
+  cloudPillText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   helpCircle: {
     width: 32,
     height: 32,

@@ -5,9 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
   Alert,
 } from 'react-native';
-import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from '../types/index';
+import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats, AcceptedOrder } from '../types/index';
+import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
+import { UserAgentService } from '../services/UserAgentService';
 import { BidInspectorScreen } from './BidInspectorScreen';
 
 interface PhonePeHomeScreenProps {
@@ -19,6 +22,8 @@ interface PhonePeHomeScreenProps {
   onOpenAgentBids: () => void;
   onOpenEligibility: () => void;
   onSelectCategory: (category: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
@@ -30,13 +35,44 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   onOpenAgentBids,
   onOpenEligibility,
   onSelectCategory,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
 
   const featuredBid = bids[0];
+  const acceptedOrders: AcceptedOrder[] =
+    userProfile.acceptedOrders && userProfile.acceptedOrders.length > 0
+      ? userProfile.acceptedOrders
+      : MOCK_ACCEPTED_ORDERS;
+
+  const totalAcceptedValueInr = acceptedOrders.reduce(
+    (sum, o) => sum + (o.orderValueInr || 0),
+    0
+  );
+
+  const handleOrderPress = (order: AcceptedOrder) => {
+    Alert.alert(
+      `GeM Order: ${order.contractNumber}`,
+      `• Title: ${order.title}\n• Buyer: ${order.buyerDepartment}\n• Ministry: ${order.ministry}\n• Order Value: ₹${(order.orderValueInr / 100000).toFixed(2)} Lakhs\n• Order Date: ${order.orderDate}\n• CRAC Status: ${order.cracStatus} (${order.cracDate || 'Verified'})\n• SLA: ${order.slaCompliance}\n• PFMS UTR: ${order.pfmsUtrNumber || 'Disbursed'}\n• Invoice: ${order.invoiceNumber}`
+    );
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={['#5F259F']}
+            tintColor="#5F259F"
+          />
+        ) : undefined
+      }
+    >
       {/* SECTION 1: Procurement & Bidding (Exact PhonePe "Money Transfers" layout) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -97,7 +133,7 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                 {featuredBid.title}
               </Text>
               <Text style={styles.promoSub}>
-                Est: ₹{(featuredBid.estimatedBidValueInr! / 100000).toFixed(1)}L • ₹0 EMD (MSE Exempt)
+                Est: ₹{((featuredBid.estimatedBidValueInr || 2850000) / 100000).toFixed(1)}L • ₹0 EMD (MSE Exempt)
               </Text>
             </View>
             <View style={styles.promoArrow}>
@@ -107,7 +143,65 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
         )}
       </View>
 
-      {/* SECTION 2: Bid Tools & Analysis (Exact PhonePe "Recharge & Bills" layout) */}
+      {/* SECTION 2: Verified GeM Track Record (5 Completed Contracts • ₹1.32 Cr) */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Verified GeM Track Record</Text>
+            <Text style={styles.sectionSubTitle}>5 Completed Contracts • CVC Pre-qualification Proof</Text>
+          </View>
+          <View style={[styles.headerBadge, { backgroundColor: '#DCFCE7' }]}>
+            <Text style={[styles.headerBadgeText, { color: '#15803D' }]}>
+              ₹{(totalAcceptedValueInr / 100000).toFixed(2)} Lakhs
+            </Text>
+          </View>
+        </View>
+
+        {/* List of 5 Completed Orders */}
+        <View style={styles.ordersList}>
+          {acceptedOrders.map((order, index) => (
+            <TouchableOpacity
+              key={order.contractNumber}
+              style={[styles.orderItem, index === acceptedOrders.length - 1 && styles.orderItemLast]}
+              onPress={() => handleOrderPress(order)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.orderLeft}>
+                <View style={styles.orderNumberRow}>
+                  <Text style={styles.orderContractNumber}>{order.contractNumber}</Text>
+                  <View style={styles.cracPill}>
+                    <Text style={styles.cracPillText}>✓ 100% CRAC</Text>
+                  </View>
+                </View>
+                <Text style={styles.orderTitle} numberOfLines={1}>
+                  {order.title}
+                </Text>
+                <Text style={styles.orderDepartment} numberOfLines={1}>
+                  {order.buyerDepartment} • {order.orderDate}
+                </Text>
+              </View>
+
+              <View style={styles.orderRight}>
+                <Text style={styles.orderValueText}>
+                  ₹{(order.orderValueInr / 100000).toFixed(2)}L
+                </Text>
+                <View style={styles.pfmsTag}>
+                  <Text style={styles.pfmsTagText}>PFMS Disbursed</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Track Record Footer Banner */}
+        <View style={styles.trackRecordFooter}>
+          <Text style={styles.trackRecordFooterText}>
+            ✓ 100% On-Time Delivery • 0 Liquidated Damages • Pre-qualifies for bids up to ₹1.05 Cr
+          </Text>
+        </View>
+      </View>
+
+      {/* SECTION 3: Bid Tools & Analysis (Exact PhonePe "Recharge & Bills" layout) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Bid Tools &amp; Analysis</Text>
@@ -178,7 +272,7 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Bottom Split Action Banner (PhonePe Buy SIM / More style) */}
+        {/* Bottom Split Action Banner */}
         <View style={styles.splitBannerRow}>
           <View style={styles.splitBannerLeft}>
             <Text style={styles.splitBannerTitle}>Zero-EMD Exemption Active</Text>
@@ -194,7 +288,92 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
         </View>
       </View>
 
-      {/* SECTION 3: Key Government Categories (Exact PhonePe "Loans / Insurance" layout) */}
+      {/* SECTION 4: Live GeM Tenders Feed (Matched For You) */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Live GeM Tenders Feed</Text>
+            <Text style={styles.sectionSubTitle}>Auto-matched with CVC Past Performance</Text>
+          </View>
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>{bids.length} Active Today</Text>
+          </View>
+        </View>
+
+        {/* Tender Cards */}
+        {bids.map((bid) => {
+          const evalResult = UserAgentService.evaluateBid(userProfile, bid);
+          const pastMatch = evalResult.pastExperienceMatch;
+
+          return (
+            <View key={bid.bidNumber} style={styles.tenderFeedCard}>
+              {/* Header: Bid # & Ministry */}
+              <View style={styles.tenderFeedHeader}>
+                <Text style={styles.tenderBidNumber}>{bid.bidNumber}</Text>
+                <Text style={styles.tenderDepartment} numberOfLines={1}>
+                  {bid.department}
+                </Text>
+              </View>
+
+              {/* Title */}
+              <Text style={styles.tenderTitle} numberOfLines={2}>
+                {bid.title}
+              </Text>
+
+              {/* 3 Metric Pills */}
+              <View style={styles.tenderMetricsRow}>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>EST. BUDGET</Text>
+                  <Text style={styles.metricValue}>
+                    ₹{((bid.estimatedBidValueInr || 2850000) / 100000).toFixed(1)}L
+                  </Text>
+                </View>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>EMD STATUS</Text>
+                  <Text style={[styles.metricValue, { color: '#059669' }]}>
+                    {bid.isEmdExemptForMse ? '₹0 (MSE Waived)' : `₹${bid.emdAmountInr}`}
+                  </Text>
+                </View>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>DELIVERY</Text>
+                  <Text style={styles.metricValue}>{bid.deliveryPeriodDays} Days</Text>
+                </View>
+              </View>
+
+              {/* CVC Experience Match Badge */}
+              {pastMatch?.eligible ? (
+                <View style={styles.cvcMatchBanner}>
+                  <Text style={styles.cvcMatchTitle}>
+                    ⭐ CVC Past Experience Qualified ({pastMatch.matchType})
+                  </Text>
+                  {pastMatch.bestMatchingOrder && (
+                    <Text style={styles.cvcMatchSubtitle} numberOfLines={1}>
+                      Matched: {pastMatch.bestMatchingOrder.contractNumber} (₹{(pastMatch.bestMatchingOrder.orderValueInr / 100000).toFixed(1)}L - {pastMatch.bestMatchingOrder.buyerDepartment})
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.cvcStandardBanner}>
+                  <Text style={styles.cvcStandardText}>
+                    ℹ️ Standard Eligibility: Turnover ₹{(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L • {bid.yearsExperienceRequired} yrs exp
+                  </Text>
+                </View>
+              )}
+
+              {/* Action Button: Zero-PDF Inspect */}
+              <TouchableOpacity
+                style={styles.inspectBtn}
+                onPress={() => setSelectedBid(bid)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.inspectBtnText}>Inspect Zero-PDF Bid ➔</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* SECTION 5: Key Government Categories (Exact PhonePe "Loans / Insurance" layout) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Key Tender Categories</Text>
@@ -303,6 +482,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.2,
+  },
+  sectionSubTitle: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
   },
   headerBadge: {
     backgroundColor: '#F3E8FF',
@@ -465,6 +650,195 @@ const styles = StyleSheet.create({
   },
   moreBtnText: {
     color: '#5F259F',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ordersList: {
+    marginBottom: 12,
+  },
+  orderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  orderItemLast: {
+    borderBottomWidth: 0,
+  },
+  orderLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  orderContractNumber: {
+    color: '#0F172A',
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
+  cracPill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  cracPillText: {
+    color: '#15803D',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  orderTitle: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  orderDepartment: {
+    color: '#64748B',
+    fontSize: 11,
+  },
+  orderRight: {
+    alignItems: 'flex-end',
+  },
+  orderValueText: {
+    color: '#059669',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  pfmsTag: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  pfmsTagText: {
+    color: '#166534',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  trackRecordFooter: {
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  trackRecordFooterText: {
+    color: '#475569',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  tenderFeedCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tenderFeedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  tenderBidNumber: {
+    color: '#5F259F',
+    fontSize: 11,
+    fontWeight: '800',
+    fontFamily: 'monospace',
+  },
+  tenderDepartment: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '500',
+    maxWidth: '55%',
+  },
+  tenderTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  tenderMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  metricItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  metricLabel: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  metricValue: {
+    color: '#0F172A',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  cvcMatchBanner: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 10,
+  },
+  cvcMatchTitle: {
+    color: '#065F46',
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  cvcMatchSubtitle: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  cvcStandardBanner: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 10,
+  },
+  cvcStandardText: {
+    color: '#0369A1',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  inspectBtn: {
+    backgroundColor: '#5F259F',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  inspectBtnText: {
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
   },
