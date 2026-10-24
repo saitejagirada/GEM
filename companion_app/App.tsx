@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
-import { ReverseAuctionScreen } from './screens/ReverseAuctionScreen.tsx';
-import { CracInspectorScreen } from './screens/CracInspectorScreen.tsx';
-import { PfmsTrackerScreen } from './screens/PfmsTrackerScreen.tsx';
+import { ReverseAuctionScreen } from './screens/ReverseAuctionScreen';
+import { CracInspectorScreen } from './screens/CracInspectorScreen';
+import { PfmsTrackerScreen } from './screens/PfmsTrackerScreen';
 
 type Tab = 'AUCTION' | 'CRAC' | 'PFMS';
 

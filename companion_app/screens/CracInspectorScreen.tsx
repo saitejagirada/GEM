@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert } from 'react-native';
-import { InspectionEngine } from '../services/InspectionEngine.ts';
-import type { InspectionItem, GeoCoordinate } from '../types/index.ts';
+import { InspectionEngine } from '../services/InspectionEngine';
+import type { InspectionItem, GeoCoordinate } from '../types/index';
 
 export const CracInspectorScreen: React.FC = () => {
   const [poNumber] = useState('GEM-PO-2026-88192');

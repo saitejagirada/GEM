@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { PfmsTracker } from '../services/PfmsTracker.ts';
-import type { InvoiceContractTracker, MilestoneStage } from '../types/index.ts';
+import { PfmsTracker } from '../services/PfmsTracker';
+import type { InvoiceContractTracker, MilestoneStage } from '../types/index';
 
 export const PfmsTrackerScreen: React.FC = () => {
   const [tracker, setTracker] = useState<InvoiceContractTracker>({

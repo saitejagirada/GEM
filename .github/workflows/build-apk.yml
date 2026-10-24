@@ -41,6 +41,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-disabled: true
 
       - name: Install Dependencies
         working-directory: companion_app
@@ -69,3 +71,13 @@ jobs:
           name: gem-companion-debug-apk
           path: companion_app/android/app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      - name: Upload Gradle Diagnostics on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-diagnostics
+          path: |
+            companion_app/android/app/build/reports/
+            companion_app/android/build.log
+          retention-days: 3

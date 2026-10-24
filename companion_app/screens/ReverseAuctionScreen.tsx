@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import type { AuctionItem } from '../types/index.ts';
+import type { AuctionItem } from '../types/index';
 
 export const ReverseAuctionScreen: React.FC = () => {
   const [auction, setAuction] = useState<AuctionItem>({
