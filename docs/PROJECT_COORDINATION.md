@@ -22,7 +22,7 @@ This document serves as the shared single source of truth across all 3 developme
 
 ## 🎨 Thread 2: UI / UX & Mobile Interaction (`ui-ux-stream`)
 **Agent ID**: `a4869f6c-1ec1-4291-8efa-dd6ada9f2878`  
-**Focus**: PhonePe & Groww-inspired visual hierarchy, glanceable tender cards, instant zero-PDF bid fundamentals, thumb ergonomics, and auctions war room.
+**Focus**: Pure PhonePe clean visual design (White background, signature purple header, 4-column quick action grid, "Bid Tools & Analysis", "Key Government Categories", and 5-tab bottom bar with floating center scan button).
 
 * **Primary Files**:
   * [`companion_app/App.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/App.tsx)
@@ -30,14 +30,17 @@ This document serves as the shared single source of truth across all 3 developme
   * [`companion_app/screens/BidInspectorScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/BidInspectorScreen.tsx)
   * [`companion_app/screens/AuctionsHubScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/AuctionsHubScreen.tsx)
   * [`companion_app/screens/ParticipatedPortfolioScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/ParticipatedPortfolioScreen.tsx)
-* **Current Status**: ✅ **COMPLETED & OPERATIONAL (PhonePe + Groww Hybrid UI/UX)**.
-  * `UserAgentFeedScreen.tsx`: Live Market Pulse ticker, horizontal pill filters (`90%+ Match`, `Zero EMD`, `Defence`, `Railways`, `Closing Soon`), dedicated agent hero card, and ranked match cards.
-  * `BidInspectorScreen.tsx`: Zero-PDF instant drawer displaying eligibility verdict, AI predictive L1 benchmark range, 2x2 fundamentals grid, operational risk flags, BOQ line items, consignee geocoding, and interactive document checklist.
-  * `AuctionsHubScreen.tsx`: Unified segmented hub with live Reverse Auctions (hold-to-bid double-tap guard, L1 gap ticker, urgency pulse) and Forward Auctions (`forwardauction.gem.gov.in` surplus machinery & e-scrap lots).
-  * `ParticipatedPortfolioScreen.tsx`: PhonePe holdings-style active vs awarded submissions, quoted vs benchmark pricing variance, and deep links to field inspection & PFMS tracking.
-  * Hardened outdoor yard ergonomics (min 48x48dp touch bounds, rapid steppers for gloved inspectors, high-contrast dark palette, tactile haptics).
+* **Current Status**: ⚠️ **REFACTORING TO PURE PHONEPE LIGHT THEME**.
+  * Eliminating gloomy dark theme and military HUD / inspection camera clutter from the home screen.
+  * Direct alignment with PhonePe screenshots in `/Users/giradasaiteja/downloads/files`:
+    1. Clean pure white background (`#FFFFFF`) with PhonePe purple header (`#5F259F`).
+    2. Section 1: 4-column "Bidding Actions" (My Agent Bids, Live RA, Forward Auctions, Eligibility Check).
+    3. Section 2: 4-column "Bid Tools & Analysis" (Zero-PDF Inspector, Price Intel, Corrigenda Watch, Document Vault).
+    4. Section 3: 4-column "Key Categories" (Railways, Defence, Healthcare, IT & Telecom).
+    5. 5-Tab Navigation with floating center purple QR/Scan button: `Home`, `Search`, `Scan`, `Alerts`, `History`.
 * **Next Steps**:
-  * Real-time WebSocket streaming integration with Thread 3's backend simulation endpoints.
+  * Complete screen redesign in clean white PhonePe theme.
+
 
 ---
 

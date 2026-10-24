@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import type { ForwardAuctionLot } from '../types/index';
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
+import { PortalApiClient } from '../services/PortalApiClient';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 
 type AuctionMode = 'REVERSE' | 'FORWARD';
@@ -16,6 +17,14 @@ type AuctionMode = 'REVERSE' | 'FORWARD';
 export const AuctionsHubScreen: React.FC = () => {
   const [activeMode, setActiveMode] = useState<AuctionMode>('REVERSE');
   const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>(MOCK_FORWARD_AUCTIONS);
+
+  useEffect(() => {
+    PortalApiClient.getForwardAuctions()
+      .then((lots) => {
+        if (lots && lots.length > 0) setForwardLots(lots);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleIncrementForwardBid = (lotId: string) => {
     setForwardLots((prev) =>

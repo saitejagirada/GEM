@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
 import { BidDocService } from '../services/BidDocService';
+import { PortalApiClient } from '../services/PortalApiClient';
 import { BidInspectorScreen } from './BidInspectorScreen';
 
 interface UserAgentFeedScreenProps {
@@ -31,8 +32,18 @@ export const UserAgentFeedScreen: React.FC<UserAgentFeedScreenProps> = ({
   const [selectedFilter, setSelectedFilter] = useState<FilterChip>('ALL');
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
 
+  const [currentBids, setCurrentBids] = useState<DeconstructedBidDoc[]>(bids);
+  const [currentPulse, setCurrentPulse] = useState<MarketPulseStats>(marketPulse);
+
+  useEffect(() => {
+    PortalApiClient.getMarketPulse().then(setCurrentPulse).catch(() => {});
+    PortalApiClient.getFeed().then((res) => {
+      if (res && res.length > 0) setCurrentBids(res);
+    }).catch(() => {});
+  }, []);
+
   // Evaluate and rank bids using the dedicated agent
-  const ranked = UserAgentService.rankDailyBids(userProfile, bids);
+  const ranked = UserAgentService.rankDailyBids(userProfile, currentBids);
 
   const filteredBids = ranked.filter(({ bid, evaluation }) => {
     // Search query filter
@@ -61,23 +72,23 @@ export const UserAgentFeedScreen: React.FC<UserAgentFeedScreenProps> = ({
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pulseScroll}>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseLabel}>TODAY'S BIDS</Text>
-            <Text style={styles.pulseValue}>{marketPulse.totalBidsToday.toLocaleString('en-IN')}</Text>
+            <Text style={styles.pulseValue}>{currentPulse.totalBidsToday.toLocaleString('en-IN')}</Text>
           </View>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseLabel}>LIVE REVERSE AUCTIONS</Text>
-            <Text style={[styles.pulseValue, { color: '#00D09C' }]}>⚡ {marketPulse.liveReverseAuctions}</Text>
+            <Text style={[styles.pulseValue, { color: '#00D09C' }]}>⚡ {currentPulse.liveReverseAuctions}</Text>
           </View>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseLabel}>FORWARD SCRAP LOTS</Text>
-            <Text style={[styles.pulseValue, { color: '#38BDF8' }]}>♻ {marketPulse.liveForwardAuctions}</Text>
+            <Text style={[styles.pulseValue, { color: '#38BDF8' }]}>♻ {currentPulse.liveForwardAuctions}</Text>
           </View>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseLabel}>CLOSING &lt; 24H</Text>
-            <Text style={[styles.pulseValue, { color: '#F59E0B' }]}>⏳ {marketPulse.closingIn24Hours}</Text>
+            <Text style={[styles.pulseValue, { color: '#F59E0B' }]}>⏳ {currentPulse.closingIn24Hours}</Text>
           </View>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseLabel}>ZERO-EMD (MSE)</Text>
-            <Text style={[styles.pulseValue, { color: '#A78BFA' }]}>🛡️ {marketPulse.zeroEmdBids}</Text>
+            <Text style={[styles.pulseValue, { color: '#A78BFA' }]}>🛡️ {currentPulse.zeroEmdBids}</Text>
           </View>
         </ScrollView>
       </View>

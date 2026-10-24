@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import type { ParticipatedBid, ParticipatedBidStage } from '../types/index';
 import { MOCK_PARTICIPATED_BIDS } from '../fixtures/mockData';
+import { PortalApiClient } from '../services/PortalApiClient';
 
 interface ParticipatedPortfolioScreenProps {
   onOpenCrac?: () => void;
@@ -20,7 +21,15 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
   onOpenPfms,
 }) => {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'AWARDED'>('ACTIVE');
-  const [bids] = useState<ParticipatedBid[]>(MOCK_PARTICIPATED_BIDS);
+  const [bids, setBids] = useState<ParticipatedBid[]>(MOCK_PARTICIPATED_BIDS);
+
+  useEffect(() => {
+    PortalApiClient.getPortfolio()
+      .then((items) => {
+        if (items && items.length > 0) setBids(items);
+      })
+      .catch(() => {});
+  }, []);
 
   const activeBids = bids.filter((b) => b.stage !== 'AWARDED_L1' && b.stage !== 'DISQUALIFIED');
   const awardedBids = bids.filter((b) => b.stage === 'AWARDED_L1');
