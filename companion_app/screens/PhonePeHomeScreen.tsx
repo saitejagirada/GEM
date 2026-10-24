@@ -18,12 +18,13 @@ import { BidCountdownBadge } from '../components/BidCountdownBadge';
 import { TenderCountdownTicker } from '../components/TenderCountdownTicker';
 import { AnimatedSegmentedBar } from '../components/AnimatedSegmentedBar';
 import { AnimatedCategoryChip } from '../components/AnimatedCategoryChip';
+import { PortalDocService } from '../services/PortalDocService';
 
 interface PhonePeHomeScreenProps {
   userProfile: UserAgentProfile;
   bids: DeconstructedBidDoc[];
   marketPulse: MarketPulseStats;
-  onNavigateTab: (tab: 'SEARCH' | 'SCAN' | 'ALERTS' | 'HISTORY') => void;
+  onNavigateTab: (tab: 'BIDS' | 'TENDERS' | 'AUCTIONS' | 'MY_BIDS' | 'SCAN' | 'SEARCH' | 'ALERTS' | 'HISTORY') => void;
   onOpenAuctions: () => void;
   onOpenAgentBids: () => void;
   onOpenEligibility: () => void;
@@ -109,23 +110,21 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   };
 
   const handleOpenDoc = (url?: string, bidNumber?: string) => {
-    if (!url) return;
-    // Security audit: strictly whitelist official GeM domains
-    const isSafeGemUrl = url.startsWith('https://bidplus.gem.gov.in') || url.startsWith('https://gem.gov.in');
-    if (!isSafeGemUrl) {
+    const targetUrl = PortalDocService.resolvePdfUrl(bidNumber, url);
+    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
       Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
       return;
     }
-    Linking.canOpenURL(url)
+    Linking.canOpenURL(targetUrl)
       .then((supported) => {
         if (supported) {
-          Linking.openURL(url);
+          Linking.openURL(targetUrl);
         } else {
-          Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber}\n\nDocument Link:\n${url}`);
+          Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber || 'N/A'}\n\nDocument Link:\n${targetUrl}`);
         }
       })
       .catch(() => {
-        Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber}\n\nDocument Link:\n${url}`);
+        Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber || 'N/A'}\n\nDocument Link:\n${targetUrl}`);
       });
   };
 

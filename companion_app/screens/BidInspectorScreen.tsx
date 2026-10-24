@@ -13,6 +13,7 @@ import {
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
 import { BidDocService } from '../services/BidDocService';
+import { PortalDocService } from '../services/PortalDocService';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -66,25 +67,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   };
 
   const handleOpenDoc = () => {
-    if (!bid.docUrl) {
-      Alert.alert('Notice', 'No official document link available for this bid.');
-      return;
-    }
-    const isSafeGemUrl = bid.docUrl.startsWith('https://bidplus.gem.gov.in') || bid.docUrl.startsWith('https://gem.gov.in');
-    if (!isSafeGemUrl) {
+    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
+    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
       Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
       return;
     }
-    Linking.canOpenURL(bid.docUrl)
+    Linking.canOpenURL(targetUrl)
       .then((supported) => {
         if (supported) {
-          Linking.openURL(bid.docUrl);
+          Linking.openURL(targetUrl);
         } else {
-          Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}`);
+          Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${targetUrl}`);
         }
       })
       .catch(() => {
-        Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}`);
+        Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${targetUrl}`);
       });
   };
 

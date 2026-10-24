@@ -195,7 +195,7 @@ export class SupabaseClient {
   private static supabaseUrl: string = 'https://szrradtvbktmegzybmwa.supabase.co';
   private static anonKey: string =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6cnJhZHR2Ymt0bWVnenlibXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MzYzMDUsImV4cCI6MjEwODQxMjMwNX0.mUdqLvI_xaOiGYPu79UcK4yEk5Fn_D9ewfq5VvhBTPs';
-  private static timeoutMs: number = 3000;
+  private static timeoutMs: number = 5000;
   private static isConfigured: boolean = true;
   private static forceOffline: boolean = false;
 
@@ -354,11 +354,49 @@ export class SupabaseClient {
       []
     );
 
-    if (!rows || rows.length === 0) {
-      return this.getTenders({ ...params, limit }); // Fallback to offline
+    // Anti-starvation merge: start with baseline bids (34 items), overlay any live Supabase rows
+    const bidMap = new Map<string, DeconstructedBidDoc>();
+    for (const b of MOCK_DAILY_BIDS) {
+      bidMap.set(b.bidNumber, b);
+    }
+    if (rows && rows.length > 0) {
+      for (const r of rows) {
+        const doc = this.mapRowToDeconstructedDoc(r);
+        bidMap.set(doc.bidNumber, doc);
+      }
+    }
+    let merged = Array.from(bidMap.values());
+
+    // Apply filters if passed
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      merged = merged.filter((b) =>
+        b.bidNumber.toLowerCase().includes(q) ||
+        b.title.toLowerCase().includes(q) ||
+        b.ministry.toLowerCase().includes(q) ||
+        b.department.toLowerCase().includes(q)
+      );
+    }
+    if (params?.state) {
+      const stateQuery = params.state.toLowerCase();
+      merged = merged.filter((b) =>
+        b.consignees.some((c) => c.state.toLowerCase().includes(stateQuery))
+      );
+    }
+    if (params?.bidType && params.bidType !== 'ALL') {
+      const targetType = params.bidType;
+      merged = merged.filter((b) => b.type === targetType || (targetType === 'RA' && b.isRa));
+    }
+    if (params?.categoryDomain && params.categoryDomain !== 'All Domains') {
+      const cat = params.categoryDomain.toLowerCase();
+      merged = merged.filter((b) =>
+        (b.categoryDomain && b.categoryDomain.toLowerCase().includes(cat)) ||
+        b.title.toLowerCase().includes(cat) ||
+        b.ministry.toLowerCase().includes(cat)
+      );
     }
 
-    return rows.map((r) => this.mapRowToDeconstructedDoc(r));
+    return merged.slice(0, limit);
   }
 
   /**
