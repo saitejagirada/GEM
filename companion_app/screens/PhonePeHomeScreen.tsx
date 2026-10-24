@@ -7,6 +7,7 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  Linking,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats, AcceptedOrder } from '../types/index';
 import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
@@ -29,6 +30,8 @@ interface PhonePeHomeScreenProps {
   lastSyncedTime?: string;
 }
 
+const FEED_CATEGORIES = ['All', 'Defence', 'Railways', 'Medical', 'Power', 'Electronics'];
+
 export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   userProfile,
   bids,
@@ -45,6 +48,16 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
   lastSyncedTime,
 }) => {
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
+  const [selectedFeedFilter, setSelectedFeedFilter] = useState<string>('All');
+
+  const filteredBids = bids.filter((bid) => {
+    if (selectedFeedFilter === 'All') return true;
+    const catLower = selectedFeedFilter.toLowerCase();
+    const titleMatch = (bid.title || '').toLowerCase().includes(catLower);
+    const minMatch = (bid.ministry || '').toLowerCase().includes(catLower);
+    const deptMatch = (bid.department || '').toLowerCase().includes(catLower);
+    return titleMatch || minMatch || deptMatch;
+  });
 
   const featuredBid = bids[0];
   const acceptedOrders: AcceptedOrder[] =
@@ -330,93 +343,145 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Tender Cards */}
-        {bids.map((bid) => {
-          const evalResult = UserAgentService.evaluateBid(userProfile, bid);
-          const pastMatch = evalResult.pastExperienceMatch;
-
-          return (
-            <View key={bid.bidNumber} style={styles.tenderFeedCard}>
-              {/* Header: Bid # & Ministry */}
-              <View style={styles.tenderFeedHeader}>
-                <Text style={styles.tenderBidNumber}>{bid.bidNumber}</Text>
-                <Text style={styles.tenderDepartment} numberOfLines={1}>
-                  {bid.department}
+        {/* Quick Category Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterChipsScroll}
+          contentContainerStyle={styles.filterChipsRow}
+        >
+          {FEED_CATEGORIES.map((cat) => {
+            const isActive = selectedFeedFilter === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setSelectedFeedFilter(cat)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  {cat}
                 </Text>
-              </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-              {/* Title */}
-              <Text style={styles.tenderTitle} numberOfLines={2}>
-                {bid.title}
-              </Text>
+        {/* Tender Cards */}
+        {filteredBids.length === 0 ? (
+          <View style={styles.emptyFilterState}>
+            <Text style={styles.emptyFilterText}>No live tenders found for &quot;{selectedFeedFilter}&quot;</Text>
+            <TouchableOpacity
+              style={styles.resetFilterBtn}
+              onPress={() => setSelectedFeedFilter('All')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetFilterBtnText}>Show All Categories</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          filteredBids.map((bid) => {
+            const evalResult = UserAgentService.evaluateBid(userProfile, bid);
+            const pastMatch = evalResult.pastExperienceMatch;
 
-              {/* 3 Metric Pills */}
-              <View style={styles.tenderMetricsRow}>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>EST. BUDGET</Text>
-                  <Text style={styles.metricValue}>
-                    ₹{((bid.estimatedBidValueInr || 2850000) / 100000).toFixed(1)}L
+            return (
+              <View key={bid.bidNumber} style={styles.tenderFeedCard}>
+                {/* Header: Bid # & Ministry */}
+                <View style={styles.tenderFeedHeader}>
+                  <Text style={styles.tenderBidNumber}>{bid.bidNumber}</Text>
+                  <Text style={styles.tenderDepartment} numberOfLines={1}>
+                    {bid.department}
                   </Text>
                 </View>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>EMD STATUS</Text>
-                  <Text style={[styles.metricValue, { color: '#059669' }]}>
-                    {bid.isEmdExemptForMse ? '₹0 (MSE Waived)' : `₹${bid.emdAmountInr}`}
-                  </Text>
-                </View>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>DELIVERY</Text>
-                  <Text style={styles.metricValue}>{bid.deliveryPeriodDays} Days</Text>
-                </View>
-              </View>
 
-              {/* CVC Experience Match Badge */}
-              {pastMatch?.eligible ? (
-                <View style={styles.cvcMatchBanner}>
-                  <Text style={styles.cvcMatchTitle}>
-                    ⭐ CVC Past Experience Qualified ({pastMatch.matchType})
-                  </Text>
-                  {pastMatch.bestMatchingOrder && (
-                    <Text style={styles.cvcMatchSubtitle} numberOfLines={1}>
-                      Matched: {pastMatch.bestMatchingOrder.contractNumber} (₹{(pastMatch.bestMatchingOrder.orderValueInr / 100000).toFixed(1)}L - {pastMatch.bestMatchingOrder.buyerDepartment})
+                {/* Title */}
+                <Text style={styles.tenderTitle} numberOfLines={2}>
+                  {bid.title}
+                </Text>
+
+                {/* 3 Metric Pills */}
+                <View style={styles.tenderMetricsRow}>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>EST. BUDGET</Text>
+                    <Text style={styles.metricValue}>
+                      ₹{((bid.estimatedBidValueInr || 2850000) / 100000).toFixed(1)}L
                     </Text>
-                  )}
+                  </View>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>EMD STATUS</Text>
+                    <Text style={[styles.metricValue, { color: '#059669' }]}>
+                      {bid.isEmdExemptForMse ? '₹0 (MSE Waived)' : `₹${bid.emdAmountInr}`}
+                    </Text>
+                  </View>
+                  <View style={styles.metricItem}>
+                    <Text style={styles.metricLabel}>DELIVERY</Text>
+                    <Text style={styles.metricValue}>{bid.deliveryPeriodDays} Days</Text>
+                  </View>
                 </View>
-              ) : (
-                <View style={styles.cvcStandardBanner}>
-                  <Text style={styles.cvcStandardText}>
-                    ℹ️ Standard Eligibility: Turnover ₹{(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L • {bid.yearsExperienceRequired} yrs exp
-                  </Text>
-                </View>
-              )}
 
-              {/* Action Buttons: Zero-PDF Inspect + Official Portal Doc */}
-              <View style={styles.tenderActionsRow}>
-                <TouchableOpacity
-                  style={styles.inspectBtn}
-                  onPress={() => setSelectedBid(bid)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.inspectBtnText}>Inspect Zero-PDF ➔</Text>
-                </TouchableOpacity>
-                {bid.docUrl ? (
+                {/* CVC Experience Match Badge */}
+                {pastMatch?.eligible ? (
+                  <View style={styles.cvcMatchBanner}>
+                    <Text style={styles.cvcMatchTitle}>
+                      ⭐ CVC Past Experience Qualified ({pastMatch.matchType})
+                    </Text>
+                    {pastMatch.bestMatchingOrder && (
+                      <Text style={styles.cvcMatchSubtitle} numberOfLines={1}>
+                        Matched: {pastMatch.bestMatchingOrder.contractNumber} (₹{(pastMatch.bestMatchingOrder.orderValueInr / 100000).toFixed(1)}L - {pastMatch.bestMatchingOrder.buyerDepartment})
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.cvcStandardBanner}>
+                    <Text style={styles.cvcStandardText}>
+                      ℹ️ Standard Eligibility: Turnover ₹{(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L • {bid.yearsExperienceRequired} yrs exp
+                    </Text>
+                  </View>
+                )}
+
+                {/* Action Buttons: Zero-PDF Inspect + Official Portal Doc */}
+                <View style={styles.tenderActionsRow}>
                   <TouchableOpacity
-                    style={styles.portalPdfBtn}
-                    onPress={() =>
-                      Alert.alert(
-                        'Official GeM Portal Document',
-                        `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
-                      )
-                    }
+                    style={styles.inspectBtn}
+                    onPress={() => setSelectedBid(bid)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.portalPdfBtnText}>GeM Doc 📄</Text>
+                    <Text style={styles.inspectBtnText}>Inspect Zero-PDF ➔</Text>
                   </TouchableOpacity>
-                ) : null}
+                  {bid.docUrl ? (
+                    <TouchableOpacity
+                      style={styles.portalPdfBtn}
+                      onPress={() => {
+                        if (bid.docUrl) {
+                          Linking.canOpenURL(bid.docUrl)
+                            .then((supported) => {
+                              if (supported) {
+                                Linking.openURL(bid.docUrl!);
+                              } else {
+                                Alert.alert(
+                                  'Official GeM Portal Document',
+                                  `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
+                                );
+                              }
+                            })
+                            .catch(() => {
+                              Alert.alert(
+                                'Official GeM Portal Document',
+                                `Bid: ${bid.bidNumber}\n\nDocument Link:\n${bid.docUrl}\n\nBuyer: ${bid.department}\nMinistry: ${bid.ministry}`
+                              );
+                            });
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.portalPdfBtnText}>GeM Doc 📄</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </View>
 
       {/* SECTION 5: Key Government Categories (Exact PhonePe "Loans / Insurance" layout) */}
@@ -966,4 +1031,60 @@ const styles = StyleSheet.create({
   exploreBannerLeft: { flex: 1, marginRight: 8 },
   exploreBannerTitle: { color: '#1E293B', fontSize: 13, fontWeight: '700' },
   exploreBannerSub: { color: '#64748B', fontSize: 11, marginTop: 2 },
+  filterChipsScroll: {
+    marginVertical: 10,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#F1F3F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: '#5F259F',
+    borderColor: '#5F259F',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  emptyFilterState: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyFilterText: {
+    fontSize: 13,
+    color: '#64748B',
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  resetFilterBtn: {
+    backgroundColor: '#5F259F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  resetFilterBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

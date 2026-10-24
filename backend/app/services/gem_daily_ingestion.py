@@ -32,7 +32,7 @@ class GemDailyIngestion:
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     @classmethod
-    def fetch_live_portal_bids(cls, pages: int = 2) -> List[Dict[str, Any]]:
+    def fetch_live_portal_bids(cls, pages: int = 5) -> List[Dict[str, Any]]:
         """
         Extracts ongoing public bids from bidplus.gem.gov.in without requiring an account.
         Parses live Solr records and normalizes them into standard DeconstructedBidDoc format.
@@ -275,7 +275,7 @@ class GemDailyIngestion:
         }
 
     @classmethod
-    def sync_daily_bids(cls, pages: int = 2) -> Dict[str, Any]:
+    def sync_daily_bids(cls, pages: int = 5) -> Dict[str, Any]:
         """Orchestrates full daily crawl from gem.gov.in, local caching, and database sync."""
         logger.info(f"Starting daily GeM crawl (pages={pages})...")
         live_bids = cls.fetch_live_portal_bids(pages=pages)

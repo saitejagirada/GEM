@@ -132,23 +132,8 @@ export interface InvoiceContractTracker {
 }
 
 // -------------------------------------------------------------------------
-// Module 4: Order-Bound Chat & Audit Log
 // -------------------------------------------------------------------------
-
-export interface OrderChatMessage {
-  id: string;
-  contractId: string;
-  senderId: string;
-  senderName: string;
-  senderRole: UserRole;
-  text: string;
-  attachedDocumentUrl?: string;
-  timestampUtc: string;
-  immutableAuditSignature: string;
-}
-
-// -------------------------------------------------------------------------
-// Module 5: Dedicated User Agent & Profile Matching Models
+// Module 4: Dedicated User Agent & Profile Matching Models
 // -------------------------------------------------------------------------
 
 export interface AcceptedOrder {

@@ -14,7 +14,7 @@ portal_bp = Blueprint('portal', __name__)
 @portal_bp.route('/sync-daily-bids', methods=['POST'])
 def sync_daily_bids():
     """Triggers live crawl of public bids from bidplus.gem.gov.in and database sync."""
-    pages = request.args.get('pages', default=2, type=int)
+    pages = request.args.get('pages', default=5, type=int)
     result = GemDailyIngestion.sync_daily_bids(pages=pages)
     return jsonify(result), 200
 
@@ -22,7 +22,8 @@ def sync_daily_bids():
 @portal_bp.route('/live-bids', methods=['GET'])
 def get_live_bids():
     """Returns freshly crawled live public tenders from gem.gov.in."""
-    bids = GemDailyIngestion.fetch_live_portal_bids(pages=2)
+    pages = request.args.get('pages', default=5, type=int)
+    bids = GemDailyIngestion.fetch_live_portal_bids(pages=pages)
     return jsonify({"success": True, "count": len(bids), "data": bids}), 200
 
 
