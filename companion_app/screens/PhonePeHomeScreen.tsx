@@ -13,6 +13,11 @@ import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats, AcceptedO
 import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { UserAgentService } from '../services/UserAgentService';
 import { BidInspectorScreen } from './BidInspectorScreen';
+import { PulsingBeacon } from '../components/PulsingBeacon';
+import { BidCountdownBadge } from '../components/BidCountdownBadge';
+import { TenderCountdownTicker } from '../components/TenderCountdownTicker';
+import { AnimatedSegmentedBar } from '../components/AnimatedSegmentedBar';
+import { AnimatedCategoryChip } from '../components/AnimatedCategoryChip';
 
 interface PhonePeHomeScreenProps {
   userProfile: UserAgentProfile;
@@ -214,8 +219,11 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
 
           {/* Button 2: Live Auctions */}
           <TouchableOpacity style={styles.circleItem} onPress={onOpenAuctions} activeOpacity={0.7}>
-            <View style={styles.purpleCircle}>
+            <View style={[styles.purpleCircle, { backgroundColor: '#7C3AED' }]}>
               <Text style={styles.circleIcon}>⚡</Text>
+              <View style={styles.raLiveBeaconWrapper}>
+                <PulsingBeacon variant="crimson" size={6} />
+              </View>
             </View>
             <Text style={styles.circleLabel}>Live RA</Text>
           </TouchableOpacity>
@@ -239,6 +247,12 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
             <Text style={styles.circleLabel}>MSE Status</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Dynamic Urgency Countdown Ticker */}
+        <TenderCountdownTicker
+          closingCount={marketPulse.closingIn24Hours}
+          onPress={() => onNavigateTab('SEARCH')}
+        />
 
         {/* Promo Banner directly below (PhonePe Mutual Fund SIP style) */}
         {featuredBid && (
@@ -424,8 +438,8 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
         <View style={styles.portalSyncBanner}>
           <View style={styles.portalSyncLeft}>
             <View style={styles.portalSyncTagRow}>
-              <View style={styles.liveGreenDot} />
-              <Text style={styles.portalSyncTag}>PUBLIC PORTAL SYNC (GEM.GOV.IN)</Text>
+              <PulsingBeacon variant="emerald" size={8} />
+              <Text style={styles.portalSyncTag}>PUBLIC PORTAL SYNC (GEM.GOV.IN • LIVE FIREHOSE)</Text>
             </View>
             <Text style={styles.portalSyncTitle}>Auto-Ingested Daily Government Opportunities</Text>
             <Text style={styles.portalSyncSub}>
@@ -444,59 +458,28 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Top Procurement Type Tabs Bar */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.procurementTabsScroll}
-          contentContainerStyle={styles.procurementTabsRow}
-        >
-          {PROCUREMENT_TABS.map((tab) => {
-            const isActive = selectedProcurementType === tab.key;
-            const count = typeCounts[tab.key];
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.procurementTab, isActive && styles.procurementTabActive]}
-                onPress={() => setSelectedProcurementType(tab.key)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.procurementTabIcon}>{tab.icon}</Text>
-                <Text style={[styles.procurementTabText, isActive && styles.procurementTabTextActive]}>
-                  {tab.label}
-                </Text>
-                <View style={[styles.procurementCountBadge, isActive && styles.procurementCountBadgeActive]}>
-                  <Text style={[styles.procurementCountText, isActive && styles.procurementCountTextActive]}>
-                    {count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* Top Procurement Type Tabs Bar with Tactile Spring Animations */}
+        <AnimatedSegmentedBar
+          tabs={PROCUREMENT_TABS.map((t) => ({ ...t, count: typeCounts[t.key] }))}
+          selectedKey={selectedProcurementType}
+          onSelect={setSelectedProcurementType}
+        />
 
-        {/* Industry Domain Filter Chips */}
+        {/* Industry Domain Filter Chips with Spring Bounce */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterChipsScroll}
           contentContainerStyle={styles.filterChipsRow}
         >
-          {DOMAIN_CATEGORIES.map((cat) => {
-            const isActive = selectedDomainCategory === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setSelectedDomainCategory(cat)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {DOMAIN_CATEGORIES.map((cat) => (
+            <AnimatedCategoryChip
+              key={cat}
+              label={cat}
+              isActive={selectedDomainCategory === cat}
+              onPress={() => setSelectedDomainCategory(cat)}
+            />
+          ))}
         </ScrollView>
 
         {/* Opportunity Cards */}
@@ -521,12 +504,25 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
             const evalResult = UserAgentService.evaluateBid(userProfile, bid);
             const pastMatch = evalResult.pastExperienceMatch;
             const isService = bid.type === 'SERVICE';
+            const cardAccentStyle =
+              bid.isRa || bid.type === 'RA'
+                ? styles.cardAccentRa
+                : bid.type === 'SERVICE'
+                ? styles.cardAccentService
+                : bid.type === 'CUSTOM'
+                ? styles.cardAccentCustom
+                : bid.type === 'BOQ'
+                ? styles.cardAccentBoq
+                : styles.cardAccentProduct;
 
             return (
-              <View key={bid.bidNumber} style={styles.tenderFeedCard}>
-                {/* Header: Type Badge + Bid # */}
+              <View key={bid.bidNumber} style={[styles.tenderFeedCard, cardAccentStyle]}>
+                {/* Header: Type Badge + Live Countdown + Bid # */}
                 <View style={styles.tenderFeedHeader}>
-                  {renderTypeBadge(bid)}
+                  <View style={styles.headerBadgeGroup}>
+                    {renderTypeBadge(bid)}
+                    <BidCountdownBadge closingTimeUtc={bid.closingTimeUtc} />
+                  </View>
                   <Text style={styles.tenderBidNumber}>{bid.bidNumber}</Text>
                 </View>
 
@@ -540,24 +536,37 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                   {bid.department} • {bid.categoryDomain || bid.ministry}
                 </Text>
 
-                {/* 3 Metric Pills */}
-                <View style={styles.tenderMetricsRow}>
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>EST. BUDGET</Text>
-                    <Text style={styles.metricValue}>
-                      ₹{((bid.estimatedBidValueInr || 2850000) / 100000).toFixed(1)}L
+                {/* 4 Instant Dealbreaker Velocity Pills */}
+                <View style={styles.dealbreakerGrid}>
+                  {/* 1. EMD Exemption Status */}
+                  <View style={[styles.dealbreakerPill, bid.isEmdExemptForMse ? styles.pillSuccess : styles.pillNeutral]}>
+                    <Text style={[styles.dealbreakerPillText, bid.isEmdExemptForMse ? styles.pillTextSuccess : styles.pillTextNeutral]}>
+                      {bid.isEmdExemptForMse ? '🛡️ MSE: ₹0 EMD (Waived)' : `⚠️ EMD: ₹${((bid.emdAmountInr || 0) / 1000).toFixed(0)}k`}
                     </Text>
                   </View>
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>EMD STATUS</Text>
-                    <Text style={[styles.metricValue, { color: '#059669' }]}>
-                      {bid.isEmdExemptForMse ? '₹0 (MSE Waived)' : `₹${bid.emdAmountInr}`}
+
+                  {/* 2. Minimum Annual Turnover */}
+                  <View style={[styles.dealbreakerPill, evalResult.turnoverEligible ? styles.pillSuccess : styles.pillWarning]}>
+                    <Text style={[styles.dealbreakerPillText, evalResult.turnoverEligible ? styles.pillTextSuccess : styles.pillTextWarning]}>
+                      {bid.minAnnualTurnoverInr > 0
+                        ? `📊 Min T/O: ₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L (${evalResult.turnoverEligible ? '✓ Fits' : 'Shortfall'})`
+                        : '📊 Min T/O: No Min Req'}
                     </Text>
                   </View>
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>{isService ? 'DURATION' : 'DELIVERY'}</Text>
-                    <Text style={styles.metricValue}>
-                      {isService ? `${bid.serviceDetails?.durationMonths || 12} Mos` : `${bid.deliveryPeriodDays} Days`}
+
+                  {/* 3. Delivery / Duration */}
+                  <View style={styles.dealbreakerPill}>
+                    <Text style={styles.dealbreakerPillText}>
+                      {isService
+                        ? `🛠️ ${bid.serviceDetails?.durationMonths || 12} Mos SLA`
+                        : `🚚 ${bid.deliveryPeriodDays} Days Delivery`}
+                    </Text>
+                  </View>
+
+                  {/* 4. Primary Consignee Location */}
+                  <View style={styles.dealbreakerPill}>
+                    <Text style={styles.dealbreakerPillText} numberOfLines={1}>
+                      📍 {bid.consignees?.[0]?.state || 'Pan-India'} ({bid.consignees?.length || 1} Hub{(bid.consignees?.length || 1) > 1 ? 's' : ''})
                     </Text>
                   </View>
                 </View>
@@ -574,19 +583,22 @@ export const PhonePeHomeScreen: React.FC<PhonePeHomeScreenProps> = ({
                 {/* CVC Experience Match Badge */}
                 {pastMatch?.eligible ? (
                   <View style={styles.cvcMatchBanner}>
-                    <Text style={styles.cvcMatchTitle}>
-                      ⭐ CVC Past Experience Qualified ({pastMatch.matchType})
-                    </Text>
+                    <View style={styles.cvcMatchHeaderRow}>
+                      <Text style={styles.cvcMatchStar}>⭐</Text>
+                      <Text style={styles.cvcMatchTitle}>
+                        CVC PAST PERFORMANCE QUALIFIED ({pastMatch.matchType})
+                      </Text>
+                    </View>
                     {pastMatch.bestMatchingOrder && (
                       <Text style={styles.cvcMatchSubtitle} numberOfLines={1}>
-                        Matched: {pastMatch.bestMatchingOrder.contractNumber} (₹{(pastMatch.bestMatchingOrder.orderValueInr / 100000).toFixed(1)}L - {pastMatch.bestMatchingOrder.buyerDepartment})
+                        Pre-qualified via GeM Order #{pastMatch.bestMatchingOrder.contractNumber} (₹{(pastMatch.bestMatchingOrder.orderValueInr / 100000).toFixed(1)}L)
                       </Text>
                     )}
                   </View>
                 ) : (
                   <View style={styles.cvcStandardBanner}>
                     <Text style={styles.cvcStandardText}>
-                      ℹ️ Standard Eligibility: Turnover ₹{(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L • {bid.yearsExperienceRequired} yrs exp
+                      ℹ️ Standard Criteria: Turnover ₹{(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L • {bid.yearsExperienceRequired} yrs exp
                     </Text>
                   </View>
                 )}
@@ -982,12 +994,95 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tenderFeedCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    borderLeftWidth: 4,
+  },
+  cardAccentProduct: {
+    borderLeftColor: '#2563EB',
+  },
+  cardAccentService: {
+    borderLeftColor: '#059669',
+  },
+  cardAccentCustom: {
+    borderLeftColor: '#D97706',
+  },
+  cardAccentBoq: {
+    borderLeftColor: '#7C3AED',
+  },
+  cardAccentRa: {
+    borderLeftColor: '#DC2626',
+  },
+  headerBadgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  dealbreakerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginVertical: 10,
+  },
+  dealbreakerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dealbreakerPillText: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  pillSuccess: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  pillTextSuccess: {
+    color: '#047857',
+  },
+  pillWarning: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  pillTextWarning: {
+    color: '#B45309',
+  },
+  pillNeutral: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  pillTextNeutral: {
+    color: '#475569',
+  },
+  raLiveBeaconWrapper: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+  },
+  cvcMatchHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  cvcMatchStar: {
+    fontSize: 12,
   },
   tenderFeedHeader: {
     flexDirection: 'row',
