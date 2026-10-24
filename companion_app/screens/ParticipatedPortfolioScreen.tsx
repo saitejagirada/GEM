@@ -271,7 +271,7 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
             </View>
           </View>
         );
-      })}
+      }))}
     </ScrollView>
   );
 };
