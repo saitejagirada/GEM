@@ -96,4 +96,32 @@ describe('UserAgentService', () => {
     expect(ranked[0].bid.bidNumber).toBe('GEM/2026/B/9001');
     expect(ranked[0].evaluation.matchScore).toBeGreaterThan(ranked[1].evaluation.matchScore);
   });
+
+  it('analyzes accepted orders and confirms past experience compliance', () => {
+    const profileWithOrders: UserAgentProfile = {
+      ...mockProfile,
+      acceptedOrders: [
+        {
+          contractNumber: 'GEMC-511687712001',
+          orderDate: '15-Jan-2026',
+          title: 'Supply of Outdoor LED Luminaire Street Lights',
+          buyerDepartment: 'Northern Railway',
+          ministry: 'Ministry of Railways',
+          category: 'Solar & Renewable Energy',
+          orderValueInr: 2200000, // ₹22L >= 80% of ₹25L (₹20L)
+          quantity: 500,
+          cracStatus: 'CRAC_ACCEPTED',
+          cracDate: '28-Jan-2026',
+          slaCompliance: 'ON_TIME',
+          invoiceNumber: 'INV-001',
+        },
+      ],
+    };
+
+    const evaluation = UserAgentService.evaluateBid(profileWithOrders, highMatchBid);
+    expect(evaluation.pastExperienceMatch).toBeDefined();
+    expect(evaluation.pastExperienceMatch?.qualifiesCriteria).toBe(true);
+    expect(evaluation.pastExperienceMatch?.matchingOrderNumber).toBe('GEMC-511687712001');
+    expect(evaluation.pastExperienceMatch?.ruleDescription).toContain('Satisfies 80% Single-Order Criteria');
+  });
 });

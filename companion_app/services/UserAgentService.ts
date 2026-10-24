@@ -95,6 +95,46 @@ export class UserAgentService {
       maxInr: Math.round(baseValue * 0.94),
     };
 
+    // Past Performance & Experience Analysis based on Completed GeM Orders
+    let pastExperienceMatch: BidMatchEvaluation['pastExperienceMatch'] = undefined;
+    if (profile.acceptedOrders && profile.acceptedOrders.length > 0) {
+      const estimatedValue = bid.estimatedBidValueInr || bid.emdAmountInr * 50;
+      const threshold80 = estimatedValue * 0.8;
+      const threshold50 = estimatedValue * 0.5;
+      const threshold40 = estimatedValue * 0.4;
+
+      const single80 = profile.acceptedOrders.find((o) => o.orderValueInr >= threshold80);
+      const orders50 = profile.acceptedOrders.filter((o) => o.orderValueInr >= threshold50);
+      const orders40 = profile.acceptedOrders.filter((o) => o.orderValueInr >= threshold40);
+
+      if (single80) {
+        pastExperienceMatch = {
+          qualifiesCriteria: true,
+          matchingOrderNumber: single80.contractNumber,
+          matchingOrderValueInr: single80.orderValueInr,
+          ruleDescription: `Satisfies 80% Single-Order Criteria via Contract ${single80.contractNumber} (₹${(single80.orderValueInr / 100000).toFixed(1)}L)`,
+        };
+      } else if (orders50.length >= 2) {
+        pastExperienceMatch = {
+          qualifiesCriteria: true,
+          matchingOrderNumber: orders50[0].contractNumber,
+          matchingOrderValueInr: orders50[0].orderValueInr,
+          ruleDescription: `Satisfies 2-Order 50% Rule with completed contracts totaling ₹${((orders50[0].orderValueInr + orders50[1].orderValueInr) / 100000).toFixed(1)}L`,
+        };
+      } else if (orders40.length >= 3) {
+        pastExperienceMatch = {
+          qualifiesCriteria: true,
+          ruleDescription: `Satisfies 3-Order 40% Rule with 3 executed GeM contracts`,
+        };
+      } else {
+        const highestOrder = Math.max(...profile.acceptedOrders.map((o) => o.orderValueInr));
+        pastExperienceMatch = {
+          qualifiesCriteria: false,
+          ruleDescription: `Highest past order ₹${(highestOrder / 100000).toFixed(1)}L is below single-order 80% threshold (₹${(threshold80 / 100000).toFixed(1)}L)`,
+        };
+      }
+    }
+
     return {
       bidNumber: bid.bidNumber,
       matchScore,
@@ -105,6 +145,7 @@ export class UserAgentService {
       verdictTag,
       verdictSummary,
       expectedWinningBidRange,
+      pastExperienceMatch,
     };
   }
 

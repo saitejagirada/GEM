@@ -79,10 +79,12 @@ describe('SupabaseClient', () => {
   it('retrieves vendor profile mapped to UserAgentProfile format', async () => {
     const profile = await SupabaseClient.getVendorProfile('usr-agent-001');
     expect(profile).toBeDefined();
-    expect(profile.organizationName).toBe('Rajesh Hardware & Electrical Solutions');
+    expect(profile.organizationName).toBe('Garuda Tech & Electrical Solutions');
     expect(profile.msmeCategory).toBe('MICRO');
     expect(profile.hasUdyamCertificate).toBe(true);
     expect(profile.productCategories).toContain('LED Luminaire');
+    expect(profile.acceptedOrders).toBeDefined();
+    expect(profile.acceptedOrders?.length).toBe(5);
   });
 
   it('manages vendor portfolio offline and preserves local bid additions', async () => {

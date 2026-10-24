@@ -182,10 +182,11 @@ export type CorrigendumListener = (corrigendum: SupabaseCorrigendum) => void;
 // -----------------------------------------------------------------------------
 
 export class SupabaseClient {
-  private static supabaseUrl: string = 'https://mock-gem-supabase.supabase.co';
-  private static anonKey: string = 'mock-anon-key';
-  private static timeoutMs: number = 2000;
-  private static isConfigured: boolean = false;
+  private static supabaseUrl: string = 'https://szrradtvbktmegzybmwa.supabase.co';
+  private static anonKey: string =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6cnJhZHR2Ymt0bWVnenlibXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MzYzMDUsImV4cCI6MjEwODQxMjMwNX0.mUdqLvI_xaOiGYPu79UcK4yEk5Fn_D9ewfq5VvhBTPs';
+  private static timeoutMs: number = 3000;
+  private static isConfigured: boolean = true;
   private static forceOffline: boolean = false;
 
   private static raListeners: Set<ReverseAuctionListener> = new Set();

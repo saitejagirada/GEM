@@ -151,7 +151,21 @@ export interface OrderChatMessage {
 // Module 5: Dedicated User Agent & Profile Matching Models
 // -------------------------------------------------------------------------
 
-export type MsmeCategory = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE' | 'STARTUP';
+export interface AcceptedOrder {
+  contractNumber: string; // e.g. "GEMC-511687712001"
+  orderDate: string; // e.g. "15-Jan-2026"
+  title: string;
+  buyerDepartment: string;
+  ministry: string;
+  category: string;
+  orderValueInr: number;
+  quantity: number;
+  cracStatus: 'CRAC_ACCEPTED' | 'PAYMENT_DISBURSED';
+  cracDate: string;
+  slaCompliance: 'ON_TIME' | 'EARLY_DELIVERY';
+  invoiceNumber: string;
+  pfmsUtrNumber?: string;
+}
 
 export interface UserAgentProfile {
   id: string;
@@ -163,6 +177,7 @@ export interface UserAgentProfile {
   targetStates: string[]; // e.g. ['Uttar Pradesh', 'Delhi', 'Haryana']
   isOem: boolean;
   hasUdyamCertificate: boolean;
+  acceptedOrders?: AcceptedOrder[];
 }
 
 export interface BidMatchEvaluation {
@@ -175,6 +190,12 @@ export interface BidMatchEvaluation {
   verdictTag: 'HIGH_MATCH' | 'MODERATE_MATCH' | 'DISQUALIFIED';
   verdictSummary: string;
   expectedWinningBidRange: { minInr: number; maxInr: number };
+  pastExperienceMatch?: {
+    qualifiesCriteria: boolean;
+    matchingOrderNumber?: string;
+    matchingOrderValueInr?: number;
+    ruleDescription: string;
+  };
 }
 
 // -------------------------------------------------------------------------
