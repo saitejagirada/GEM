@@ -64,3 +64,29 @@ This document serves as the shared single source of truth across all 3 developme
   * Implement 0–100% User Agent Match scoring algorithm.
   * Expose REST endpoints: `/api/portal/market-pulse`, `/api/portal/feed`, `/api/portal/bid/:id/fundamentals`, `/api/portal/auctions`, `/api/portal/portfolio`.
 
+---
+
+## 🗄️ Thread 4: Supabase & Realtime Data Pipeline (`supabase-stream`)
+**Agent ID**: `d10db7d1-08d6-49aa-b0f3-7b77a363ee93`  
+**Focus**: PostgreSQL schema (`tenders`, `fundamentals`, `reverse_auctions`, `corrigenda`, `vendor_profiles`), GIN full-text search indexing, Row Level Security, and Supabase Realtime channels.
+
+* **Primary Files**:
+  * [`backend/database/supabase_schema.sql`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/database/supabase_schema.sql)
+  * [`companion_app/services/SupabaseClient.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/SupabaseClient.ts)
+* **Status**: 🟢 **ACTIVE & INITIALIZED**. Designing relational models, migration scripts, and offline-first TypeScript client.
+
+---
+
+## 🧐 Thread 5: The Reality Checker (`reality-checker-stream`)
+**Agent ID**: `e01e8dba-0a51-4128-9ccc-a8f48db259f4`  
+**Focus**: Ruthless vendor advocate auditing, identifying procurement friction, ungrounded dummy data, missed dealbreakers (EMD exemption, CA turnover, corrigenda deadlines), and PhonePe-style UX improvements.
+
+* **Primary Focus Screens**:
+  * [`companion_app/screens/PhonePeHomeScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PhonePeHomeScreen.tsx)
+  * [`companion_app/screens/BidInspectorScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/BidInspectorScreen.tsx)
+  * [`companion_app/screens/ReverseAuctionScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/ReverseAuctionScreen.tsx)
+  * [`companion_app/screens/PhonePeSearchScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PhonePeSearchScreen.tsx)
+  * [`companion_app/screens/PhonePeAlertsScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PhonePeAlertsScreen.tsx)
+* **Status**: 🟢 **ACTIVE & INITIALIZED**. Conducting first comprehensive vendor usability audit.
+
+
