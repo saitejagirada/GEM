@@ -187,6 +187,26 @@ class GemPortalService:
         """Filters and ranks tenders based on match criteria."""
         bids = cls.get_mock_bids()
 
+        if category:
+            cat = category.lower().strip()
+            cat_keywords = {
+                "railways": ["railway", "rail", "switches"],
+                "defence": ["defence", "defense", "bro", "ordnance", "fasteners"],
+                "solar": ["solar", "led", "lighting"],
+                "healthcare": ["health", "hospital", "medical"],
+                "it": ["network", "poe", "server", "switch", "telecom"]
+            }.get(cat, [cat])
+
+            bids = [
+                b for b in bids
+                if any(
+                    kw in b.get("title", "").lower()
+                    or kw in b.get("department", "").lower()
+                    or kw in b.get("ministry", "").lower()
+                    for kw in cat_keywords
+                )
+            ]
+
         if state:
             bids = [
                 b for b in bids
@@ -199,6 +219,57 @@ class GemPortalService:
         # Rank by matchScore descending
         bids.sort(key=lambda x: x.get("matchScore", 0), reverse=True)
         return bids
+
+    @classmethod
+    def search_bids(cls, query: str) -> List[Dict[str, Any]]:
+        """Searches tenders matching keyword across title, department, or bid number."""
+        if not query or not query.strip():
+            return cls.get_mock_bids()
+
+        q = query.lower().strip()
+        bids = cls.get_mock_bids()
+        return [
+            b for b in bids
+            if q in b.get("title", "").lower()
+            or q in b.get("department", "").lower()
+            or q in b.get("ministry", "").lower()
+            or q in b.get("bidNumber", "").lower()
+            or any(q in item.get("itemTitle", "").lower() for item in b.get("boqItems", []))
+        ]
+
+    @staticmethod
+    def get_alerts() -> List[Dict[str, Any]]:
+        """Returns real-time notifications for the PhonePe Alerts tab."""
+        now = datetime.now(timezone.utc)
+        return [
+            {
+                "id": "alert-1",
+                "title": "Corrigendum Issued",
+                "type": "CORRIGENDUM",
+                "bidNumber": "GEM/2026/B/890456",
+                "message": "Delivery period extended by 15 days for Western Railway Gigabit PoE Switches.",
+                "timestamp": (now - timedelta(minutes=45)).isoformat(),
+                "priority": "HIGH"
+            },
+            {
+                "id": "alert-2",
+                "title": "Outbid in Live Reverse Auction",
+                "type": "OUTBID",
+                "bidNumber": "GEM-2026-RA-99201",
+                "message": "New L1 bid of ₹38,25,000 entered by Competitor #4. Counter-bid available.",
+                "timestamp": (now - timedelta(hours=2)).isoformat(),
+                "priority": "URGENT"
+            },
+            {
+                "id": "alert-3",
+                "title": "Tender Closing in < 24 Hours",
+                "type": "CLOSING_SOON",
+                "bidNumber": "GEM/2026/B/890456",
+                "message": "Technical bid submission closes tomorrow at 18:00 IST. Ensure MAF is uploaded.",
+                "timestamp": (now - timedelta(hours=4)).isoformat(),
+                "priority": "NORMAL"
+            }
+        ]
 
     @classmethod
     def get_bid_fundamentals(cls, bid_number: str) -> Optional[Dict[str, Any]]:

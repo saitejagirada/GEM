@@ -1,7 +1,7 @@
 """
 GeM Portal Intelligence API Blueprint
 Exposes endpoints for market pulse, personalized tender feeds, fundamentals deconstruction,
-reverse/forward auctions, and participated portfolios.
+reverse/forward auctions, participated portfolios, keyword search, and real-time alerts.
 """
 
 from flask import Blueprint, jsonify, request
@@ -19,7 +19,7 @@ def get_market_pulse():
 
 @portal_bp.route('/feed', methods=['GET'])
 def get_feed():
-    """Returns ranked tenders with AI fit scoring."""
+    """Returns ranked tenders with AI fit scoring and category filtering."""
     user_id = request.args.get('userId')
     category = request.args.get('category')
     state = request.args.get('state')
@@ -28,6 +28,21 @@ def get_feed():
 
     bids = GemPortalService.get_feed(user_id=user_id, category=category, state=state, min_score=min_score)
     return jsonify({"success": True, "count": len(bids), "data": bids})
+
+
+@portal_bp.route('/search', methods=['GET'])
+def search_tenders():
+    """Searches tenders by keyword across title, department, or bid number."""
+    query = request.args.get('q', '').strip()
+    bids = GemPortalService.search_bids(query=query)
+    return jsonify({"success": True, "query": query, "count": len(bids), "data": bids})
+
+
+@portal_bp.route('/alerts', methods=['GET'])
+def get_alerts():
+    """Returns active notifications (corrigendums, outbid, closing soon) for PhonePe Alerts tab."""
+    alerts = GemPortalService.get_alerts()
+    return jsonify({"success": True, "count": len(alerts), "data": alerts})
 
 
 @portal_bp.route('/bid/<path:bid_number>/fundamentals', methods=['GET'])
@@ -53,7 +68,6 @@ def manage_portfolio():
     user_id = request.args.get('userId')
     if request.method == 'POST':
         payload = request.get_json(silent=True) or {}
-        # In mock mode, acknowledge addition
         return jsonify({"success": True, "message": "Bid added to portfolio tracking", "data": payload}), 201
 
     portfolio = GemPortalService.get_portfolio(user_id=user_id)
