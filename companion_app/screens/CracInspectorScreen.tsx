@@ -55,7 +55,6 @@ export const CracInspectorScreen: React.FC = () => {
     Alert.alert('Barcode Scanned', `Verified Consignment Tag: ${newBarcode}`);
   };
 
-  // Glove-friendly stepper adjustments
   const adjustAccepted = (delta: number) => {
     const nextAccepted = Math.max(0, Math.min(totalQuantity, acceptedQuantity + delta));
     setAcceptedQuantity(nextAccepted);
@@ -130,9 +129,8 @@ export const CracInspectorScreen: React.FC = () => {
         <Text style={styles.vendorText}>Vendor: {vendorName}</Text>
       </View>
 
-      {/* Camera Viewfinder with Crosshairs & Tamper-Proof Watermark */}
+      {/* Camera Viewfinder */}
       <View style={styles.cameraBox}>
-        {/* Viewfinder Header */}
         <View style={styles.viewfinderHeader}>
           <Text style={styles.cameraTag}>🔴 LIVE CAMERA VIEWFINDER</Text>
           <View style={[styles.gpsBadge, geo.accuracyMeters < 5 ? styles.gpsGood : styles.gpsWarning]}>
@@ -140,7 +138,7 @@ export const CracInspectorScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Viewfinder Reticle / Target Area */}
+        {/* Viewfinder Reticle */}
         <View style={styles.reticleContainer}>
           <View style={styles.reticleCornerTL} />
           <View style={styles.reticleCornerTR} />
@@ -150,7 +148,7 @@ export const CracInspectorScreen: React.FC = () => {
           <Text style={styles.reticleHint}>Align package barcode / serial marking within frame</Text>
         </View>
 
-        {/* Live Watermark Overlay Box with Opacity Toggle */}
+        {/* Live Watermark Overlay Box */}
         <View style={[styles.watermarkBox, { opacity: hudOpacity }]}>
           <View style={styles.watermarkTopRow}>
             <Text style={styles.watermarkHeading}>CERT-In AUDIT WATERMARK OVERLAY</Text>
@@ -164,18 +162,18 @@ export const CracInspectorScreen: React.FC = () => {
           <Text style={styles.watermarkText}>{watermarkPreview}</Text>
         </View>
 
-        {/* Capture Button (Min 48dp) */}
+        {/* Capture Button */}
         <TouchableOpacity style={styles.captureBtn} onPress={handleCapturePhoto} activeOpacity={0.8}>
           <Text style={styles.captureBtnText}>📷 CAPTURE WATERMARKED EVIDENCE ({photoCount} SAVED)</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Barcode Verification (Min 48dp) */}
+      {/* Barcode Verification */}
       <View style={styles.card}>
         <View style={styles.rowBetween}>
           <Text style={styles.cardHeader}>Scanned Barcodes ({scannedBarcodes.length})</Text>
           <TouchableOpacity style={styles.scanBtn} onPress={handleScanBarcode} activeOpacity={0.8}>
-            <Text style={styles.scanBtnText}>+ Scan Tag (48dp)</Text>
+            <Text style={styles.scanBtnText}>+ Scan Tag</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.barcodeChips}>
@@ -187,7 +185,7 @@ export const CracInspectorScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Glove-Safe Quantity Reconciliation */}
+      {/* Quantity Reconciliation */}
       <View style={styles.card}>
         <View style={styles.rowBetween}>
           <Text style={styles.cardHeader}>Quantity Reconciliation (Total: {totalQuantity})</Text>
@@ -196,7 +194,6 @@ export const CracInspectorScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Rapid Stepper Controls for Gloved Field Workers */}
         <View style={styles.stepperContainer}>
           <Text style={styles.stepperTitle}>Accepted Quantity: {acceptedQuantity}</Text>
           <View style={styles.stepperRow}>
@@ -218,7 +215,6 @@ export const CracInspectorScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Rejection / Defect Section */}
         {rejectedQuantity > 0 && (
           <View style={styles.defectBox}>
             <Text style={styles.defectLabel}>
@@ -229,13 +225,13 @@ export const CracInspectorScreen: React.FC = () => {
               value={defectReason}
               onChangeText={setDefectReason}
               placeholder="Specify defect reason..."
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor="#9CA3AF"
             />
           </View>
         )}
       </View>
 
-      {/* Double-Confirmed Sign-off Button (Min 56dp) */}
+      {/* Sign-off Button (PhonePe Purple) */}
       <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitCrac} activeOpacity={0.85}>
         <Text style={styles.submitBtnText}>SIGN &amp; ISSUE CRAC CERTIFICATE</Text>
         <Text style={styles.submitBtnSub}>Protected with Confirmation &amp; Offline Queue</Text>
@@ -245,74 +241,91 @@ export const CracInspectorScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
-  badge: { color: '#38BDF8', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 4 },
-  poTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: '900', marginBottom: 2 },
-  titleText: { color: '#CBD5E1', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  vendorText: { color: '#94A3B8', fontSize: 13 },
-  cameraBox: { backgroundColor: '#020617', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
-  viewfinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cameraTag: { color: '#EF4444', fontSize: 11, fontWeight: '800' },
-  gpsBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  gpsGood: { backgroundColor: 'rgba(0, 208, 156, 0.2)' },
-  gpsWarning: { backgroundColor: 'rgba(245, 158, 11, 0.2)' },
-  gpsText: { color: '#00D09C', fontSize: 11, fontWeight: '800' },
-  reticleContainer: {
-    height: 160,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    borderRadius: 8,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  badge: { color: '#5F259F', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
+  poTitle: { color: '#111827', fontSize: 17, fontWeight: '900', marginBottom: 2 },
+  titleText: { color: '#4B5563', fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  vendorText: { color: '#6B7280', fontSize: 12 },
+  cameraBox: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  viewfinderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  cameraTag: { color: '#DC2626', fontSize: 11, fontWeight: '800' },
+  gpsBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  gpsGood: { backgroundColor: '#E8F5E9' },
+  gpsWarning: { backgroundColor: '#FEF3C7' },
+  gpsText: { color: '#00C853', fontSize: 11, fontWeight: '800' },
+  reticleContainer: {
+    height: 150,
+    backgroundColor: '#1E293B',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
     position: 'relative',
   },
-  reticleCornerTL: { position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTopWidth: 2, borderLeftWidth: 2, borderColor: '#00D09C' },
-  reticleCornerTR: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTopWidth: 2, borderRightWidth: 2, borderColor: '#00D09C' },
-  reticleCornerBL: { position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottomWidth: 2, borderLeftWidth: 2, borderColor: '#00D09C' },
-  reticleCornerBR: { position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottomWidth: 2, borderRightWidth: 2, borderColor: '#00D09C' },
-  crosshair: { color: '#00D09C', fontSize: 26, fontWeight: '300' },
-  reticleHint: { color: '#64748B', fontSize: 10, marginTop: 4 },
-  watermarkBox: { backgroundColor: '#0F172A', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#475569', marginBottom: 12 },
+  reticleCornerTL: { position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTopWidth: 2, borderLeftWidth: 2, borderColor: '#00C853' },
+  reticleCornerTR: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTopWidth: 2, borderRightWidth: 2, borderColor: '#00C853' },
+  reticleCornerBL: { position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottomWidth: 2, borderLeftWidth: 2, borderColor: '#00C853' },
+  reticleCornerBR: { position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottomWidth: 2, borderRightWidth: 2, borderColor: '#00C853' },
+  crosshair: { color: '#00C853', fontSize: 26, fontWeight: '300' },
+  reticleHint: { color: '#94A3B8', fontSize: 10, marginTop: 4 },
+  watermarkBox: { backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12 },
   watermarkTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  watermarkHeading: { color: '#F59E0B', fontSize: 10, fontWeight: '900' },
-  opacityToggle: { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#1E293B', borderRadius: 4 },
-  opacityToggleText: { color: '#38BDF8', fontSize: 9, fontWeight: '800' },
-  watermarkText: { color: '#F8FAFC', fontSize: 10, fontFamily: 'monospace', lineHeight: 15 },
-  captureBtn: { backgroundColor: '#2563EB', minHeight: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', padding: 8 },
-  captureBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
+  watermarkHeading: { color: '#B45309', fontSize: 10, fontWeight: '800' },
+  opacityToggle: { paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#F3F4F6', borderRadius: 4 },
+  opacityToggleText: { color: '#5F259F', fontSize: 9, fontWeight: '800' },
+  watermarkText: { color: '#1F2937', fontSize: 10, fontFamily: 'monospace', lineHeight: 15 },
+  captureBtn: { backgroundColor: '#5F259F', minHeight: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center', padding: 8 },
+  captureBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  cardHeader: { color: '#F8FAFC', fontSize: 15, fontWeight: '800' },
-  scanBtn: { backgroundColor: '#334155', minHeight: 48, minWidth: 120, paddingHorizontal: 16, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  scanBtnText: { color: '#38BDF8', fontWeight: '800', fontSize: 12 },
-  barcodeChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  chip: { backgroundColor: '#0F172A', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#334155' },
-  chipText: { color: '#00D09C', fontSize: 12, fontWeight: '700' },
-  presetBtn: { backgroundColor: 'rgba(0, 208, 156, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  presetBtnText: { color: '#00D09C', fontSize: 11, fontWeight: '800' },
-  stepperContainer: { marginTop: 8 },
-  stepperTitle: { color: '#CBD5E1', fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  cardHeader: { color: '#111827', fontSize: 14, fontWeight: '800' },
+  scanBtn: { backgroundColor: '#F3E8FF', minHeight: 44, paddingHorizontal: 14, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  scanBtnText: { color: '#5F259F', fontWeight: '800', fontSize: 12 },
+  barcodeChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  chip: { backgroundColor: '#F3E8FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  chipText: { color: '#5F259F', fontSize: 11, fontWeight: '700' },
+  presetBtn: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  presetBtnText: { color: '#00C853', fontSize: 11, fontWeight: '800' },
+  stepperContainer: { marginTop: 6 },
+  stepperTitle: { color: '#4B5563', fontSize: 12, fontWeight: '700', marginBottom: 6 },
   stepperRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   stepBtn: {
     flex: 1,
-    minHeight: 48,
-    backgroundColor: '#0F172A',
+    minHeight: 44,
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stepBtnText: { color: '#F8FAFC', fontSize: 14, fontWeight: '800' },
-  qtyDisplay: { flex: 1.5, minHeight: 48, backgroundColor: '#1E293B', borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#00D09C' },
-  qtyDisplayText: { color: '#00D09C', fontSize: 18, fontWeight: '900' },
-  defectBox: { marginTop: 14 },
-  defectLabel: { color: '#F87171', fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  defectInput: { backgroundColor: '#0F172A', borderRadius: 8, color: '#FFFFFF', padding: 10, fontSize: 13, borderWidth: 1, borderColor: '#EF4444' },
-  submitBtn: { backgroundColor: '#059669', minHeight: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', padding: 10, marginTop: 4, marginBottom: 24 },
-  submitBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
-  submitBtnSub: { color: '#D1FAE5', fontSize: 11, marginTop: 2 },
+  stepBtnText: { color: '#111827', fontSize: 13, fontWeight: '800' },
+  qtyDisplay: { flex: 1.5, minHeight: 44, backgroundColor: '#FFFFFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#5F259F' },
+  qtyDisplayText: { color: '#5F259F', fontSize: 16, fontWeight: '900' },
+  defectBox: { marginTop: 12 },
+  defectLabel: { color: '#DC2626', fontSize: 11, fontWeight: '700', marginBottom: 4 },
+  defectInput: { backgroundColor: '#FFFFFF', borderRadius: 8, color: '#111827', padding: 8, fontSize: 12, borderWidth: 1, borderColor: '#FCA5A5' },
+  submitBtn: { backgroundColor: '#5F259F', minHeight: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', padding: 10, marginTop: 4, marginBottom: 24 },
+  submitBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  submitBtnSub: { color: '#E9D5FF', fontSize: 10, marginTop: 2 },
 });

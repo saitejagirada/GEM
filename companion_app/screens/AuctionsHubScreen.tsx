@@ -44,14 +44,14 @@ export const AuctionsHubScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top Segmented Mode Selector (Min 48dp touch bounds) */}
+      {/* Top Segmented Mode Selector (PhonePe White/Purple Style) */}
       <View style={styles.segmentedBar}>
         <TouchableOpacity
           style={[styles.segmentBtn, activeMode === 'REVERSE' && styles.segmentActive]}
           onPress={() => setActiveMode('REVERSE')}
         >
           <Text style={[styles.segmentText, activeMode === 'REVERSE' && styles.segmentTextActive]}>
-            ⚡ Reverse Auctions (RA)
+            ⚡ Live Reverse Auctions
           </Text>
         </TouchableOpacity>
 
@@ -60,7 +60,7 @@ export const AuctionsHubScreen: React.FC = () => {
           onPress={() => setActiveMode('FORWARD')}
         >
           <Text style={[styles.segmentText, activeMode === 'FORWARD' && styles.segmentTextActive]}>
-            ♻ Forward Auctions (e-Scrap)
+            ♻ Forward e-Scrap Lots
           </Text>
         </TouchableOpacity>
       </View>
@@ -120,7 +120,7 @@ export const AuctionsHubScreen: React.FC = () => {
                   </View>
                 </View>
 
-                {/* Quick 1-Tap Bid Button (Min 48dp) */}
+                {/* Quick 1-Tap Bid Button */}
                 <TouchableOpacity
                   style={styles.bidIncrementBtn}
                   onPress={() => handleIncrementForwardBid(lot.id)}
@@ -141,88 +141,93 @@ export const AuctionsHubScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   segmentedBar: {
     flexDirection: 'row',
     padding: 8,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F8F9FA',
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: '#E5E7EB',
     gap: 8,
   },
   segmentBtn: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 10,
+    minHeight: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
   },
   segmentActive: {
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-    borderColor: '#3B82F6',
+    backgroundColor: '#F3E8FF',
+    borderColor: '#5F259F',
   },
-  segmentText: { color: '#94A3B8', fontSize: 12, fontWeight: '700' },
-  segmentTextActive: { color: '#60A5FA', fontWeight: '900' },
+  segmentText: { color: '#6B7280', fontSize: 12, fontWeight: '700' },
+  segmentTextActive: { color: '#5F259F', fontWeight: '800' },
   scrollArea: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   forwardBanner: {
-    backgroundColor: '#162032',
+    backgroundColor: '#F3E8FF',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#38BDF8',
+    borderColor: '#E9D5FF',
   },
-  bannerTag: { color: '#38BDF8', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 },
-  bannerTitle: { color: '#F8FAFC', fontSize: 16, fontWeight: '800', marginBottom: 2 },
-  bannerSubtitle: { color: '#94A3B8', fontSize: 12, lineHeight: 16 },
+  bannerTag: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
+  bannerTitle: { color: '#111827', fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  bannerSubtitle: { color: '#4B5563', fontSize: 12, lineHeight: 16 },
   lotCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   lotHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  catPill: { backgroundColor: 'rgba(56, 189, 248, 0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  catText: { color: '#38BDF8', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  lotTimeTag: { color: '#F59E0B', fontSize: 11, fontWeight: '700' },
-  lotNumber: { color: '#64748B', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  lotTitle: { color: '#F8FAFC', fontSize: 15, fontWeight: '800', lineHeight: 20, marginBottom: 4 },
-  lotDept: { color: '#CBD5E1', fontSize: 12, marginBottom: 10 },
+  catPill: { backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  catText: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  lotTimeTag: { color: '#D97706', fontSize: 11, fontWeight: '700' },
+  lotNumber: { color: '#6B7280', fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  lotTitle: { color: '#111827', fontSize: 14, fontWeight: '700', lineHeight: 19, marginBottom: 4 },
+  lotDept: { color: '#4B5563', fontSize: 12, marginBottom: 10 },
   yardBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderRadius: 8,
     padding: 8,
     marginBottom: 12,
   },
   yardIcon: { fontSize: 12, marginRight: 6, marginTop: 1 },
-  yardText: { color: '#94A3B8', fontSize: 11, flex: 1, lineHeight: 15 },
+  yardText: { color: '#4B5563', fontSize: 11, flex: 1, lineHeight: 15 },
   priceRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   priceCell: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
   },
-  priceLabel: { color: '#64748B', fontSize: 10, fontWeight: '700', marginBottom: 2 },
-  reserveVal: { color: '#94A3B8', fontSize: 14, fontWeight: '700' },
-  highestVal: { color: '#00D09C', fontSize: 16, fontWeight: '900' },
+  priceLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  reserveVal: { color: '#6B7280', fontSize: 13, fontWeight: '700' },
+  highestVal: { color: '#00C853', fontSize: 15, fontWeight: '900' },
   bidIncrementBtn: {
-    minHeight: 48,
-    backgroundColor: '#3B82F6',
+    minHeight: 46,
+    backgroundColor: '#5F259F',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 12,
   },
-  bidIncrementBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  bidIncrementBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', textAlign: 'center' },
 });

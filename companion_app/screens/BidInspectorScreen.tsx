@@ -61,7 +61,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     if (onAddToParticipated) {
       onAddToParticipated(bid);
     }
-    Alert.alert('Added to Portfolio', `Bid ${bid.bidNumber} tracked in your Participated Bids.`);
+    Alert.alert('Tracked in History', `Bid ${bid.bidNumber} added to your Participated Submissions.`);
   };
 
   const checkedCount = bid.requiredDocuments.filter((d) => checkedDocs[d]).length;
@@ -69,7 +69,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={styles.container}>
-        {/* Top Header Bar */}
+        {/* Top Header Bar (PhonePe Purple) */}
         <View style={styles.headerBar}>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close details">
             <Text style={styles.closeBtnText}>✕</Text>
@@ -113,7 +113,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             <Text style={styles.ministryText}>{bid.ministry}</Text>
           </View>
 
-          {/* Expected Winning L1 Benchmark (Groww Price Guidance Style) */}
+          {/* Expected Winning L1 Benchmark Range */}
           <View style={styles.benchmarkCard}>
             <View style={styles.benchmarkHeader}>
               <Text style={styles.benchmarkLabel}>EXPECTED WINNING L1 BENCHMARK</Text>
@@ -124,11 +124,11 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               {(evaluation.expectedWinningBidRange.maxInr / 100000).toFixed(2)}L
             </Text>
             <Text style={styles.benchmarkSub}>
-              Based on historical {bid.category || 'MES/Defence'} procurement clearing ratios (82%–94% of budget).
+              Based on historical {bid.category || 'procurement'} clearing ratios (82%–94% of budget).
             </Text>
           </View>
 
-          {/* Groww-style 2x2 Key Fundamentals Grid */}
+          {/* 2x2 Key Fundamentals Grid */}
           <View style={styles.card}>
             <Text style={styles.sectionHeading}>Key Procurement Fundamentals</Text>
             <View style={styles.grid2x2}>
@@ -138,7 +138,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               </View>
               <View style={styles.gridCell}>
                 <Text style={styles.cellLabel}>EMD Guarantee</Text>
-                <Text style={[styles.cellValueSecondary, { color: '#00D09C' }]}>
+                <Text style={[styles.cellValueSecondary, { color: '#00C853' }]}>
                   {fundamentals.emdLabel}
                 </Text>
               </View>
@@ -175,7 +175,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
           {/* BOQ Technical Scope */}
           <View style={styles.card}>
-            <Text style={styles.sectionHeading}>BOQ & Scope Breakdown ({bid.boqItems.length} Items)</Text>
+            <Text style={styles.sectionHeading}>BOQ &amp; Scope Breakdown ({bid.boqItems.length} Items)</Text>
             {bid.boqItems.map((item, idx) => (
               <View key={idx} style={styles.boqItemRow}>
                 <View style={styles.boqTopRow}>
@@ -235,21 +235,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </View>
         </ScrollView>
 
-        {/* Sticky Bottom Actions Bar (Min 48dp Touch Targets) */}
+        {/* Sticky Bottom Actions Bar (PhonePe Purple) */}
         <View style={styles.stickyFooter}>
           <TouchableOpacity
             style={styles.addPortfolioBtn}
             onPress={handleAddPortfolio}
             activeOpacity={0.8}
           >
-            <Text style={styles.addPortfolioText}>+ Track in Portfolio</Text>
+            <Text style={styles.addPortfolioText}>+ Track in History</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.officialLinkBtn}
-            onPress={() => Alert.alert('GeM Official Portal', `Direct link: ${bid.docUrl}`)}
+            onPress={() => Alert.alert('GeM Official Portal', `Direct official link: ${bid.docUrl}`)}
             activeOpacity={0.8}
           >
-            <Text style={styles.officialLinkText}>Open GeM Link ↗</Text>
+            <Text style={styles.officialLinkText}>Open GeM ↗</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -258,178 +258,167 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    backgroundColor: '#0B132B',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    paddingTop: 14,
+    paddingBottom: 14,
+    backgroundColor: '#5F259F',
   },
   closeBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#1E293B',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { color: '#F8FAFC', fontSize: 18, fontWeight: '700' },
+  closeBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerBidNum: { color: '#F8FAFC', fontSize: 15, fontWeight: '800' },
-  headerSubtitle: { color: '#00D09C', fontSize: 11, fontWeight: '600' },
+  headerBidNum: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  headerSubtitle: { color: '#E9D5FF', fontSize: 11, fontWeight: '500' },
   shareBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#1E293B',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  shareBtnText: { fontSize: 18 },
+  shareBtnText: { fontSize: 16 },
   scrollArea: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 24 },
   verdictBanner: {
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1.5,
   },
-  verdictHigh: {
-    backgroundColor: 'rgba(0, 208, 156, 0.15)',
-    borderColor: '#00D09C',
-  },
-  verdictModerate: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderColor: '#F59E0B',
-  },
-  verdictDisqualified: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderColor: '#EF4444',
-  },
-  verdictTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  verdictPill: { color: '#F8FAFC', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  verdictHigh: { backgroundColor: '#E8F5E9', borderColor: '#00C853' },
+  verdictModerate: { backgroundColor: '#FFF3E0', borderColor: '#FF6D00' },
+  verdictDisqualified: { backgroundColor: '#FFEBEE', borderColor: '#D32F2F' },
+  verdictTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  verdictPill: { color: '#111827', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   matchScoreText: {
-    color: '#00D09C',
-    fontSize: 14,
+    color: '#00C853',
+    fontSize: 13,
     fontWeight: '800',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
-  verdictSummary: { color: '#E2E8F0', fontSize: 13, lineHeight: 18 },
+  verdictSummary: { color: '#374151', fontSize: 13, lineHeight: 18 },
   card: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  deptBadge: { color: '#38BDF8', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
-  bidTitle: { color: '#F8FAFC', fontSize: 17, fontWeight: '800', lineHeight: 22, marginBottom: 4 },
-  ministryText: { color: '#94A3B8', fontSize: 12 },
+  deptBadge: { color: '#5F259F', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
+  bidTitle: { color: '#111827', fontSize: 15, fontWeight: '800', lineHeight: 20, marginBottom: 4 },
+  ministryText: { color: '#6B7280', fontSize: 12 },
   benchmarkCard: {
-    backgroundColor: '#162032',
+    backgroundColor: '#F3E8FF',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: '#E9D5FF',
   },
   benchmarkHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  benchmarkLabel: { color: '#60A5FA', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  benchmarkHint: { color: '#94A3B8', fontSize: 11 },
-  benchmarkRange: { color: '#F8FAFC', fontSize: 24, fontWeight: '900', marginVertical: 4 },
-  benchmarkSub: { color: '#94A3B8', fontSize: 11, lineHeight: 16 },
-  sectionHeading: { color: '#F8FAFC', fontSize: 15, fontWeight: '800', marginBottom: 12 },
-  grid2x2: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  benchmarkLabel: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  benchmarkHint: { color: '#6B7280', fontSize: 10 },
+  benchmarkRange: { color: '#111827', fontSize: 22, fontWeight: '900', marginVertical: 4 },
+  benchmarkSub: { color: '#4B5563', fontSize: 11, lineHeight: 15 },
+  sectionHeading: { color: '#111827', fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  grid2x2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridCell: {
     width: '48%',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderRadius: 10,
-    padding: 12,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
   },
-  cellLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600', marginBottom: 4 },
-  cellValuePrimary: { color: '#F8FAFC', fontSize: 15, fontWeight: '800' },
-  cellValueSecondary: { color: '#38BDF8', fontSize: 14, fontWeight: '700' },
-  riskCard: { borderColor: '#F59E0B' },
-  riskHeader: { marginBottom: 6 },
-  riskTitle: { color: '#FBBF24', fontSize: 12, fontWeight: '800' },
-  riskFlagText: { color: '#E2E8F0', fontSize: 12, lineHeight: 18, marginTop: 2 },
+  cellLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  cellValuePrimary: { color: '#111827', fontSize: 13, fontWeight: '800' },
+  cellValueSecondary: { color: '#2563EB', fontSize: 13, fontWeight: '700' },
+  riskCard: { borderColor: '#F59E0B', backgroundColor: '#FFFBEB' },
+  riskHeader: { marginBottom: 4 },
+  riskTitle: { color: '#B45309', fontSize: 11, fontWeight: '800' },
+  riskFlagText: { color: '#78350F', fontSize: 12, lineHeight: 17, marginTop: 2 },
   boqItemRow: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
   },
   boqTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  boqItemTitle: { color: '#F8FAFC', fontSize: 13, fontWeight: '700', flex: 1, marginRight: 8 },
-  boqQtyBadge: { color: '#00D09C', fontSize: 12, fontWeight: '800', backgroundColor: 'rgba(0, 208, 156, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  boqSpecsText: { color: '#94A3B8', fontSize: 11, lineHeight: 16 },
+  boqItemTitle: { color: '#111827', fontSize: 13, fontWeight: '700', flex: 1, marginRight: 8 },
+  boqQtyBadge: { color: '#00C853', fontSize: 11, fontWeight: '800', backgroundColor: '#E8F5E9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  boqSpecsText: { color: '#6B7280', fontSize: 11, lineHeight: 16 },
   consigneeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: '#F3F4F6',
   },
   consigneeLeft: { flex: 1, marginRight: 8 },
-  consigneeLocation: { color: '#F8FAFC', fontSize: 13, fontWeight: '700' },
-  consigneeOfficer: { color: '#94A3B8', fontSize: 11, marginTop: 2 },
+  consigneeLocation: { color: '#111827', fontSize: 13, fontWeight: '700' },
+  consigneeOfficer: { color: '#6B7280', fontSize: 11, marginTop: 2 },
   consigneeRight: { alignItems: 'flex-end' },
-  stateBadge: { color: '#38BDF8', fontSize: 11, fontWeight: '700' },
-  consigneeQty: { color: '#CBD5E1', fontSize: 12, fontWeight: '800', marginTop: 2 },
+  stateBadge: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
+  consigneeQty: { color: '#374151', fontSize: 12, fontWeight: '800', marginTop: 2 },
   checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  checkRatio: { color: '#00D09C', fontSize: 13, fontWeight: '800' },
+  checkRatio: { color: '#5F259F', fontSize: 12, fontWeight: '800' },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 44,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: '#F3F4F6',
   },
   checkbox: {
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#64748B',
+    borderColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
-  checkboxActive: { backgroundColor: '#00D09C', borderColor: '#00D09C' },
-  checkMark: { color: '#0B132B', fontSize: 15, fontWeight: '900' },
-  checkLabel: { color: '#E2E8F0', fontSize: 13, flex: 1 },
-  checkLabelActive: { color: '#F8FAFC', fontWeight: '600' },
+  checkboxActive: { backgroundColor: '#5F259F', borderColor: '#5F259F' },
+  checkMark: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  checkLabel: { color: '#374151', fontSize: 12, flex: 1 },
+  checkLabelActive: { color: '#111827', fontWeight: '600' },
   stickyFooter: {
     flexDirection: 'row',
     gap: 12,
     padding: 16,
-    backgroundColor: '#0B132B',
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
+    borderTopColor: '#E5E7EB',
   },
   addPortfolioBtn: {
     flex: 1.3,
-    minHeight: 52,
-    backgroundColor: '#3B82F6',
+    minHeight: 48,
+    backgroundColor: '#5F259F',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -437,13 +426,13 @@ const styles = StyleSheet.create({
   addPortfolioText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   officialLinkBtn: {
     flex: 1,
-    minHeight: 52,
-    backgroundColor: '#1E293B',
+    minHeight: 48,
+    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#475569',
+    borderColor: '#D1D5DB',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  officialLinkText: { color: '#CBD5E1', fontSize: 13, fontWeight: '700' },
+  officialLinkText: { color: '#374151', fontSize: 13, fontWeight: '700' },
 });

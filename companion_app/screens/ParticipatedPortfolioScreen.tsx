@@ -35,64 +35,70 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
   const awardedBids = bids.filter((b) => b.stage === 'AWARDED_L1');
 
   const displayedBids = activeTab === 'ACTIVE' ? activeBids : awardedBids;
-
   const totalQuotedActive = activeBids.reduce((sum, b) => sum + b.quotedPriceInr, 0);
 
   const getStageBadge = (stage: ParticipatedBidStage, rank?: number) => {
     switch (stage) {
       case 'TECHNICAL_EVALUATION':
-        return { label: 'TECHNICAL EVALUATION', bg: 'rgba(59, 130, 246, 0.2)', text: '#60A5FA' };
+        return { label: 'TECHNICAL EVALUATION', bg: '#EFF6FF', text: '#2563EB' };
       case 'FINANCIAL_EVALUATION':
-        return { label: `FINANCIAL EVAL • RANK L${rank || 1}`, bg: 'rgba(245, 158, 11, 0.2)', text: '#F59E0B' };
+        return { label: `FINANCIAL EVAL • RANK L${rank || 1}`, bg: '#FEF3C7', text: '#D97706' };
       case 'REVERSE_AUCTION':
-        return { label: '⚡ LIVE RA ACTIVE', bg: 'rgba(0, 208, 156, 0.2)', text: '#00D09C' };
+        return { label: '⚡ LIVE RA ACTIVE', bg: '#F3E8FF', text: '#5F259F' };
       case 'AWARDED_L1':
-        return { label: '★ CONTRACT AWARDED (L1)', bg: 'rgba(167, 139, 250, 0.2)', text: '#C084FC' };
+        return { label: '★ CONTRACT AWARDED (L1)', bg: '#E8F5E9', text: '#00C853' };
       case 'DISQUALIFIED':
-        return { label: 'DISQUALIFIED', bg: 'rgba(239, 68, 68, 0.2)', text: '#EF4444' };
+        return { label: 'DISQUALIFIED', bg: '#FEE2E2', text: '#DC2626' };
       default:
-        return { label: stage, bg: '#1E293B', text: '#94A3B8' };
+        return { label: stage, bg: '#F3F4F6', text: '#6B7280' };
     }
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Portfolio Header Card (PhonePe Holdings Style) */}
+      {/* Title */}
+      <Text style={styles.screenTitle}>History &amp; Submissions</Text>
+
+      {/* Summary Card (PhonePe Balance / Holdings Style) */}
       <View style={styles.summaryCard}>
-        <Text style={styles.summarySub}>PARTICIPATED BID PORTFOLIO</Text>
+        <View style={styles.summaryTopRow}>
+          <Text style={styles.summarySub}>ACTIVE TENDER EXPOSURE</Text>
+          <Text style={styles.summaryBidsCount}>{activeBids.length} Submissions</Text>
+        </View>
         <Text style={styles.summaryAmount}>₹{(totalQuotedActive / 100000).toFixed(2)} Lakhs</Text>
-        <Text style={styles.summaryHint}>Active Tender Exposure ({activeBids.length} Submissions)</Text>
 
         <View style={styles.metricsRow}>
           <View style={styles.metricCell}>
-            <Text style={styles.metricLabel}>Active Bids</Text>
+            <Text style={styles.metricLabel}>Active Submissions</Text>
             <Text style={styles.metricVal}>{activeBids.length}</Text>
           </View>
           <View style={styles.metricCell}>
             <Text style={styles.metricLabel}>Contracts Won</Text>
-            <Text style={[styles.metricVal, { color: '#00D09C' }]}>{awardedBids.length}</Text>
+            <Text style={[styles.metricVal, { color: '#00C853' }]}>{awardedBids.length}</Text>
           </View>
           <View style={styles.metricCell}>
             <Text style={styles.metricLabel}>Corrigenda</Text>
-            <Text style={[styles.metricVal, { color: '#38BDF8' }]}>3 Issued</Text>
+            <Text style={[styles.metricVal, { color: '#2563EB' }]}>3 Issued</Text>
           </View>
         </View>
       </View>
 
-      {/* Tabs (Min 48dp) */}
+      {/* Tabs (PhonePe Pill Filter Style) */}
       <View style={styles.tabRow}>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'ACTIVE' && styles.tabBtnActive]}
           onPress={() => setActiveTab('ACTIVE')}
+          activeOpacity={0.8}
         >
           <Text style={[styles.tabBtnText, activeTab === 'ACTIVE' && styles.tabBtnTextActive]}>
-            Active Submissions ({activeBids.length})
+            Active Bids ({activeBids.length})
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'AWARDED' && styles.tabBtnActive]}
           onPress={() => setActiveTab('AWARDED')}
+          activeOpacity={0.8}
         >
           <Text style={[styles.tabBtnText, activeTab === 'AWARDED' && styles.tabBtnTextActive]}>
             Awarded Orders ({awardedBids.length})
@@ -136,7 +142,7 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
                 <Text style={styles.priceColVal}>₹{b.expectedL1BenchmarkInr.toLocaleString('en-IN')}</Text>
               </View>
               <View style={styles.diffCol}>
-                <Text style={styles.priceColLabel}>Spread</Text>
+                <Text style={styles.priceColLabel}>Variance</Text>
                 <Text style={[styles.diffVal, priceDiff <= 0 ? styles.diffPositive : styles.diffNegative]}>
                   {priceDiff <= 0 ? `${diffPercent}%` : `+${diffPercent}%`}
                 </Text>
@@ -173,7 +179,7 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
                     style={styles.actionBtnSecondary}
                     onPress={() => Alert.alert('Bid Details', `Submitted: ${new Date(b.submittedAtUtc).toLocaleDateString()}`)}
                   >
-                    <Text style={styles.actionBtnSecondaryText}>View Submission</Text>
+                    <Text style={styles.actionBtnSecondaryText}>View Bid Submission</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionBtnSecondary}
@@ -192,104 +198,122 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { padding: 16, paddingBottom: 32 },
+  screenTitle: {
+    color: '#1A1C1E',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 16,
+  },
   summaryCard: {
-    backgroundColor: '#162032',
-    borderRadius: 14,
+    backgroundColor: '#F3E8FF',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: '#3B82F6',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
   },
-  summarySub: { color: '#60A5FA', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  summaryAmount: { color: '#F8FAFC', fontSize: 26, fontWeight: '900', marginVertical: 4 },
-  summaryHint: { color: '#94A3B8', fontSize: 12 },
+  summaryTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  summarySub: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  summaryBidsCount: { color: '#5F259F', fontSize: 11, fontWeight: '700' },
+  summaryAmount: { color: '#1A1C1E', fontSize: 26, fontWeight: '900', marginVertical: 6 },
   metricsRow: {
     flexDirection: 'row',
-    marginTop: 14,
+    marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#334155',
+    borderTopColor: '#E9D5FF',
     gap: 8,
   },
   metricCell: { flex: 1 },
-  metricLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '600' },
-  metricVal: { color: '#F8FAFC', fontSize: 16, fontWeight: '800', marginTop: 2 },
+  metricLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600' },
+  metricVal: { color: '#111827', fontSize: 15, fontWeight: '800', marginTop: 2 },
   tabRow: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 24,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#1E293B',
-    gap: 6,
+    borderColor: '#E5E7EB',
   },
   tabBtn: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 10,
+    minHeight: 44,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tabBtnActive: { backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155' },
-  tabBtnText: { color: '#94A3B8', fontSize: 12, fontWeight: '700' },
-  tabBtnTextActive: { color: '#F8FAFC', fontWeight: '900' },
+  tabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabBtnText: { color: '#6B7280', fontSize: 12, fontWeight: '700' },
+  tabBtnTextActive: { color: '#5F259F', fontWeight: '800' },
   bidCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   stageBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  stageBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  corrigendumBadge: { backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  corrigendumText: { color: '#F59E0B', fontSize: 10, fontWeight: '800' },
-  bidNumberText: { color: '#64748B', fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  bidTitle: { color: '#F8FAFC', fontSize: 15, fontWeight: '800', lineHeight: 20, marginBottom: 4 },
-  deptText: { color: '#CBD5E1', fontSize: 12, marginBottom: 12 },
+  stageBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  corrigendumBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  corrigendumText: { color: '#D97706', fontSize: 10, fontWeight: '700' },
+  bidNumberText: { color: '#6B7280', fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  bidTitle: { color: '#111827', fontSize: 14, fontWeight: '700', lineHeight: 19, marginBottom: 4 },
+  deptText: { color: '#6B7280', fontSize: 11, marginBottom: 12 },
   pricingRow: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E7EB',
     gap: 8,
   },
   priceCol: { flex: 1.2 },
   diffCol: { flex: 0.8, alignItems: 'flex-end' },
-  priceColLabel: { color: '#64748B', fontSize: 9, fontWeight: '700', marginBottom: 2 },
-  priceColVal: { color: '#F8FAFC', fontSize: 13, fontWeight: '800' },
-  diffVal: { fontSize: 14, fontWeight: '900', marginTop: 2 },
-  diffPositive: { color: '#00D09C' },
-  diffNegative: { color: '#F87171' },
+  priceColLabel: { color: '#9CA3AF', fontSize: 9, fontWeight: '700', marginBottom: 2 },
+  priceColVal: { color: '#1F2937', fontSize: 12, fontWeight: '800' },
+  diffVal: { fontSize: 13, fontWeight: '800', marginTop: 2 },
+  diffPositive: { color: '#00C853' },
+  diffNegative: { color: '#DC2626' },
   cardActionsRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
   actionBtn: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
   },
-  actionBtnCrac: { backgroundColor: '#0284C7' },
+  actionBtnCrac: { backgroundColor: '#5F259F' },
   actionBtnPfms: { backgroundColor: '#059669' },
-  actionBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  actionBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   actionBtnSecondary: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: 10,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#475569',
+    borderColor: '#D1D5DB',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  actionBtnSecondaryText: { color: '#CBD5E1', fontSize: 12, fontWeight: '700' },
+  actionBtnSecondaryText: { color: '#374151', fontSize: 12, fontWeight: '600' },
 });

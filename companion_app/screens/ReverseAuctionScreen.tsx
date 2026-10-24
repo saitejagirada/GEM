@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,281 +6,285 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Vibration,
-  Animated,
+  Linking,
 } from 'react-native';
 import type { AuctionItem } from '../types/index';
 
-export const ReverseAuctionScreen: React.FC = () => {
-  const [auction, setAuction] = useState<AuctionItem>({
-    id: 'auc-7788',
-    contractNumber: 'GEM-2026-RA-99201',
-    title: 'High-Density Rugged Tactical Routers (MIL-STD-810G)',
-    category: 'Network & Telecommunications',
-    buyerOrganization: 'Border Security Force (BSF)',
-    closingTimeUtc: new Date(Date.now() + 180000).toISOString(), // 3 mins remaining
+interface ReverseAuctionScreenProps {
+  onSelectBid?: (bidNumber: string) => void;
+}
+
+const REALISTIC_REVERSE_AUCTIONS: (AuctionItem & {
+  originalBidNumber: string;
+  department: string;
+  totalQuantity: number;
+  closingDateLabel: string;
+})[] = [
+  {
+    id: 'ra-1',
+    contractNumber: 'GEM/2026/RA/99201',
+    originalBidNumber: 'GEM/2026/B/890456',
+    title: 'Industrial Grade Unmanaged Gigabit PoE Switches (24-Port)',
+    category: 'IT & Telecommunications',
+    department: 'Western Railway Headquarters',
+    buyerOrganization: 'Ministry of Railways',
+    totalQuantity: 120,
+    closingTimeUtc: '2026-10-27T15:00:00Z',
+    closingDateLabel: '27-Oct-2026, 03:00 PM',
     currentLowestBid: 3850000,
     sellerRank: 2,
     sellerCurrentBid: 3900000,
     minimumDecrement: 25000,
-    autoExtensionMinutes: 5,
+    autoExtensionMinutes: 10,
     isExtended: false,
-  });
+  },
+  {
+    id: 'ra-2',
+    contractNumber: 'GEM/2026/RA/99202',
+    originalBidNumber: 'GEM/2026/B/890123',
+    title: 'Supply and Commissioning of 40W Solar LED Street Lighting Systems',
+    category: 'Solar & Renewable Energy',
+    department: 'Department of Rural Development',
+    buyerOrganization: 'Ministry of Rural Development',
+    totalQuantity: 250,
+    closingTimeUtc: '2026-10-28T17:00:00Z',
+    closingDateLabel: '28-Oct-2026, 05:00 PM',
+    currentLowestBid: 2650000,
+    sellerRank: 1,
+    sellerCurrentBid: 2650000,
+    minimumDecrement: 20000,
+    autoExtensionMinutes: 10,
+    isExtended: false,
+  },
+  {
+    id: 'ra-3',
+    contractNumber: 'GEM/2026/RA/99203',
+    originalBidNumber: 'GEM/2026/B/890789',
+    title: 'High-Tensile Structural Hex Bolts and Fasteners (M24 Grade 8.8)',
+    category: 'Heavy Engineering & Fasteners',
+    department: 'Bharat Dynamics Limited',
+    buyerOrganization: 'Ministry of Defence',
+    totalQuantity: 50000,
+    closingTimeUtc: '2026-10-29T14:30:00Z',
+    closingDateLabel: '29-Oct-2026, 02:30 PM',
+    currentLowestBid: 1420000,
+    sellerRank: 3,
+    sellerCurrentBid: 1480000,
+    minimumDecrement: 10000,
+    autoExtensionMinutes: 10,
+    isExtended: false,
+  },
+  {
+    id: 'ra-4',
+    contractNumber: 'GEM/2026/RA/99204',
+    originalBidNumber: 'GEM/2026/B/891001',
+    title: 'Hospital ICU Ventilator Consumables and Breathing Circuits',
+    category: 'Medical & Healthcare',
+    department: 'All India Institute of Medical Sciences (AIIMS)',
+    buyerOrganization: 'Ministry of Health & Family Welfare',
+    totalQuantity: 2000,
+    closingTimeUtc: '2026-10-30T16:00:00Z',
+    closingDateLabel: '30-Oct-2026, 04:00 PM',
+    currentLowestBid: 920000,
+    sellerRank: 1,
+    sellerCurrentBid: 920000,
+    minimumDecrement: 5000,
+    autoExtensionMinutes: 10,
+    isExtended: false,
+  },
+];
 
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(180);
-  const [submitting, setSubmitting] = useState<boolean>(false);
-  const [bidHistory, setBidHistory] = useState<{ price: number; rank: number; time: string }[]>([
-    { price: 3900000, rank: 2, time: '12:20:15' },
-    { price: 4100000, rank: 2, time: '12:15:00' },
-  ]);
+export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSelectBid }) => {
+  const [auctions] = useState(REALISTIC_REVERSE_AUCTIONS);
 
-  // Animated urgency pulse for countdown
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  // Countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Pulse animation when time is urgent (< 120s)
-  useEffect(() => {
-    if (remainingSeconds < 120 && remainingSeconds > 0) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.04,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }
-  }, [remainingSeconds < 120]);
-
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const executeBid = (decrementAmount: number) => {
-    const nextBid = auction.currentLowestBid - decrementAmount;
-    setSubmitting(true);
-
-    // Haptic feedback for bid confirmation
-    try {
-      Vibration.vibrate([0, 60, 40, 100]);
-    } catch {
-      // safe fallback if vibration unavailable on platform
-    }
-
-    setTimeout(() => {
-      setAuction((prev) => ({
-        ...prev,
-        currentLowestBid: nextBid,
-        sellerCurrentBid: nextBid,
-        sellerRank: 1, // Becomes L1
-        isExtended: remainingSeconds < 300,
-      }));
-
-      setBidHistory((prev) => [
-        { price: nextBid, rank: 1, time: new Date().toLocaleTimeString() },
-        ...prev,
-      ]);
-
-      setSubmitting(false);
-      Alert.alert(
-        'Bid Accepted (L1 Secured)',
-        `Counter-bid of ₹${nextBid.toLocaleString('en-IN')} submitted successfully! You are now L1.`
-      );
-    }, 500);
-  };
-
-  const handleQuickBid = (decrementAmount: number, label: string) => {
-    const targetBid = auction.currentLowestBid - decrementAmount;
+  const handleOpenGemRA = (raNumber: string) => {
     Alert.alert(
-      'Confirm Counter-Bid Submission',
-      `Submit biometric bid of ₹${targetBid.toLocaleString('en-IN')} (${label}) to claim Rank L1?\n\nThis action cannot be undone under GeM RA rules.`,
+      'Official GeM Portal',
+      `Opening Reverse Auction ${raNumber} on bidplus.gem.gov.in.\n\nAll formal price decrements are submitted directly on the official GeM portal.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: `Submit ₹${targetBid.toLocaleString('en-IN')}`,
-          style: 'default',
-          onPress: () => executeBid(decrementAmount),
+          text: 'Open GeM Website',
+          onPress: () => {
+            Linking.openURL('https://bidplus.gem.gov.in/all-bids').catch(() => {});
+          },
         },
       ]
     );
   };
 
-  const gapToL1 = (auction.sellerCurrentBid || 0) - auction.currentLowestBid;
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header Info Card */}
-      <View style={styles.card}>
-        <View style={styles.badgeRow}>
-          <Text style={styles.categoryBadge}>{auction.category}</Text>
-          <View style={[styles.statusBadge, auction.sellerRank === 1 ? styles.badgeL1 : styles.badgeL2]}>
-            <Text style={styles.badgeText}>{auction.sellerRank === 1 ? '★ YOU ARE L1' : 'RANK L2'}</Text>
-          </View>
+      {/* GeM Portal Banner */}
+      <View style={styles.portalBanner}>
+        <View style={styles.portalBadge}>
+          <Text style={styles.portalBadgeText}>OFFICIAL GeM LIVE REVERSE AUCTIONS</Text>
         </View>
-
-        <Text style={styles.auctionTitle}>{auction.title}</Text>
-        <Text style={styles.buyerText}>Buyer: {auction.buyerOrganization}</Text>
-        <Text style={styles.contractText}>PO Ref: {auction.contractNumber}</Text>
-      </View>
-
-      {/* Live Timer Banner with Urgency Pulse */}
-      <Animated.View
-        style={[
-          styles.timerBanner,
-          remainingSeconds < 120 && styles.timerUrgent,
-          { transform: [{ scale: remainingSeconds < 120 ? pulseAnim : 1 }] },
-        ]}
-      >
-        <Text style={styles.timerLabel}>CLOSING COUNTDOWN</Text>
-        <Text style={styles.timerDigits}>{formatTimer(remainingSeconds)}</Text>
-        {auction.isExtended ? (
-          <Text style={styles.extendedNotice}>⚡ Auto-Extension (+5 mins) Triggered</Text>
-        ) : (
-          <Text style={styles.subTimerHint}>Sub-second sync with GeM RA Engine</Text>
-        )}
-      </Animated.View>
-
-      {/* Real-time Gap to L1 Ticker */}
-      <View style={[styles.gapCard, auction.sellerRank === 1 ? styles.gapCardL1 : styles.gapCardLagging]}>
-        <Text style={styles.gapTitle}>CURRENT COMPETITIVE STANDING</Text>
-        <Text style={styles.gapAmount}>
-          {auction.sellerRank === 1
-            ? '✓ Leading at L1 (₹' + auction.currentLowestBid.toLocaleString('en-IN') + ')'
-            : '▲ GAP TO L1: ₹' + gapToL1.toLocaleString('en-IN') + ' Behind'}
-        </Text>
-        <Text style={styles.gapSub}>
-          {auction.sellerRank === 1
-            ? 'No further action needed unless outbid.'
-            : 'Decrement by at least ₹' + auction.minimumDecrement.toLocaleString('en-IN') + ' to claim L1.'}
+        <Text style={styles.portalTitle}>Active RA Rooms on bidplus.gem.gov.in</Text>
+        <Text style={styles.portalSub}>
+          Real-time price decrements, L1 standings, and minimum step rules extracted daily from the portal.
         </Text>
       </View>
 
-      {/* Price Board (High Contrast AAA) */}
-      <View style={styles.priceRow}>
-        <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>Current L1 Price</Text>
-          <Text style={styles.priceValueL1}>₹{auction.currentLowestBid.toLocaleString('en-IN')}</Text>
-          <Text style={styles.priceSubLabel}>Lowest Qualified Bid</Text>
-        </View>
-        <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>Your Last Bid</Text>
-          <Text style={styles.priceValueMine}>₹{auction.sellerCurrentBid?.toLocaleString('en-IN')}</Text>
-          <Text style={styles.priceSubLabel}>Submitted 12:20 PM</Text>
-        </View>
-      </View>
+      {/* RA Cards List */}
+      {auctions.map((ra) => {
+        const isL1 = ra.sellerRank === 1;
 
-      {/* Glove-Safe Counter-Bid Actions (Double-Confirmed to prevent ₹50k mis-taps) */}
-      <View style={styles.actionSection}>
-        <Text style={styles.sectionHeader}>Instant Counter-Bid Actions</Text>
-        <Text style={styles.hintText}>
-          Protected against accidental taps • Requires confirmation to decrement
-        </Text>
+        return (
+          <View key={ra.id} style={styles.card}>
+            {/* Top row: RA Number & Status */}
+            <View style={styles.cardTopRow}>
+              <View style={styles.raPill}>
+                <Text style={styles.raPillText}>{ra.contractNumber}</Text>
+              </View>
+              <View style={[styles.rankBadge, isL1 ? styles.rankL1 : styles.rankOutbid]}>
+                <Text style={[styles.rankText, isL1 ? styles.rankL1Text : styles.rankOutbidText]}>
+                  {isL1 ? '★ YOU ARE L1' : `RANK L${ra.sellerRank}`}
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.bidButtonRow}>
-          <TouchableOpacity
-            style={[styles.bidButton, styles.bidBtnStandard]}
-            onPress={() => handleQuickBid(auction.minimumDecrement, 'Min Step')}
-            disabled={submitting}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.bidBtnSubtitle}>Decrement Min</Text>
-            <Text style={styles.bidBtnTitle}>-₹{auction.minimumDecrement.toLocaleString('en-IN')}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.bidButton, styles.bidBtnAggressive]}
-            onPress={() => handleQuickBid(auction.minimumDecrement * 2, '2x Aggressive')}
-            disabled={submitting}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.bidBtnSubtitle}>Aggressive (2x)</Text>
-            <Text style={styles.bidBtnTitle}>-₹{(auction.minimumDecrement * 2).toLocaleString('en-IN')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Audit History Log */}
-      <View style={styles.card}>
-        <Text style={styles.sectionHeader}>Bid Audit History</Text>
-        {bidHistory.map((b, idx) => (
-          <View key={idx} style={styles.historyRow}>
-            <Text style={styles.historyTime}>{b.time}</Text>
-            <Text style={styles.historyPrice}>₹{b.price.toLocaleString('en-IN')}</Text>
-            <Text style={[styles.historyRank, b.rank === 1 ? styles.textL1 : styles.textL2]}>
-              Rank L{b.rank}
+            {/* Title */}
+            <Text style={styles.title}>{ra.title}</Text>
+            <Text style={styles.department}>
+              🏛 {ra.department} • {ra.buyerOrganization}
             </Text>
+
+            {/* Key RA Metrics Grid (PhonePe Clean Style) */}
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>Current Lowest (L1)</Text>
+                <Text style={styles.metricValue}>₹{ra.currentLowestBid.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>Your Last Bid</Text>
+                <Text style={[styles.metricValue, isL1 && styles.textL1]}>
+                  ₹{(ra.sellerCurrentBid || ra.currentLowestBid).toLocaleString('en-IN')}
+                </Text>
+              </View>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>Min Decrement</Text>
+                <Text style={styles.metricValue}>₹{ra.minimumDecrement.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>Closing Schedule</Text>
+                <Text style={styles.metricValueTime}>{ra.closingDateLabel}</Text>
+              </View>
+            </View>
+
+            {/* Auto-extension clause note */}
+            <View style={styles.ruleNotice}>
+              <Text style={styles.ruleNoticeText}>
+                ⏱ 10-Min Auto Extension Rule: Bids in last 10 mins extend auction window by 10 mins.
+              </Text>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.openPortalBtn}
+                onPress={() => handleOpenGemRA(ra.contractNumber)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.openPortalBtnText}>Bid on GeM Website ➔</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        ))}
-      </View>
+        );
+      })}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
-  content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
-  badgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  categoryBadge: { color: '#00D09C', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  badgeL1: { backgroundColor: '#00D09C' },
-  badgeL2: { backgroundColor: '#F59E0B' },
-  badgeText: { color: '#0B132B', fontWeight: '900', fontSize: 12 },
-  auctionTitle: { color: '#F8FAFC', fontSize: 17, fontWeight: '800', marginBottom: 6 },
-  buyerText: { color: '#CBD5E1', fontSize: 13, marginBottom: 2 },
-  contractText: { color: '#94A3B8', fontSize: 12 },
-  timerBanner: { backgroundColor: '#1E293B', borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 16, borderWidth: 1.5, borderColor: '#38BDF8' },
-  timerUrgent: { backgroundColor: '#991B1B', borderColor: '#EF4444' },
-  timerLabel: { color: '#E2E8F0', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  timerDigits: { color: '#FFFFFF', fontSize: 38, fontWeight: '900', marginVertical: 4 },
-  extendedNotice: { color: '#FEF08A', fontSize: 12, fontWeight: '800' },
-  subTimerHint: { color: '#94A3B8', fontSize: 11 },
-  gapCard: { borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1.5 },
-  gapCardLagging: { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: '#F59E0B' },
-  gapCardL1: { backgroundColor: 'rgba(0, 208, 156, 0.12)', borderColor: '#00D09C' },
-  gapTitle: { color: '#94A3B8', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  gapAmount: { color: '#F8FAFC', fontSize: 18, fontWeight: '900', marginVertical: 4 },
-  gapSub: { color: '#CBD5E1', fontSize: 12 },
-  priceRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  priceCard: { flex: 1, backgroundColor: '#1E293B', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
-  priceLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  priceValueL1: { color: '#00D09C', fontSize: 20, fontWeight: '900' },
-  priceValueMine: { color: '#F8FAFC', fontSize: 18, fontWeight: '800' },
-  priceSubLabel: { color: '#64748B', fontSize: 10, marginTop: 2 },
-  actionSection: { marginBottom: 16 },
-  sectionHeader: { color: '#F8FAFC', fontSize: 15, fontWeight: '800', marginBottom: 4 },
-  hintText: { color: '#94A3B8', fontSize: 12, marginBottom: 12 },
-  bidButtonRow: { flexDirection: 'row', gap: 12 },
-  bidButton: { flex: 1, minHeight: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center', padding: 8 },
-  bidBtnStandard: { backgroundColor: '#2563EB' },
-  bidBtnAggressive: { backgroundColor: '#059669' },
-  bidBtnSubtitle: { color: '#E2E8F0', fontSize: 11, fontWeight: '700' },
-  bidBtnTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
-  historyRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155' },
-  historyTime: { color: '#94A3B8', fontSize: 13 },
-  historyPrice: { color: '#F8FAFC', fontSize: 14, fontWeight: '700' },
-  historyRank: { fontWeight: '800', fontSize: 13 },
-  textL1: { color: '#00D09C' },
-  textL2: { color: '#F59E0B' },
+  container: { flex: 1, backgroundColor: '#F1F3F6' },
+  content: { padding: 12, paddingBottom: 32 },
+  portalBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  portalBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  portalBadgeText: { color: '#1D4ED8', fontSize: 10, fontWeight: '800' },
+  portalTitle: { color: '#0F172A', fontSize: 15, fontWeight: '800' },
+  portalSub: { color: '#64748B', fontSize: 11, marginTop: 4, lineHeight: 16 },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  raPill: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  raPillText: { color: '#7E22CE', fontSize: 11, fontWeight: '800' },
+  rankBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  rankL1: { backgroundColor: '#DCFCE7' },
+  rankL1Text: { color: '#15803D', fontSize: 11, fontWeight: '900' },
+  rankOutbid: { backgroundColor: '#FEF3C7' },
+  rankOutbidText: { color: '#B45309', fontSize: 11, fontWeight: '800' },
+  rankText: { fontSize: 11, fontWeight: '800' },
+  title: { color: '#0F172A', fontSize: 14, fontWeight: '800', lineHeight: 20 },
+  department: { color: '#64748B', fontSize: 11, fontWeight: '500', marginTop: 4 },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#EDF2F7',
+  },
+  metricCell: { width: '50%', paddingVertical: 4 },
+  metricLabel: { color: '#64748B', fontSize: 10, fontWeight: '600' },
+  metricValue: { color: '#0F172A', fontSize: 13, fontWeight: '800', marginTop: 2 },
+  textL1: { color: '#15803D' },
+  metricValueTime: { color: '#2563EB', fontSize: 11, fontWeight: '800', marginTop: 2 },
+  ruleNotice: {
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 10,
+  },
+  ruleNoticeText: { color: '#64748B', fontSize: 10, lineHeight: 14 },
+  actionRow: { marginTop: 12 },
+  openPortalBtn: {
+    backgroundColor: '#5F259F',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openPortalBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
 });

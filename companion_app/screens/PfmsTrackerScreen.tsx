@@ -17,7 +17,7 @@ export const PfmsTrackerScreen: React.FC = () => {
     totalAmountInr: 4850000,
     buyerName: 'Directorate General of Supplies & Transport (Army HQ)',
     sellerName: 'Apex Tactical Logistics Pvt Ltd',
-    cracIssueDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), // 4 days ago
+    cracIssueDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
     statutorySlaDaysRemaining: 6,
     isDeemedAccepted: false,
     milestones: PfmsTracker.createInitialMilestones(),
@@ -53,7 +53,7 @@ export const PfmsTrackerScreen: React.FC = () => {
         <Text style={styles.sellerText}>Seller: {tracker.sellerName}</Text>
       </View>
 
-      {/* Statutory 10-Day SLA Countdown Card with Visual Day Meter */}
+      {/* Statutory 10-Day SLA Countdown Card */}
       <View style={[styles.slaCard, { borderColor: slaStatus.badgeColor }]}>
         <View style={styles.slaHeaderRow}>
           <Text style={styles.slaTitle}>STATUTORY 10-DAY CRAC SLA</Text>
@@ -62,7 +62,6 @@ export const PfmsTrackerScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Day Meter */}
         <View style={styles.slaMeterRow}>
           <Text style={styles.slaDayCounter}>
             Day {daysElapsed} of 10 Elapsed • {tracker.statutorySlaDaysRemaining} Days Remaining
@@ -73,7 +72,7 @@ export const PfmsTrackerScreen: React.FC = () => {
         </View>
 
         <Text style={styles.slaDescription}>
-          Under GeM GFR Rule 149, if the buyer fails to sign the CRAC within 10 days of physical delivery, the system automatically triggers deemed acceptance and unlocks PFMS treasury disbursement.
+          Under GeM GFR Rule 149, if the buyer does not complete inspection within 10 days of delivery, deemed acceptance unlocks PFMS disbursement.
         </Text>
       </View>
 
@@ -88,7 +87,7 @@ export const PfmsTrackerScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* 6-Stage Milestone Stepper (4dp Connectors & 36dp Nodes) */}
+      {/* 6-Stage Milestone Stepper */}
       <View style={styles.card}>
         <Text style={[styles.cardHeader, { marginBottom: 16 }]}>6-Stage PFMS Payment Pipeline</Text>
 
@@ -103,7 +102,9 @@ export const PfmsTrackerScreen: React.FC = () => {
                     m.completed ? styles.nodeCompleted : isCurrent ? styles.nodeCurrent : styles.nodePending,
                   ]}
                 >
-                  <Text style={styles.nodeText}>{m.completed ? '✓' : idx + 1}</Text>
+                  <Text style={[styles.nodeText, !m.completed && !isCurrent && { color: '#6B7280' }]}>
+                    {m.completed ? '✓' : idx + 1}
+                  </Text>
                 </View>
                 {idx < tracker.milestones.length - 1 && (
                   <View
@@ -131,9 +132,9 @@ export const PfmsTrackerScreen: React.FC = () => {
         })}
       </View>
 
-      {/* Simulation Quick-Triggers (Min 48dp Touch Targets) */}
+      {/* Simulation Quick-Triggers */}
       <View style={styles.card}>
-        <Text style={styles.cardHeader}>Simulation Test Triggers (48dp Touch Targets)</Text>
+        <Text style={styles.cardHeader}>Simulation Test Triggers</Text>
         <View style={styles.triggerRow}>
           <TouchableOpacity
             style={styles.triggerBtn}
@@ -148,11 +149,11 @@ export const PfmsTrackerScreen: React.FC = () => {
             onPress={() => handleAdvanceStage('PFMS_TREASURY_SANCTION', 'PFMS-BILL-88992')}
             activeOpacity={0.8}
           >
-            <Text style={styles.triggerBtnText}>Pass PFMS Bill</Text>
+            <Text style={styles.triggerBtnText}>Pass Bill</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.triggerBtn, { backgroundColor: '#059669' }]}
+            style={[styles.triggerBtn, { backgroundColor: '#00C853' }]}
             onPress={() => handleAdvanceStage('BANK_UTR_CREDITED', 'RBI-UTR-2026-990021')}
             activeOpacity={0.8}
           >
@@ -165,57 +166,69 @@ export const PfmsTrackerScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B132B' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { padding: 16, paddingBottom: 32 },
-  card: { backgroundColor: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   badgeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  contractBadge: { color: '#00D09C', fontSize: 13, fontWeight: '800' },
-  invoiceText: { color: '#94A3B8', fontSize: 12 },
-  amountText: { color: '#F8FAFC', fontSize: 26, fontWeight: '900', marginVertical: 4 },
-  buyerText: { color: '#CBD5E1', fontSize: 13, marginBottom: 2 },
-  sellerText: { color: '#94A3B8', fontSize: 12 },
-  slaCard: { backgroundColor: '#162032', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1.5 },
-  slaHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  slaTitle: { color: '#F8FAFC', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-  slaBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  slaBadgeText: { color: '#0B132B', fontSize: 11, fontWeight: '900' },
-  slaMeterRow: { marginVertical: 6 },
-  slaDayCounter: { color: '#CBD5E1', fontSize: 12, fontWeight: '700' },
-  slaTrack: { height: 8, backgroundColor: '#0F172A', borderRadius: 4, overflow: 'hidden', marginVertical: 6 },
+  contractBadge: { color: '#5F259F', fontSize: 13, fontWeight: '800' },
+  invoiceText: { color: '#6B7280', fontSize: 12 },
+  amountText: { color: '#111827', fontSize: 24, fontWeight: '900', marginVertical: 4 },
+  buyerText: { color: '#374151', fontSize: 13, marginBottom: 2 },
+  sellerText: { color: '#6B7280', fontSize: 12 },
+  slaCard: { backgroundColor: '#FFFBEB', borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1.5 },
+  slaHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  slaTitle: { color: '#92400E', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  slaBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  slaBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  slaMeterRow: { marginVertical: 4 },
+  slaDayCounter: { color: '#78350F', fontSize: 12, fontWeight: '700' },
+  slaTrack: { height: 8, backgroundColor: '#FEF3C7', borderRadius: 4, overflow: 'hidden', marginVertical: 6 },
   slaFill: { height: '100%', borderRadius: 4 },
-  slaDescription: { color: '#94A3B8', fontSize: 11, lineHeight: 16, marginTop: 4 },
+  slaDescription: { color: '#92400E', fontSize: 11, lineHeight: 15, marginTop: 4 },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  cardHeader: { color: '#F8FAFC', fontSize: 15, fontWeight: '800' },
-  progressPercent: { color: '#00D09C', fontSize: 16, fontWeight: '900' },
-  progressBarTrack: { height: 10, backgroundColor: '#0F172A', borderRadius: 5, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#00D09C' },
-  milestoneItem: { flexDirection: 'row', marginBottom: 16 },
-  timelineCol: { width: 44, alignItems: 'center' },
-  node: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
-  nodeCompleted: { backgroundColor: '#00D09C' },
-  nodeCurrent: { backgroundColor: '#2563EB', borderWidth: 2.5, borderColor: '#60A5FA' },
-  nodePending: { backgroundColor: '#334155' },
-  nodeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
-  connector: { width: 4, flex: 1, marginVertical: 2 },
-  connectorActive: { backgroundColor: '#00D09C' },
-  connectorInactive: { backgroundColor: '#334155' },
-  milestoneContent: { flex: 1, paddingLeft: 12 },
+  cardHeader: { color: '#111827', fontSize: 14, fontWeight: '800' },
+  progressPercent: { color: '#00C853', fontSize: 16, fontWeight: '900' },
+  progressBarTrack: { height: 8, backgroundColor: '#F3F4F6', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#00C853' },
+  milestoneItem: { flexDirection: 'row', marginBottom: 14 },
+  timelineCol: { width: 40, alignItems: 'center' },
+  node: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  nodeCompleted: { backgroundColor: '#00C853' },
+  nodeCurrent: { backgroundColor: '#5F259F', borderWidth: 2, borderColor: '#C084FC' },
+  nodePending: { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#D1D5DB' },
+  nodeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  connector: { width: 3, flex: 1, marginVertical: 2 },
+  connectorActive: { backgroundColor: '#00C853' },
+  connectorInactive: { backgroundColor: '#E5E7EB' },
+  milestoneContent: { flex: 1, paddingLeft: 10 },
   milestoneHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  milestoneTitle: { color: '#E2E8F0', fontSize: 14, fontWeight: '700' },
-  titleCompleted: { color: '#F8FAFC' },
-  completedTag: { color: '#00D09C', fontSize: 10, fontWeight: '800' },
-  activeTag: { color: '#38BDF8', fontSize: 10, fontWeight: '800' },
-  milestoneDesc: { color: '#94A3B8', fontSize: 12, marginTop: 2, lineHeight: 16 },
-  refText: { color: '#38BDF8', fontSize: 11, fontFamily: 'monospace', marginTop: 4 },
-  triggerRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  milestoneTitle: { color: '#111827', fontSize: 13, fontWeight: '700' },
+  titleCompleted: { color: '#111827' },
+  completedTag: { color: '#00C853', fontSize: 10, fontWeight: '800' },
+  activeTag: { color: '#5F259F', fontSize: 10, fontWeight: '800' },
+  milestoneDesc: { color: '#6B7280', fontSize: 11, marginTop: 2, lineHeight: 15 },
+  refText: { color: '#2563EB', fontSize: 10, fontFamily: 'monospace', marginTop: 3 },
+  triggerRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   triggerBtn: {
     flex: 1,
-    minHeight: 48,
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
+    minHeight: 44,
+    backgroundColor: '#5F259F',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 6,
   },
-  triggerBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  triggerBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', textAlign: 'center' },
 });
