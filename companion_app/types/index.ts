@@ -146,3 +146,134 @@ export interface OrderChatMessage {
   timestampUtc: string;
   immutableAuditSignature: string;
 }
+
+// -------------------------------------------------------------------------
+// Module 5: Dedicated User Agent & Profile Matching Models
+// -------------------------------------------------------------------------
+
+export type MsmeCategory = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE' | 'STARTUP';
+
+export interface UserAgentProfile {
+  id: string;
+  organizationName: string;
+  msmeCategory: MsmeCategory;
+  annualTurnoverInr: number; // e.g. 5000000 (50 Lakhs)
+  yearsExperience: number; // e.g. 3
+  productCategories: string[]; // e.g. ['LED Luminaire', 'Cables', 'Switchgear']
+  targetStates: string[]; // e.g. ['Uttar Pradesh', 'Delhi', 'Haryana']
+  isOem: boolean;
+  hasUdyamCertificate: boolean;
+}
+
+export interface BidMatchEvaluation {
+  bidNumber: string;
+  matchScore: number; // 0 - 100%
+  isEligible: boolean;
+  turnoverEligible: boolean;
+  experienceEligible: boolean;
+  emdStatus: 'EXEMPT' | 'PAYABLE' | 'NOT_APPLICABLE';
+  verdictTag: 'HIGH_MATCH' | 'MODERATE_MATCH' | 'DISQUALIFIED';
+  verdictSummary: string;
+  expectedWinningBidRange: { minInr: number; maxInr: number };
+}
+
+// -------------------------------------------------------------------------
+// Module 6: Zero-PDF Instant Bid Fundamentals Model
+// -------------------------------------------------------------------------
+
+export type BidDocType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ';
+export type MiiClass = 'CLASS_1' | 'CLASS_2' | 'NON_LOCAL';
+
+export interface BoqLineItem {
+  itemTitle: string;
+  quantity: number;
+  unit: string;
+  specsSummary: string;
+}
+
+export interface ConsigneeDestination {
+  location: string;
+  state: string;
+  pincode: string;
+  quantity: number;
+  reportingOfficer?: string;
+}
+
+export interface DeconstructedBidDoc {
+  bidNumber: string;
+  title: string;
+  department: string;
+  ministry: string;
+  type: BidDocType;
+  estimatedBidValueInr?: number;
+  emdAmountInr: number;
+  isEmdExemptForMse: boolean;
+  epbgPercentage: number;
+  minAnnualTurnoverInr: number;
+  yearsExperienceRequired: number;
+  pastPerformancePercentage: number;
+  deliveryPeriodDays: number;
+  splittingRatio?: string; // e.g. "100% to L1" or "70:30 MSE"
+  makeInIndiaClass?: MiiClass;
+  boqItems: BoqLineItem[];
+  consignees: ConsigneeDestination[];
+  requiredDocuments: string[];
+  closingTimeUtc: string;
+  docUrl: string;
+}
+
+// -------------------------------------------------------------------------
+// Module 7: Forward Auctions (e-Scrap & Surplus Assets)
+// -------------------------------------------------------------------------
+
+export type ForwardAuctionCategory =
+  | 'SCRAP_METAL'
+  | 'VEHICLES'
+  | 'MACHINERY'
+  | 'SURPLUS_EQUIPMENT'
+  | 'ELECTRONICS';
+
+export interface ForwardAuctionLot {
+  id: string;
+  auctionNumber: string;
+  title: string;
+  department: string;
+  locationYard: string;
+  reservePriceInr: number;
+  currentHighestBidInr: number;
+  minimumIncrementInr: number;
+  closingTimeUtc: string;
+  category: ForwardAuctionCategory;
+}
+
+// -------------------------------------------------------------------------
+// Module 8: Market Pulse & Participated Portfolio Models
+// -------------------------------------------------------------------------
+
+export interface MarketPulseStats {
+  totalBidsToday: number;
+  liveReverseAuctions: number;
+  liveForwardAuctions: number;
+  closingIn24Hours: number;
+  zeroEmdBids: number;
+}
+
+export type ParticipatedBidStage =
+  | 'TECHNICAL_EVALUATION'
+  | 'FINANCIAL_EVALUATION'
+  | 'REVERSE_AUCTION'
+  | 'AWARDED_L1'
+  | 'DISQUALIFIED';
+
+export interface ParticipatedBid {
+  bidNumber: string;
+  itemTitle: string;
+  department: string;
+  quotedPriceInr: number;
+  expectedL1BenchmarkInr: number;
+  submittedAtUtc: string;
+  stage: ParticipatedBidStage;
+  currentRank?: number;
+  corrigendumCount: number;
+}
+

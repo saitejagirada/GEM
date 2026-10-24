@@ -21,34 +21,41 @@ This document serves as the shared single source of truth across all 3 developme
 ---
 
 ## 🎨 Thread 2: UI / UX & Mobile Interaction (`ui-ux-stream`)
-**Focus**: Mobile ergonomic experience, design system, sunlight legibility, outdoor yard usage, animations, and tactile feedback.
+**Agent ID**: `a4869f6c-1ec1-4291-8efa-dd6ada9f2878`  
+**Focus**: PhonePe & Groww-inspired visual hierarchy, glanceable tender cards, instant zero-PDF bid fundamentals, thumb ergonomics, and auctions war room.
 
 * **Primary Files**:
   * [`companion_app/App.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/App.tsx)
-  * [`companion_app/screens/ReverseAuctionScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/ReverseAuctionScreen.tsx)
-  * [`companion_app/screens/CracInspectorScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/CracInspectorScreen.tsx)
-  * [`companion_app/screens/PfmsTrackerScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/PfmsTrackerScreen.tsx)
-* **Current Status**: Baseline functional prototypes active for all 3 screens.
-* **Upcoming Goals**:
-  * Refine visual hierarchy and typography for direct sunlight.
-  * Add haptic and audio confirmation for bid decrements in the Auction room.
-  * Polish camera viewfinder overlay with interactive crosshairs and watermark opacity.
-  * Polish 6-stage milestone tracker with animated progress lines.
+  * [`companion_app/screens/UserAgentFeedScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/UserAgentFeedScreen.tsx)
+  * [`companion_app/screens/BidInspectorScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/BidInspectorScreen.tsx)
+  * [`companion_app/screens/AuctionsHubScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/AuctionsHubScreen.tsx)
+  * [`companion_app/screens/ParticipatedPortfolioScreen.tsx`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/screens/ParticipatedPortfolioScreen.tsx)
+* **Current Status**: ✅ **COMPLETED & OPERATIONAL (PhonePe + Groww Hybrid UI/UX)**.
+  * `UserAgentFeedScreen.tsx`: Live Market Pulse ticker, horizontal pill filters (`90%+ Match`, `Zero EMD`, `Defence`, `Railways`, `Closing Soon`), dedicated agent hero card, and ranked match cards.
+  * `BidInspectorScreen.tsx`: Zero-PDF instant drawer displaying eligibility verdict, AI predictive L1 benchmark range, 2x2 fundamentals grid, operational risk flags, BOQ line items, consignee geocoding, and interactive document checklist.
+  * `AuctionsHubScreen.tsx`: Unified segmented hub with live Reverse Auctions (hold-to-bid double-tap guard, L1 gap ticker, urgency pulse) and Forward Auctions (`forwardauction.gem.gov.in` surplus machinery & e-scrap lots).
+  * `ParticipatedPortfolioScreen.tsx`: PhonePe holdings-style active vs awarded submissions, quoted vs benchmark pricing variance, and deep links to field inspection & PFMS tracking.
+  * Hardened outdoor yard ergonomics (min 48x48dp touch bounds, rapid steppers for gloved inspectors, high-contrast dark palette, tactile haptics).
+* **Next Steps**:
+  * Real-time WebSocket streaming integration with Thread 3's backend simulation endpoints.
 
 ---
 
 ## ⚙️ Thread 3: Backend & Core Systems Architecture (`backend-stream`)
-**Focus**: Reverse auction WebSockets, clock drift synchronization, offline SQLite mutation queues, PFMS integration, and MiroFish simulation APIs.
+**Agent ID**: `e6973303-6cdb-4b69-9bb6-ee44d3d58fed`  
+**Focus**: Daily official GeM portal extraction, 50-page tender PDF deconstruction, dedicated user agent profile matching, pricing intelligence, and REST endpoints.
 
 * **Primary Files**:
   * [`companion_app/types/index.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/types/index.ts)
-  * [`companion_app/services/AuctionRoom.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/AuctionRoom.ts)
-  * [`companion_app/services/InspectionEngine.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/InspectionEngine.ts)
-  * [`companion_app/services/OfflineQueue.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/OfflineQueue.ts)
-  * [`companion_app/services/PfmsTracker.ts`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/companion_app/services/PfmsTracker.ts)
-  * [`backend/app/`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/)
-* **Current Status**: 16/16 automated unit tests passing across all 4 core services.
+  * [`backend/app/services/portal_extractor.py`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/services/portal_extractor.py)
+  * [`backend/app/services/tender_doc_deconstructor.py`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/services/tender_doc_deconstructor.py)
+  * [`backend/app/services/user_agent_matcher.py`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/services/user_agent_matcher.py)
+  * [`backend/app/services/pricing_intelligence.py`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/services/pricing_intelligence.py)
+  * [`backend/app/api/gem_portal.py`](file:///Users/giradasaiteja/.gemini/antigravity/scratch/MiroFish/backend/app/api/gem_portal.py)
+* **Current Status**: 16/16 unit tests passing. Architecture specifications and REST contracts dispatched to backend stream.
 * **Upcoming Goals**:
-  * Connect mobile app to MiroFish backend Flask simulation server (`http://localhost:5001`).
-  * Implement WebSocket mock/live server endpoint for real-time reverse auction streaming.
-  * SQLite persistence driver for `OfflineQueue`.
+  * Implement daily portal scraper for `bidplus.gem.gov.in` and `forwardauction.gem.gov.in`.
+  * Implement automated PDF deconstructor extracting EMD, turnover, experience, and BOQ items.
+  * Implement 0–100% User Agent Match scoring algorithm.
+  * Expose REST endpoints: `/api/portal/market-pulse`, `/api/portal/feed`, `/api/portal/bid/:id/fundamentals`, `/api/portal/auctions`, `/api/portal/portfolio`.
+
