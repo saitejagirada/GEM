@@ -24,10 +24,13 @@ import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
 import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
+import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidCountdownBadge } from '../components/BidCountdownBadge';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
+
+export type GeMStatusTab = 'ONGOING' | 'RA' | 'CLOSED' | 'CANCELLED' | 'ALL';
 
 export interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
@@ -68,11 +71,14 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
   const f = BidDocService.getFundamentalsSummary(bid);
   const isHighMatch = matchScore >= 75;
   const isService = bid.type === 'SERVICE';
-  const isRa = bid.isRa || bid.type === 'RA';
+  const isRa = bid.isRa || bid.type === 'RA' || bid.lifecycleStatus === 'BID_TO_RA';
+  const lifecycle = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
+  const isClosed = lifecycle === 'CLOSED' || lifecycle === 'AWARDED';
+  const isCancelled = lifecycle === 'CANCELLED' || bid.isCancelled;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Card Header: Type Badge + Countdown + Bid Number */}
+      {/* Card Header: Type Badge + Dynamic Lifecycle / Countdown + Bid Number */}
       <View style={styles.cardTop}>
         <View style={styles.badgeRow}>
           <View
@@ -118,7 +124,19 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
                 : '📦 GOODS'}
             </Text>
           </View>
-          <BidCountdownBadge closingTimeUtc={bid.closingTimeUtc} />
+          {isCancelled ? (
+            <View style={[styles.statusBadge, { backgroundColor: '#FEE2E2' }]}>
+              <Text style={{ color: '#DC2626', fontSize: 9.5, fontWeight: '800' }}>🚫 CANCELLED</Text>
+            </View>
+          ) : isClosed ? (
+            <View style={[styles.statusBadge, { backgroundColor: isDark ? '#334155' : '#F1F5F9' }]}>
+              <Text style={{ color: isDark ? '#94A3B8' : '#475569', fontSize: 9.5, fontWeight: '800' }}>
+                🔒 EVALUATION ({bid.evaluationStage || 'TECH'})
+              </Text>
+            </View>
+          ) : (
+            <BidCountdownBadge closingTimeUtc={bid.closingTimeUtc} />
+          )}
         </View>
         <Text style={[styles.bidNumText, { color: colors.textMuted }]}>{bid.bidNumber}</Text>
       </View>
@@ -220,8 +238,25 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   const [searchQuery, setSearchQuery] = useState(initialFilter);
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
+  const [statusTab, setStatusTab] = useState<GeMStatusTab>('ONGOING');
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('ALL');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(mode === 'tenders' ? 'CUSTOM' : 'ALL');
+
+  const now = useMemo(() => new Date(), []);
+  const statusCounts = useMemo(() => {
+    let ongoing = 0;
+    let ra = 0;
+    let closed = 0;
+    let cancelled = 0;
+    for (const b of bids) {
+      const s = GeMLiveSyncService.computeLifecycleStatus(b, now);
+      if (s === 'ONGOING' || s === 'BID_TO_RA') ongoing++;
+      if (s === 'BID_TO_RA' || b.isRa || b.type === 'RA') ra++;
+      if (s === 'CLOSED' || s === 'AWARDED') closed++;
+      if (s === 'CANCELLED' || b.isCancelled) cancelled++;
+    }
+    return { ongoing, ra, closed, cancelled, total: bids.length };
+  }, [bids, now]);
 
   const ranked = useMemo(() => UserAgentService.rankDailyBids(userProfile, bids), [userProfile, bids]);
 
@@ -251,6 +286,18 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   // Filter pipeline
   const filtered = useMemo(() => {
     return ranked.filter(({ bid, evaluation }) => {
+      // 0. GeM Lifecycle Status Filter (Mirroring bidplus.gem.gov.in)
+      const computedStatus = GeMLiveSyncService.computeLifecycleStatus(bid, now);
+      if (statusTab === 'ONGOING') {
+        if (computedStatus !== 'ONGOING' && computedStatus !== 'BID_TO_RA') return false;
+      } else if (statusTab === 'RA') {
+        if (computedStatus !== 'BID_TO_RA' && !bid.isRa && bid.type !== 'RA') return false;
+      } else if (statusTab === 'CLOSED') {
+        if (computedStatus !== 'CLOSED' && computedStatus !== 'AWARDED') return false;
+      } else if (statusTab === 'CANCELLED') {
+        if (computedStatus !== 'CANCELLED' && !bid.isCancelled) return false;
+      }
+
       // 1. Scope filter
       if (scopeFilter === 'MATCHED') {
         const isRelevant = evaluation.matchScore >= 60 || evaluation.isEligible;
@@ -260,7 +307,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       // 2. Type filter
       if (typeFilter !== 'ALL') {
         if (typeFilter === 'RA') {
-          if (!bid.isRa && bid.type !== 'RA') return false;
+          if (!bid.isRa && bid.type !== 'RA' && computedStatus !== 'BID_TO_RA') return false;
         } else if (bid.type !== typeFilter) {
           return false;
         }
@@ -281,7 +328,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
       return true;
     });
-  }, [ranked, scopeFilter, typeFilter, searchQuery]);
+  }, [ranked, statusTab, scopeFilter, typeFilter, searchQuery, now]);
 
   const renderItem = useCallback(
     ({ item }: { item: (typeof ranked)[0] }) => (
@@ -345,10 +392,61 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           )}
         </View>
 
-        {/* Scope Toggle: All Available vs Relevant Only */}
+        {/* Tier 1: Official GeM Status Selector (bidStatusTypeFilter) */}
+        <View style={styles.statusTabsRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusTabsScroll}>
+            <TouchButton
+              title={`🟢 Ongoing Bids (${statusCounts.ongoing})`}
+              variant={statusTab === 'ONGOING' ? 'primary' : 'ghost'}
+              size="small"
+              onPress={() => setStatusTab('ONGOING')}
+              style={styles.statusTabBtn}
+            />
+            <TouchButton
+              title={`⚡ Live RA (${statusCounts.ra})`}
+              variant={statusTab === 'RA' ? 'primary' : 'ghost'}
+              size="small"
+              onPress={() => setStatusTab('RA')}
+              style={styles.statusTabBtn}
+            />
+            <TouchButton
+              title={`🔒 Closed & Evaluating (${statusCounts.closed})`}
+              variant={statusTab === 'CLOSED' ? 'primary' : 'ghost'}
+              size="small"
+              onPress={() => setStatusTab('CLOSED')}
+              style={styles.statusTabBtn}
+            />
+            <TouchButton
+              title={`🚫 Cancelled (${statusCounts.cancelled})`}
+              variant={statusTab === 'CANCELLED' ? 'primary' : 'ghost'}
+              size="small"
+              onPress={() => setStatusTab('CANCELLED')}
+              style={styles.statusTabBtn}
+            />
+            <TouchButton
+              title={`🌐 All Bids (${statusCounts.total})`}
+              variant={statusTab === 'ALL' ? 'primary' : 'ghost'}
+              size="small"
+              onPress={() => setStatusTab('ALL')}
+              style={styles.statusTabBtn}
+            />
+          </ScrollView>
+        </View>
+
+        {/* Scope Toggle: All in Current Status vs AI Matched Only */}
         <View style={styles.scopeRow}>
           <TouchButton
-            title={`🌐 All Available (${bids.length} Loaded)`}
+            title={
+              statusTab === 'ONGOING'
+                ? `🟢 All Ongoing (${statusCounts.ongoing})`
+                : statusTab === 'CLOSED'
+                ? `🔒 All Closed (${statusCounts.closed})`
+                : statusTab === 'RA'
+                ? `⚡ All Live RA (${statusCounts.ra})`
+                : statusTab === 'CANCELLED'
+                ? `🚫 All Cancelled (${statusCounts.cancelled})`
+                : `🌐 All (${bids.length})`
+            }
             variant={scopeFilter === 'ALL' ? 'primary' : 'secondary'}
             size="small"
             onPress={() => setScopeFilter('ALL')}
@@ -364,11 +462,11 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         </View>
       </View>
 
-      {/* Procurement Type Pills */}
+      {/* Tier 2: Procurement Vehicle Type Pills (byType) */}
       <View style={styles.filterPillsRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillScroll}>
           <TouchButton
-            title={`All (${bids.length})`}
+            title="All Vehicles"
             variant={typeFilter === 'ALL' ? 'saffron' : 'secondary'}
             size="small"
             onPress={() => setTypeFilter('ALL')}
@@ -400,13 +498,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             variant={typeFilter === 'BOQ' ? 'saffron' : 'secondary'}
             size="small"
             onPress={() => setTypeFilter('BOQ')}
-            style={styles.typePill}
-          />
-          <TouchButton
-            title={`⚡ Live RA (${bids.filter((b) => b.isRa || b.type === 'RA').length})`}
-            variant={typeFilter === 'RA' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('RA')}
             style={styles.typePill}
           />
         </ScrollView>
@@ -484,6 +575,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   syncBannerText: { color: '#15803D', fontSize: 10, fontWeight: '700', textAlign: 'center' },
+  statusTabsRow: { marginTop: 6, paddingBottom: 4 },
+  statusTabsScroll: { gap: 6 },
+  statusTabBtn: { marginRight: 6 },
+  statusBadge: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6 },
   scopeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   filterPillsRow: { paddingVertical: 6 },
   filterPillScroll: { paddingHorizontal: 12, gap: 6 },

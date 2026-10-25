@@ -32,9 +32,10 @@ class GemDailyIngestion:
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     @classmethod
-    def fetch_live_portal_bids(cls, pages: int = 5) -> List[Dict[str, Any]]:
+    def fetch_live_portal_bids(cls, pages: int = 5, status_type: str = "ongoing_bids") -> List[Dict[str, Any]]:
         """
-        Extracts ongoing public bids from bidplus.gem.gov.in without requiring an account.
+        Extracts public bids from bidplus.gem.gov.in without requiring an account.
+        Supports status_type: 'ongoing_bids', 'bidrastatus', 'cancelled_bids'.
         Parses live Solr records and normalizes them into standard DeconstructedBidDoc format.
         """
         session = requests.Session()
@@ -69,7 +70,7 @@ class GemDailyIngestion:
                 "page": page,
                 "param": {"searchBid": ""},
                 "filter": {
-                    "bidStatusType": "ongoing_bids",
+                    "bidStatusType": status_type,
                     "byType": "all",
                     "highBidValue": "",
                     "byEndDate": {"from": "", "to": ""},
@@ -102,7 +103,7 @@ class GemDailyIngestion:
         # Step 3: Transform raw docs to deconstructed bids
         transformed = []
         for d in all_docs:
-            item = cls._transform_gem_doc(d)
+            item = cls._transform_gem_doc(d, status_type=status_type)
             if item:
                 transformed.append(item)
 
@@ -113,7 +114,7 @@ class GemDailyIngestion:
         return cls._load_cached_bids()
 
     @classmethod
-    def _transform_gem_doc(cls, doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _transform_gem_doc(cls, doc: Dict[str, Any], status_type: str = "ongoing_bids") -> Optional[Dict[str, Any]]:
         """Normalizes a raw GeM Solr document into standard Bid and Supabase format."""
         bid_numbers = doc.get("b_bid_number", [])
         if not bid_numbers:
@@ -230,6 +231,27 @@ class GemDailyIngestion:
         estimated_val = max(500000.0, float(quantity * 15000))
         emd_amt = 0.0  # GeM MSE exemption policy is 100% waiver
 
+        # Determine official GeM lifecycle status
+        now_dt = datetime.now(timezone.utc)
+        closing_dt = None
+        if closing_times:
+            try:
+                closing_dt = datetime.fromisoformat(closing_times[0].replace('Z', '+00:00'))
+            except Exception:
+                pass
+
+        is_ended = bool(closing_dt and closing_dt <= now_dt)
+        is_cancelled = status_type == "cancelled_bids" or bool(doc.get("b_is_cancelled", [0])[0] if isinstance(doc.get("b_is_cancelled"), list) else doc.get("b_is_cancelled", False))
+
+        if is_cancelled:
+            lifecycle_status = "CANCELLED"
+        elif is_ra or status_type == "bidrastatus":
+            lifecycle_status = "CLOSED" if is_ended else "BID_TO_RA"
+        elif is_ended:
+            lifecycle_status = "CLOSED"
+        else:
+            lifecycle_status = "ONGOING"
+
         return {
             "bidNumber": bid_number,
             "bid_number": bid_number,
@@ -238,6 +260,11 @@ class GemDailyIngestion:
             "department": dept,
             "type": bid_doc_type,
             "bid_type": bid_doc_type,
+            "lifecycleStatus": lifecycle_status,
+            "lifecycle_status": lifecycle_status,
+            "isCancelled": is_cancelled,
+            "is_ongoing": lifecycle_status in ("ONGOING", "BID_TO_RA"),
+            "evaluationStage": "TECH_EVALUATED" if lifecycle_status == "CLOSED" else "NOT_STARTED",
             "categoryDomain": domain_category,
             "category_domain": domain_category,
             "serviceDetails": service_details,

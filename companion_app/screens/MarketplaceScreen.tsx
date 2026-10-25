@@ -87,11 +87,22 @@ export const MarketplaceScreen: React.FC = () => {
                 {isService ? '🛠️ SERVICE' : '📦 PRODUCT'} • {item.category}
               </Text>
             </View>
-            {item.outletStore ? (
-              <View style={styles.outletBadge}>
-                <Text style={styles.outletBadgeText}>🏛️ {item.outletStore.toUpperCase()}</Text>
-              </View>
-            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {item.isAvailableOnGeM ? (
+                <View style={[styles.outletBadge, { backgroundColor: '#DCFCE7' }]}>
+                  <Text style={[styles.outletBadgeText, { color: '#15803D' }]}>🟢 ACTIVE ON GeM</Text>
+                </View>
+              ) : (
+                <View style={[styles.outletBadge, { backgroundColor: '#FEE2E2' }]}>
+                  <Text style={[styles.outletBadgeText, { color: '#B91C1C' }]}>🚫 DELISTED</Text>
+                </View>
+              )}
+              {item.outletStore ? (
+                <View style={styles.outletBadge}>
+                  <Text style={styles.outletBadgeText}>🏛️ {item.outletStore.toUpperCase()}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           {/* Title */}

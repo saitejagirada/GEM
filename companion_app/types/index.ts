@@ -190,6 +190,19 @@ export interface BidMatchEvaluation {
 export type BidDocType = 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ' | 'RA';
 export type MiiClass = 'CLASS_1' | 'CLASS_2' | 'NON_LOCAL';
 
+export type BidLifecycleStatus =
+  | 'ONGOING'    // Open for public bidding (closingTimeUtc > now)
+  | 'CLOSED'     // Bidding ended; undergoing evaluation
+  | 'BID_TO_RA'  // Converted to live Reverse Auction
+  | 'AWARDED'    // Contract finalized & awarded to L1
+  | 'CANCELLED'; // Withdrawn or cancelled by buyer department
+
+export type GeMEvaluationStage =
+  | 'NOT_STARTED'
+  | 'TECH_EVALUATED'
+  | 'FIN_EVALUATED'
+  | 'AWARDED';
+
 export interface BoqLineItem {
   itemTitle: string;
   quantity: number;
@@ -220,6 +233,10 @@ export interface DeconstructedBidDoc {
   type: BidDocType;
   categoryDomain?: string; // e.g. "IT & Telecom", "Services & Manpower", "Defence & Security"
   isRa?: boolean;
+  lifecycleStatus?: BidLifecycleStatus;
+  evaluationStage?: GeMEvaluationStage;
+  isCancelled?: boolean;
+  b_id?: string;
   serviceDetails?: ServiceContractDetails;
   estimatedBidValueInr?: number;
   emdAmountInr: number;
