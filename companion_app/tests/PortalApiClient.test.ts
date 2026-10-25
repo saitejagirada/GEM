@@ -19,5 +19,8 @@ describe('PortalApiClient', () => {
 
     const portfolio = await PortalApiClient.getPortfolio();
     expect(portfolio.length).toBeGreaterThan(0);
+
+    const liveBids = await PortalApiClient.getLiveBids(2);
+    expect(liveBids.length).toBeGreaterThan(0);
   });
 });

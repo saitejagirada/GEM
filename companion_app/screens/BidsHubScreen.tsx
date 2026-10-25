@@ -18,6 +18,7 @@ import {
   SafeAreaView,
   Alert,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
@@ -33,6 +34,8 @@ export interface BidsHubScreenProps {
   userProfile: UserAgentProfile;
   initialFilter?: string;
   mode?: 'bids' | 'tenders' | 'all';
+  onSyncLive?: () => Promise<void> | void;
+  isSyncing?: boolean;
 }
 
 type ScopeFilter = 'ALL' | 'MATCHED';
@@ -210,6 +213,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   userProfile,
   initialFilter = '',
   mode = 'all',
+  onSyncLive,
+  isSyncing,
 }) => {
   const { colors, fontMultiplier, isDark } = useTheme();
 
@@ -321,9 +326,23 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
         {/* Real-time National Sync Banner */}
         <View style={styles.syncBanner}>
-          <Text style={styles.syncBannerText}>
-            🟢 14,250+ Tenders Synchronized across Central Ministries & 28 States • bidplus.gem.gov.in
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.syncBannerText}>
+              🟢 45,399+ Live Ongoing Bids on Official GeM Portal • {bids.length} Active
+            </Text>
+            <Text style={{ fontSize: 10, color: '#166534', marginTop: 2 }}>
+              Public read stream • bidplus.gem.gov.in • Zero login barrier
+            </Text>
+          </View>
+          {onSyncLive && (
+            <TouchButton
+              title={isSyncing ? "⟳ Syncing..." : "⟳ Refresh"}
+              variant="primary"
+              size="small"
+              onPress={onSyncLive}
+              style={{ marginLeft: 8 }}
+            />
+          )}
         </View>
 
         {/* Scope Toggle: All Available vs Relevant Only */}
@@ -400,7 +419,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         </Text>
       </View>
 
-      {/* Virtualized FlatList */}
+      {/* Virtualized FlatList with Pull-To-Refresh */}
       <FlatList
         data={filtered}
         renderItem={renderItem}
@@ -410,6 +429,16 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         windowSize={5}
         removeClippedSubviews={true}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          onSyncLive ? (
+            <RefreshControl
+              refreshing={Boolean(isSyncing)}
+              onRefresh={onSyncLive}
+              colors={['#0B3B60', '#FF9933']}
+              tintColor="#FF9933"
+            />
+          ) : undefined
+        }
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>

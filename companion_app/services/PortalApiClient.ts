@@ -55,6 +55,10 @@ export class PortalApiClient {
     return this.safeFetch<MarketPulseStats>('/market-pulse', MOCK_MARKET_PULSE);
   }
 
+  public static async getLiveBids(pages: number = 3): Promise<DeconstructedBidDoc[]> {
+    return this.safeFetch<DeconstructedBidDoc[]>(`/live-bids?pages=${pages}`, MOCK_DAILY_BIDS);
+  }
+
   public static async getFeed(params?: { category?: string; state?: string; minScore?: number }): Promise<DeconstructedBidDoc[]> {
     const query = new URLSearchParams();
     if (params?.category) query.append('category', params.category);

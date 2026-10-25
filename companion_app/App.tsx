@@ -33,6 +33,7 @@ import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { PortalsDirectoryScreen } from './screens/PortalsDirectoryScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { SupabaseClient } from './services/SupabaseClient';
+import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { MOCK_USER_PROFILE, MOCK_DAILY_BIDS, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
 
@@ -43,7 +44,7 @@ const MainAppContent: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<ProductionTab>('MARKET');
   const [portalMode, setPortalMode] = useState<'DIRECTORY' | 'REGISTRATION'>('DIRECTORY');
-  const [bids, setBids] = useState<DeconstructedBidDoc[]>(MOCK_DAILY_BIDS);
+  const [bids, setBids] = useState<DeconstructedBidDoc[]>(GeMLiveSyncService.getLiveBids());
   const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
   const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -62,13 +63,18 @@ const MainAppContent: React.FC = () => {
         SupabaseClient.getVendorProfile('usr-agent-001'),
         SupabaseClient.getMarketPulse(),
       ]);
-      if (liveBids && liveBids.length > 0) {
-        setBids(liveBids);
+
+      const serviceBids = GeMLiveSyncService.getLiveBids();
+      const combined = liveBids && liveBids.length > 0 ? liveBids : serviceBids;
+
+      if (combined && combined.length > 0) {
+        setBids(combined);
         setCloudConnected(true);
       }
       if (profile) setUserProfile(profile);
       if (pulse) setMarketPulse(pulse);
     } catch {
+      setBids(GeMLiveSyncService.getLiveBids());
       setCloudConnected(true);
     } finally {
       setIsSyncing(false);
@@ -137,7 +143,7 @@ const MainAppContent: React.FC = () => {
         <View style={styles.controlsRow}>
           {/* Live Catalog Badge with National Scale */}
           <TouchButton
-            title={isSyncing ? '⟳ Syncing' : `🟢 GeM Live (14,250+)`}
+            title={isSyncing ? '⟳ Syncing' : `🟢 GeM Live (45,399+)`}
             variant="ghost"
             size="small"
             onPress={loadData}
@@ -187,6 +193,8 @@ const MainAppContent: React.FC = () => {
             bids={bids}
             userProfile={userProfile}
             mode="all"
+            onSyncLive={loadData}
+            isSyncing={isSyncing}
           />
         )}
         {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
