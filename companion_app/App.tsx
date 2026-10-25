@@ -34,7 +34,7 @@ import { PortalsDirectoryScreen } from './screens/PortalsDirectoryScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
-import { MOCK_USER_PROFILE, MOCK_DAILY_BIDS, MOCK_MARKET_PULSE } from './fixtures/mockData';
+import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
 
 export type ProductionTab = 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL';
@@ -97,21 +97,20 @@ const MainAppContent: React.FC = () => {
           b.bidNumber.toLowerCase().includes(lookupInput.trim().toLowerCase()) ||
           b.title.toLowerCase().includes(lookupInput.trim().toLowerCase())
       ) ||
-      MOCK_DAILY_BIDS.find(
-        (b) =>
-          b.bidNumber.toLowerCase().includes(lookupInput.trim().toLowerCase()) ||
-          b.title.toLowerCase().includes(lookupInput.trim().toLowerCase())
-      );
+      GeMLiveSyncService.getBidById(lookupInput.trim());
 
     setShowLookupModal(false);
     setLookupInput('');
     if (found) {
       setSelectedBid(found);
     } else {
-      setSelectedBid({
-        ...(bids[0] || MOCK_DAILY_BIDS[0]),
-        bidNumber: lookupInput.trim().toUpperCase(),
-      });
+      const fallbackBid = bids[0] || GeMLiveSyncService.getLiveBids()[0];
+      if (fallbackBid) {
+        setSelectedBid({
+          ...fallbackBid,
+          bidNumber: lookupInput.trim().toUpperCase(),
+        });
+      }
     }
   }, [bids, lookupInput]);
 

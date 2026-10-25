@@ -15,7 +15,7 @@ import type {
   BidLifecycleStatus,
   GeMEvaluationStage,
 } from '../types/index.ts';
-import { MOCK_DAILY_BIDS } from '../fixtures/mockData.ts';
+import { LIVE_PORTAL_BIDS } from '../fixtures/livePortalBids.ts';
 
 export interface GeMFilterOptions {
   status?: 'ALL' | 'ONGOING' | 'CLOSED' | 'RA' | 'CANCELLED' | 'AWARDED';
@@ -45,7 +45,7 @@ export type LiveSyncListener = (bids: DeconstructedBidDoc[], stats: GeMPortalLiv
 
 export class GeMLiveSyncService {
   // In-memory catalog of synchronized live bids
-  private static liveCatalog: DeconstructedBidDoc[] = [...MOCK_DAILY_BIDS];
+  private static liveCatalog: DeconstructedBidDoc[] = [...LIVE_PORTAL_BIDS];
   private static listeners: Set<LiveSyncListener> = new Set();
   private static lastSyncTime: string = new Date().toISOString();
   private static totalPortalOngoingCount: number = 45399; // Verified from official GeM Solr endpoint
