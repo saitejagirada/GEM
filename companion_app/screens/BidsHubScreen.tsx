@@ -317,6 +317,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               hitSlopPadding={4}
             />
           )}
+        </View>
+
         {/* Real-time National Sync Banner */}
         <View style={styles.syncBanner}>
           <Text style={styles.syncBannerText}>
