@@ -1,20 +1,32 @@
+/**
+ * GeM Auctions Hub Screen - Live Reverse Auctions & Forward Auctions
+ * Replicates https://forwardauction.gem.gov.in and GeM Reverse Auction Rooms:
+ * - Reverse Auctions (RA): Dynamic decrement room, clock drift synchronization
+ * - Forward Auctions: E-scrap, surplus vehicle disposal catalog
+ * - Theme-aware styling with zero-latency TouchButtons
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
+  SafeAreaView,
   Alert,
+  Linking,
 } from 'react-native';
 import type { ForwardAuctionLot } from '../types/index';
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
+import { TouchButton } from '../components/TouchButton';
+import { useTheme } from '../theme/ThemeContext';
 
 type AuctionMode = 'REVERSE' | 'FORWARD';
 
 export const AuctionsHubScreen: React.FC = () => {
+  const { colors, fontMultiplier, isDark } = useTheme();
   const [activeMode, setActiveMode] = useState<AuctionMode>('REVERSE');
   const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>(MOCK_FORWARD_AUCTIONS);
 
@@ -42,27 +54,30 @@ export const AuctionsHubScreen: React.FC = () => {
     );
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Top Segmented Mode Selector (PhonePe White/Purple Style) */}
-      <View style={styles.segmentedBar}>
-        <TouchableOpacity
-          style={[styles.segmentBtn, activeMode === 'REVERSE' && styles.segmentActive]}
-          onPress={() => setActiveMode('REVERSE')}
-        >
-          <Text style={[styles.segmentText, activeMode === 'REVERSE' && styles.segmentTextActive]}>
-            ⚡ Live Reverse Auctions
-          </Text>
-        </TouchableOpacity>
+  const openForwardAuctionPortal = () => {
+    Linking.openURL('https://forwardauction.gem.gov.in/eprocure/home').catch(() => {
+      Alert.alert('GeM Forward Auction', 'Visit https://forwardauction.gem.gov.in in your browser.');
+    });
+  };
 
-        <TouchableOpacity
-          style={[styles.segmentBtn, activeMode === 'FORWARD' && styles.segmentActive]}
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Top Segmented Mode Selector */}
+      <View style={[styles.segmentedBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <TouchButton
+          title="⚡ Live Reverse Auctions"
+          variant={activeMode === 'REVERSE' ? 'primary' : 'secondary'}
+          size="small"
+          onPress={() => setActiveMode('REVERSE')}
+          style={{ flex: 1 }}
+        />
+        <TouchButton
+          title="♻️ Forward e-Scrap Lots"
+          variant={activeMode === 'FORWARD' ? 'primary' : 'secondary'}
+          size="small"
           onPress={() => setActiveMode('FORWARD')}
-        >
-          <Text style={[styles.segmentText, activeMode === 'FORWARD' && styles.segmentTextActive]}>
-            ♻ Forward e-Scrap Lots
-          </Text>
-        </TouchableOpacity>
+          style={{ flex: 1 }}
+        />
       </View>
 
       {/* Screen Body */}
@@ -71,12 +86,22 @@ export const AuctionsHubScreen: React.FC = () => {
       ) : (
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
           {/* Forward Auction Info Banner */}
-          <View style={styles.forwardBanner}>
-            <Text style={styles.bannerTag}>GOVERNMENT SURPLUS ASSETS &amp; E-SCRAP</Text>
-            <Text style={styles.bannerTitle}>forwardauction.gem.gov.in Live Lots</Text>
-            <Text style={styles.bannerSubtitle}>
-              Direct bidding on decommissioned defense machinery, railway scrap &amp; public sector vehicles.
+          <View style={[styles.forwardBanner, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
+            <Text style={[styles.bannerTag, { color: '#1E40AF' }]}>GOVERNMENT SURPLUS ASSETS &amp; E-SCRAP</Text>
+            <Text style={[styles.bannerTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>
+              forwardauction.gem.gov.in Live Lots
             </Text>
+            <Text style={[styles.bannerSubtitle, { color: colors.textSecondary }]}>
+              Public bidding on decommissioned defense machinery, railway scrap &amp; central public sector vehicles.
+            </Text>
+            <View style={{ marginTop: 8 }}>
+              <TouchButton
+                title="Open Official Forward Auction Portal ➔"
+                variant="outline"
+                size="small"
+                onPress={openForwardAuctionPortal}
+              />
+            </View>
           </View>
 
           {/* Forward Lots List */}
@@ -88,146 +113,114 @@ export const AuctionsHubScreen: React.FC = () => {
             );
 
             return (
-              <View key={lot.id} style={styles.lotCard}>
+              <View key={lot.id} style={[styles.lotCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 {/* Header Row */}
                 <View style={styles.lotHeaderRow}>
-                  <View style={styles.catPill}>
-                    <Text style={styles.catText}>{lot.category.replace('_', ' ')}</Text>
+                  <View style={[styles.catPill, { backgroundColor: isDark ? colors.surfaceSubtle : '#EDE9FE' }]}>
+                    <Text style={[styles.catText, { color: '#6D28D9' }]}>{lot.category.replace('_', ' ')}</Text>
                   </View>
                   <Text style={styles.lotTimeTag}>⏳ {hoursLeft}h left</Text>
                 </View>
 
                 {/* Title & Lot ID */}
-                <Text style={styles.lotNumber}>{lot.auctionNumber}</Text>
-                <Text style={styles.lotTitle}>{lot.title}</Text>
-                <Text style={styles.lotDept}>{lot.department}</Text>
+                <Text style={[styles.lotNumber, { color: colors.textMuted }]}>{lot.auctionNumber}</Text>
+                <Text style={[styles.lotTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}>
+                  {lot.title}
+                </Text>
+                <Text style={[styles.lotDept, { color: colors.textMuted }]}>{lot.department}</Text>
 
                 {/* Yard Location */}
-                <View style={styles.yardBox}>
+                <View style={[styles.yardBox, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC' }]}>
                   <Text style={styles.yardIcon}>📍</Text>
-                  <Text style={styles.yardText}>{lot.locationYard}</Text>
+                  <Text style={[styles.yardText, { color: colors.textSecondary }]}>{lot.locationYard}</Text>
                 </View>
 
                 {/* Price Board */}
                 <View style={styles.priceRow}>
-                  <View style={styles.priceCell}>
-                    <Text style={styles.priceLabel}>Reserve Price</Text>
-                    <Text style={styles.reserveVal}>₹{lot.reservePriceInr.toLocaleString('en-IN')}</Text>
+                  <View style={[styles.priceCell, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
+                    <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Reserve Price</Text>
+                    <Text style={[styles.reserveVal, { color: colors.textSecondary }]}>
+                      ₹{lot.reservePriceInr.toLocaleString('en-IN')}
+                    </Text>
                   </View>
-                  <View style={styles.priceCell}>
-                    <Text style={styles.priceLabel}>Current Highest Bid</Text>
-                    <Text style={styles.highestVal}>₹{lot.currentHighestBidInr.toLocaleString('en-IN')}</Text>
+                  <View style={[styles.priceCell, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
+                    <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Current Highest Bid</Text>
+                    <Text style={[styles.highestVal, { color: colors.emerald }]}>
+                      ₹{lot.currentHighestBidInr.toLocaleString('en-IN')}
+                    </Text>
                   </View>
                 </View>
 
                 {/* Quick 1-Tap Bid Button */}
-                <TouchableOpacity
-                  style={styles.bidIncrementBtn}
+                <TouchButton
+                  title={`Raise Bid (+₹${lot.minimumIncrementInr.toLocaleString('en-IN')}) → Next: ₹${(lot.currentHighestBidInr + lot.minimumIncrementInr).toLocaleString('en-IN')}`}
+                  variant="primary"
+                  size="medium"
                   onPress={() => handleIncrementForwardBid(lot.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.bidIncrementBtnText}>
-                    Raise Bid (+₹{lot.minimumIncrementInr.toLocaleString('en-IN')}) → Next: ₹
-                    {(lot.currentHighestBidInr + lot.minimumIncrementInr).toLocaleString('en-IN')}
-                  </Text>
-                </TouchableOpacity>
+                />
               </View>
             );
           })}
         </ScrollView>
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1 },
   segmentedBar: {
     flexDirection: 'row',
     padding: 8,
-    backgroundColor: '#F8F9FA',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
     gap: 8,
   },
-  segmentBtn: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  segmentActive: {
-    backgroundColor: '#F3E8FF',
-    borderColor: '#5F259F',
-  },
-  segmentText: { color: '#6B7280', fontSize: 12, fontWeight: '700' },
-  segmentTextActive: { color: '#5F259F', fontWeight: '800' },
   scrollArea: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 32 },
+  scrollContent: { padding: 12, paddingBottom: 40 },
   forwardBanner: {
-    backgroundColor: '#F3E8FF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
   },
-  bannerTag: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
-  bannerTitle: { color: '#111827', fontSize: 15, fontWeight: '800', marginBottom: 2 },
-  bannerSubtitle: { color: '#4B5563', fontSize: 12, lineHeight: 16 },
+  bannerTag: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
+  bannerTitle: { fontWeight: '900', marginBottom: 2 },
+  bannerSubtitle: { fontSize: 11.5, lineHeight: 16 },
   lotCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000000',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  lotHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  catPill: { backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  catText: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  lotHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  catPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  catText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   lotTimeTag: { color: '#D97706', fontSize: 11, fontWeight: '700' },
-  lotNumber: { color: '#6B7280', fontSize: 11, fontWeight: '600', marginBottom: 2 },
-  lotTitle: { color: '#111827', fontSize: 14, fontWeight: '700', lineHeight: 19, marginBottom: 4 },
-  lotDept: { color: '#4B5563', fontSize: 12, marginBottom: 10 },
+  lotNumber: { fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  lotTitle: { fontWeight: '800', lineHeight: 19, marginBottom: 4 },
+  lotDept: { fontSize: 11.5, marginBottom: 8 },
   yardBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#F9FAFB',
     borderRadius: 8,
     padding: 8,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   yardIcon: { fontSize: 12, marginRight: 6, marginTop: 1 },
-  yardText: { color: '#4B5563', fontSize: 11, flex: 1, lineHeight: 15 },
-  priceRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  yardText: { fontSize: 11, flex: 1, lineHeight: 15 },
+  priceRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   priceCell: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
-  priceLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600', marginBottom: 2 },
-  reserveVal: { color: '#6B7280', fontSize: 13, fontWeight: '700' },
-  highestVal: { color: '#00C853', fontSize: 15, fontWeight: '900' },
-  bidIncrementBtn: {
-    minHeight: 46,
-    backgroundColor: '#5F259F',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-  },
-  bidIncrementBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  priceLabel: { fontSize: 9.5, fontWeight: '700', marginBottom: 2 },
+  reserveVal: { fontSize: 12, fontWeight: '700' },
+  highestVal: { fontSize: 14, fontWeight: '900' },
 });
