@@ -126,7 +126,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={styles.container}>
-        {/* Top Header Bar (PhonePe Purple) */}
+        {/* Top Header Bar (GeM Ashoka Navy) */}
         <View style={styles.headerBar}>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close details">
             <Text style={styles.closeBtnText}>✕</Text>
@@ -407,7 +407,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </View>
         </ScrollView>
 
-        {/* Sticky Bottom Actions Bar (PhonePe Purple) */}
+        {/* Sticky Bottom Actions Bar (GeM Ashoka Navy) */}
         <View style={styles.stickyFooter}>
           <TouchableOpacity
             style={styles.addPortfolioBtn}
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 14,
-    backgroundColor: '#5F259F',
+    backgroundColor: '#0B3B60',
   },
   closeBtn: {
     width: 40,
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  deptBadge: { color: '#5F259F', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
+  deptBadge: { color: '#0B3B60', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
   bidTitle: { color: '#111827', fontSize: 15, fontWeight: '800', lineHeight: 20, marginBottom: 4 },
   ministryText: { color: '#6B7280', fontSize: 12 },
   benchmarkCard: {
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
     borderColor: '#E9D5FF',
   },
   benchmarkHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  benchmarkLabel: { color: '#5F259F', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  benchmarkLabel: { color: '#0B3B60', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   benchmarkHint: { color: '#6B7280', fontSize: 10 },
   benchmarkRange: { color: '#111827', fontSize: 22, fontWeight: '900', marginVertical: 4 },
   benchmarkSub: { color: '#4B5563', fontSize: 11, lineHeight: 15 },
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   stateBadge: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
   consigneeQty: { color: '#374151', fontSize: 12, fontWeight: '800', marginTop: 2 },
   checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  checkRatio: { color: '#5F259F', fontSize: 12, fontWeight: '800' },
+  checkRatio: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10,
   },
-  checkboxActive: { backgroundColor: '#5F259F', borderColor: '#5F259F' },
+  checkboxActive: { backgroundColor: '#0B3B60', borderColor: '#0B3B60' },
   checkMark: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   checkLabel: { color: '#374151', fontSize: 12, flex: 1 },
   checkLabelActive: { color: '#111827', fontWeight: '600' },
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   addPortfolioBtn: {
     flex: 1.3,
     minHeight: 48,
-    backgroundColor: '#5F259F',
+    backgroundColor: '#0B3B60',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',

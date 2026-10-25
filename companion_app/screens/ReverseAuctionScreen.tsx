@@ -152,7 +152,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
               🏛 {ra.department} • {ra.buyerOrganization}
             </Text>
 
-            {/* Key RA Metrics Grid (PhonePe Clean Style) */}
+            {/* Key RA Metrics Grid (Official GeM Portal Style) */}
             <View style={styles.metricsGrid}>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Current Lowest (L1)</Text>
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   ruleNoticeText: { color: '#64748B', fontSize: 10, lineHeight: 14 },
   actionRow: { marginTop: 12 },
   openPortalBtn: {
-    backgroundColor: '#5F259F',
+    backgroundColor: '#0B3B60',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',

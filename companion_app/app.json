@@ -1,20 +1,21 @@
 {
   "expo": {
-    "name": "GeM Companion",
+    "name": "GeM National Portal",
     "slug": "gem-mobile-companion",
-    "version": "1.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#5F259F"
+      "backgroundColor": "#0B3B60"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "gov.gem.companion"
     },
     "android": {
+      "versionCode": 3,
       "adaptiveIcon": {
-        "backgroundColor": "#5F259F"
+        "backgroundColor": "#0B3B60"
       },
       "package": "gov.gem.companion",
       "permissions": [

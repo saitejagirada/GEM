@@ -29,6 +29,7 @@ import {
   OFFICIAL_OUTLET_STORES,
 } from '../services/MarketplaceService';
 import { TouchButton } from '../components/TouchButton';
+import { BrowseMegaMenuModal } from '../components/BrowseMegaMenuModal';
 import { useTheme } from '../theme/ThemeContext';
 
 export const MarketplaceScreen: React.FC = () => {
@@ -39,6 +40,7 @@ export const MarketplaceScreen: React.FC = () => {
   const [selectedOutlet, setSelectedOutlet] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  const [showMegaMenu, setShowMegaMenu] = useState<boolean>(false);
 
   // GFR 149 Mode Calculator state
   const [gfrCalculatorValue, setGfrCalculatorValue] = useState<string>('');
@@ -160,24 +162,44 @@ export const MarketplaceScreen: React.FC = () => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top Search & Filter Bar */}
       <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search 10,000+ GeM products, services, brands..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+        <View style={styles.searchRow}>
+          {/* Official GeM BROWSE Mega-Menu Button matching mkp.gem.gov.in */}
+          <TouchButton
+            title="BROWSE"
+            icon="☰"
+            variant="primary"
+            size="small"
+            onPress={() => setShowMegaMenu(true)}
+            style={styles.browseBtn}
+            textStyle={{ fontWeight: '900', fontSize: 11 }}
           />
-          {searchQuery.length > 0 && (
-            <TouchButton
-              title="✕"
-              variant="ghost"
-              size="small"
-              onPress={() => setSearchQuery('')}
-              hitSlopPadding={4}
+
+          <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={[styles.searchInput, { color: colors.textPrimary }]}
+              placeholder="Search 10,000+ GeM products, services..."
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
-          )}
+            {searchQuery.length > 0 && (
+              <TouchButton
+                title="✕"
+                variant="ghost"
+                size="small"
+                onPress={() => setSearchQuery('')}
+                hitSlopPadding={4}
+              />
+            )}
+          </View>
+        </View>
+
+        {/* Zero-Login Public Discovery Ribbon */}
+        <View style={styles.publicNoticeBanner}>
+          <Text style={styles.publicNoticeText}>
+            🛡️ Public Discovery Mode: 10,917+ catalog items & benchmarks freely accessible
+          </Text>
         </View>
 
         {/* Type Segments: All | Products | Services */}
@@ -345,6 +367,19 @@ export const MarketplaceScreen: React.FC = () => {
           </SafeAreaView>
         </Modal>
       ) : null}
+
+      {/* BROWSE Mega-Menu Modal */}
+      <BrowseMegaMenuModal
+        visible={showMegaMenu}
+        onClose={() => setShowMegaMenu(false)}
+        onSelectCategory={(cat, sub) => {
+          setSelectedCategory(cat);
+          if (sub) setSearchQuery(sub);
+        }}
+        onSelectOutlet={(outlet) => {
+          setSelectedOutlet(outlet);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -357,7 +392,18 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  browseBtn: { paddingHorizontal: 10, minHeight: 42 },
+  publicNoticeBanner: {
+    backgroundColor: 'rgba(11, 59, 96, 0.08)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 6,
+  },
+  publicNoticeText: { color: '#0B3B60', fontSize: 10.5, fontWeight: '700', textAlign: 'center' },
   searchInputWrapper: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 10,

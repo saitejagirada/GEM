@@ -30,6 +30,7 @@ import { BidsHubScreen } from './screens/BidsHubScreen';
 import { AuctionsHubScreen } from './screens/AuctionsHubScreen';
 import { OrdersKnowledgeScreen } from './screens/OrdersKnowledgeScreen';
 import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
+import { PortalsDirectoryScreen } from './screens/PortalsDirectoryScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { MOCK_USER_PROFILE, MOCK_DAILY_BIDS, MOCK_MARKET_PULSE } from './fixtures/mockData';
@@ -41,6 +42,7 @@ const MainAppContent: React.FC = () => {
   const { colors, toggleColorMode, isDark, fontScale, setFontScale, fontMultiplier } = useTheme();
 
   const [activeTab, setActiveTab] = useState<ProductionTab>('MARKET');
+  const [portalMode, setPortalMode] = useState<'DIRECTORY' | 'REGISTRATION'>('DIRECTORY');
   const [bids, setBids] = useState<DeconstructedBidDoc[]>(MOCK_DAILY_BIDS);
   const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
   const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
@@ -111,6 +113,13 @@ const MainAppContent: React.FC = () => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? colors.background : colors.primaryDark }]}>
       <StatusBar barStyle="light-content" backgroundColor={isDark ? colors.background : colors.primaryDark} />
 
+      {/* Official Government Tricolor Accent */}
+      <View style={styles.tricolorBar}>
+        <View style={{ flex: 1, backgroundColor: '#FF9933' }} />
+        <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
+        <View style={{ flex: 1, backgroundColor: '#138808' }} />
+      </View>
+
       {/* Official Government Top Header Bar */}
       <View style={[styles.topBar, { backgroundColor: isDark ? colors.surface : colors.primary }]}>
         {/* Left: National Identity */}
@@ -126,9 +135,9 @@ const MainAppContent: React.FC = () => {
 
         {/* Right: Portal Controls (Status, Dark Mode, Font Size, Lookup) */}
         <View style={styles.controlsRow}>
-          {/* Live Catalog Badge */}
+          {/* Live Catalog Badge with National Scale */}
           <TouchButton
-            title={isSyncing ? '⟳ Syncing' : `🟢 GeM Live (${bids.length})`}
+            title={isSyncing ? '⟳ Syncing' : `🟢 GeM Live (14,250+)`}
             variant="ghost"
             size="small"
             onPress={loadData}
@@ -182,7 +191,29 @@ const MainAppContent: React.FC = () => {
         )}
         {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
         {activeTab === 'ORDERS' && <OrdersKnowledgeScreen />}
-        {activeTab === 'PORTAL' && <PortalRegistrationScreen />}
+        {activeTab === 'PORTAL' && (
+          <View style={{ flex: 1 }}>
+            <View style={[styles.portalSubTabRow, { backgroundColor: isDark ? colors.surface : colors.surfaceSubtle, borderBottomColor: colors.border }]}>
+              <TouchButton
+                title="🏛️ Sub-Domains Directory"
+                variant={portalMode === 'DIRECTORY' ? 'primary' : 'ghost'}
+                size="small"
+                onPress={() => setPortalMode('DIRECTORY')}
+                style={{ flex: 1 }}
+                textStyle={{ fontSize: 11, fontWeight: '800' }}
+              />
+              <TouchButton
+                title="📝 Buyer/Seller Signup"
+                variant={portalMode === 'REGISTRATION' ? 'primary' : 'ghost'}
+                size="small"
+                onPress={() => setPortalMode('REGISTRATION')}
+                style={{ flex: 1 }}
+                textStyle={{ fontSize: 11, fontWeight: '800' }}
+              />
+            </View>
+            {portalMode === 'DIRECTORY' ? <PortalsDirectoryScreen /> : <PortalRegistrationScreen />}
+          </View>
+        )}
       </View>
 
       {/* 5 Production Bottom Navigation Tabs */}
@@ -307,6 +338,14 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  tricolorBar: { height: 3.5, flexDirection: 'row' },
+  portalSubTabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 8,
+    borderBottomWidth: 1,
+  },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

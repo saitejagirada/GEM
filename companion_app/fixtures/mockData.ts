@@ -1716,6 +1716,1330 @@ export const MOCK_DAILY_BIDS: DeconstructedBidDoc[] = [
     "docUrl": "https://bidplus.gem.gov.in/showbidDocument/10041093",
     "b_id": "10041093"
   }
+,
+  {
+      "bidNumber": "GEM/2026/B/8201001",
+      "title": "Dual-Chamber Automated External Defibrillators (AED) with Pediatric Pads",
+      "department": "All India Institute of Medical Sciences (AIIMS)",
+      "ministry": "Ministry of Health & Family Welfare",
+      "type": "PRODUCT",
+      "categoryDomain": "Medical & Healthcare",
+      "estimatedBidValueInr": 4200000,
+      "emdAmountInr": 84000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 3500000,
+      "yearsExperienceRequired": 2,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 30,
+      "splittingRatio": "80:20 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Biphasic Automated External Defibrillator Unit with ECG display",
+              "quantity": 35,
+              "unit": "Units",
+              "specsSummary": "IP55, FDA/CE certified, waveform biphasic truncated exponential"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "AIIMS Central Trauma Centre, Ansari Nagar",
+              "state": "Delhi",
+              "pincode": "110029",
+              "quantity": 35
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "ISO 13485 Medical Device Quality Certificate",
+          "CA Certified Annual Turnover Certificate"
+      ],
+      "closingTimeUtc": "2026-10-29T15:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201001",
+      "b_id": "8201001"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201002",
+      "title": "Supply of Pre-Fabricated Steel Modular Classroom Units & Desking",
+      "department": "Kendriya Vidyalaya Sangathan (KVS) Regional Office",
+      "ministry": "Ministry of Education",
+      "type": "BOQ",
+      "categoryDomain": "Furniture & Infrastructure",
+      "estimatedBidValueInr": 8600000,
+      "emdAmountInr": 172000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 7000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 30,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Pre-Engineered Galvanized Steel Classroom Structure 600 sq ft",
+              "quantity": 12,
+              "unit": "Sets",
+              "specsSummary": "IS 2062 Grade steel, fire-rated PUF panels 50mm, wind speed resistant 150 km/h"
+          },
+          {
+              "itemTitle": "Dual Dual-Desk Heavy Duty CRCA Powder Coated Classroom Desks",
+              "quantity": 480,
+              "unit": "Pieces",
+              "specsSummary": "BIFMA compliant, post-formed laminated top, edge-banded 2mm PVC"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "KV No. 1 AFS Jodhpur",
+              "state": "Rajasthan",
+              "pincode": "342011",
+              "quantity": 250
+          },
+          {
+              "location": "KV Airforce Station Jamnagar",
+              "state": "Gujarat",
+              "pincode": "361003",
+              "quantity": 230
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam Registration Certificate",
+          "BIFMA Test Report",
+          "Past Performance Completion Invoices"
+      ],
+      "closingTimeUtc": "2026-10-30T11:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201002",
+      "b_id": "8201002"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201003",
+      "title": "Comprehensive Facility Management & Mechanized Housekeeping Services",
+      "department": "National Informatics Centre (NIC) Headquarters",
+      "ministry": "Ministry of Electronics & IT",
+      "type": "SERVICE",
+      "categoryDomain": "Facility & Housekeeping Services",
+      "estimatedBidValueInr": 5400000,
+      "emdAmountInr": 108000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 4500000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 20,
+      "deliveryPeriodDays": 365,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Round-the-clock Mechanized Housekeeping & Sanitization Service",
+              "quantity": 12,
+              "unit": "Months",
+              "specsSummary": "Ride-on auto scrubber driers, eco-friendly chemicals Green Pro certified"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "NIC CGO Complex, Lodhi Road",
+              "state": "Delhi",
+              "pincode": "110003",
+              "quantity": 12
+          }
+      ],
+      "requiredDocuments": [
+          "EPFO / ESIC Registration Proofs",
+          "Labour License under CLRA Act",
+          "Udyam MSE Certificate"
+      ],
+      "closingTimeUtc": "2026-10-31T17:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201003",
+      "b_id": "8201003"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201004",
+      "title": "Grid-Tied Rooftop Solar Photovoltaic Plant 500 kWp with Net Metering",
+      "department": "National Thermal Power Corporation (NTPC) Township",
+      "ministry": "Ministry of Power",
+      "type": "PRODUCT",
+      "categoryDomain": "Power & Solar Energy",
+      "estimatedBidValueInr": 23500000,
+      "emdAmountInr": 470000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 18000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 30,
+      "deliveryPeriodDays": 90,
+      "splittingRatio": "75:25 MSE Split",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Mono PERC Bifacial Solar PV Modules 540Wp (ALMM Listed)",
+              "quantity": 925,
+              "unit": "Pieces",
+              "specsSummary": "MNRE ALMM approved, module efficiency > 21.2%, IP68 junction box"
+          },
+          {
+              "itemTitle": "String Inverters 100kW 3-Phase Grid-Tied with MPPT",
+              "quantity": 5,
+              "unit": "Units",
+              "specsSummary": "Efficiency 98.8%, anti-islanding protection, IP66 rated outdoor enclosure"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "NTPC Singrauli Super Thermal Power Station",
+              "state": "Uttar Pradesh",
+              "pincode": "231222",
+              "quantity": 925
+          }
+      ],
+      "requiredDocuments": [
+          "ALMM Model Certificate",
+          "MNRE Test Certificate as per IEC 61215",
+          "CA Turnover Certificate"
+      ],
+      "closingTimeUtc": "2026-11-02T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201004",
+      "b_id": "8201004"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201005",
+      "title": "Supply of High-Tensile Prestressed Concrete Railway Sleepers (RT-2496)",
+      "department": "Research Designs and Standards Organisation (RDSO)",
+      "ministry": "Ministry of Railways",
+      "type": "PRODUCT",
+      "categoryDomain": "Railways & Heavy Transport",
+      "estimatedBidValueInr": 31000000,
+      "emdAmountInr": 620000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 25000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 60,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Broad Gauge Mono-block Prestressed Concrete Sleepers RT-2496",
+              "quantity": 18000,
+              "unit": "Pieces",
+              "specsSummary": "RDSO Drawing No. T-2496, 60kg rail profile, 25-ton axle load certified"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Senior Section Engineer (P-Way), Mughalsarai Depot",
+              "state": "Uttar Pradesh",
+              "pincode": "232101",
+              "quantity": 10000
+          },
+          {
+              "location": "Senior Section Engineer (P-Way), Gaya Yard",
+              "state": "Bihar",
+              "pincode": "823001",
+              "quantity": 8000
+          }
+      ],
+      "requiredDocuments": [
+          "RDSO Approval Certificate",
+          "Factory Quality Assurance Audit Report",
+          "Past Performance Railway Invoices"
+      ],
+      "closingTimeUtc": "2026-11-04T12:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201005",
+      "b_id": "8201005"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201006",
+      "title": "Enterprise Cloud Infrastructure & Managed Disaster Recovery Services",
+      "department": "Unique Identification Authority of India (UIDAI)",
+      "ministry": "Ministry of Electronics & IT",
+      "type": "SERVICE",
+      "categoryDomain": "IT & Telecommunications",
+      "estimatedBidValueInr": 48000000,
+      "emdAmountInr": 960000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 40000000,
+      "yearsExperienceRequired": 5,
+      "pastPerformancePercentage": 35,
+      "deliveryPeriodDays": 730,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "MeitY Empanelled Cloud Service Provider (CSP) Managed Infrastructure",
+              "quantity": 24,
+              "unit": "Months",
+              "specsSummary": "Tier-IV Data Center in India, ISO 27001, SOC 2 Type II, RPO < 15 mins, RTO < 1 hour"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "UIDAI Data Centre, Manesar",
+              "state": "Haryana",
+              "pincode": "122051",
+              "quantity": 24
+          }
+      ],
+      "requiredDocuments": [
+          "MeitY Cloud Empanelment Letter",
+          "CERT-In Security Audit Certificate",
+          "Tier-IV Uptime Institute Certification"
+      ],
+      "closingTimeUtc": "2026-11-06T15:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201006",
+      "b_id": "8201006"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201007",
+      "title": "High-Pressure Commercial Water Mist Fire Suppression Systems",
+      "department": "Indian Oil Corporation Limited (IOCL) Refinery",
+      "ministry": "Ministry of Petroleum and Natural Gas",
+      "type": "PRODUCT",
+      "categoryDomain": "Defence & Security",
+      "estimatedBidValueInr": 16500000,
+      "emdAmountInr": 330000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 12000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Automated High-Pressure Water Mist Skid with Stainless Steel 316 Piping",
+              "quantity": 8,
+              "unit": "Systems",
+              "specsSummary": "NFPA 750 compliant, operating pressure 140 bar, explosion-proof ATEX motor"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "IOCL Panipat Refinery & Petrochemical Complex",
+              "state": "Haryana",
+              "pincode": "132140",
+              "quantity": 8
+          }
+      ],
+      "requiredDocuments": [
+          "PESO / ATEX Explosion Proof Certificate",
+          "NFPA 750 Test Compliance",
+          "Past Performance Refinery Supply Proofs"
+      ],
+      "closingTimeUtc": "2026-11-08T14:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201007",
+      "b_id": "8201007"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201008",
+      "title": "Supply and Laying of Commercial CPVC and DI Piping for Smart Water Grid",
+      "department": "Surat Municipal Corporation Smart City SPV",
+      "ministry": "Ministry of Housing and Urban Affairs",
+      "type": "BOQ",
+      "categoryDomain": "Urban Infrastructure & Smart Cities",
+      "estimatedBidValueInr": 29000000,
+      "emdAmountInr": 580000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 22000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 30,
+      "deliveryPeriodDays": 120,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Ductile Iron K9 Pipes 300mm with Cement Mortar Lining",
+              "quantity": 14000,
+              "unit": "Meters",
+              "specsSummary": "IS 8329 Class K9, socket and spigot push-on flexible joints"
+          },
+          {
+              "itemTitle": "Commercial Schedule 80 CPVC Pressure Pipes & Solvent Fittings",
+              "quantity": 6500,
+              "unit": "Meters",
+              "specsSummary": "ASTM F441 SDR 11, working pressure 28 bar at 23 deg C"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "SMC Central Water Works, Katargam",
+              "state": "Gujarat",
+              "pincode": "395004",
+              "quantity": 20500
+          }
+      ],
+      "requiredDocuments": [
+          "BIS Certification License (CM/L)",
+          "CIPET Raw Material Test Certificate",
+          "Past Experience Invoices"
+      ],
+      "closingTimeUtc": "2026-11-10T16:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201008",
+      "b_id": "8201008"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201009",
+      "title": "Smart Precision Agricultural Weather Monitoring Stations with LoRaWAN",
+      "department": "Indian Council of Agricultural Research (ICAR)",
+      "ministry": "Ministry of Agriculture & Farmers Welfare",
+      "type": "PRODUCT",
+      "categoryDomain": "Agriculture & Environment",
+      "estimatedBidValueInr": 7200000,
+      "emdAmountInr": 144000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 5500000,
+      "yearsExperienceRequired": 2,
+      "pastPerformancePercentage": 20,
+      "deliveryPeriodDays": 30,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "All-in-One Solar Powered Agro-Meteorological Sensor Unit",
+              "quantity": 60,
+              "unit": "Stations",
+              "specsSummary": "Ultrasonic wind speed, soil moisture 3-depths, solar radiation pyranometer, LoRaWAN + 4G fallback"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "ICAR-IARI Pusa Campus, New Delhi",
+              "state": "Delhi",
+              "pincode": "110012",
+              "quantity": 30
+          },
+          {
+              "location": "ICAR-CRIDA, Santoshnagar, Hyderabad",
+              "state": "Telangana",
+              "pincode": "500059",
+              "quantity": 30
+          }
+      ],
+      "requiredDocuments": [
+          "WPC Equipment Type Approval (ETA)",
+          "Udyam MSE Certificate",
+          "OEM Warranty 3 Years"
+      ],
+      "closingTimeUtc": "2026-11-12T11:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201009",
+      "b_id": "8201009"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201010",
+      "title": "Supply of Heavy Earthmoving Hydraulic Excavators (Crawler Mounted 20T)",
+      "department": "Border Roads Organisation (BRO), Project Dantak",
+      "ministry": "Ministry of Defence",
+      "type": "PRODUCT",
+      "categoryDomain": "Automobiles & Heavy Machinery",
+      "estimatedBidValueInr": 42000000,
+      "emdAmountInr": 840000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 5.0,
+      "minAnnualTurnoverInr": 35000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 30,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "100% to L1",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Hydraulic Crawler Excavator 20 Metric Tonne with Cold-Starting Kit",
+              "quantity": 6,
+              "unit": "Units",
+              "specsSummary": "Engine power > 140 HP, operating altitude up to 14,000 ft, heavy duty rock bucket 1.0 cu.m"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "BRO Base Workshop, Rishikesh",
+              "state": "Uttarakhand",
+              "pincode": "249201",
+              "quantity": 3
+          },
+          {
+              "location": "BRO Sector Depot, Leh Cantt",
+              "state": "Ladakh",
+              "pincode": "194101",
+              "quantity": 3
+          }
+      ],
+      "requiredDocuments": [
+          "OEM Authorization Certificate",
+          "High Altitude Cold-Start Test Certificate",
+          "Past Defence Supply Orders"
+      ],
+      "closingTimeUtc": "2026-11-15T15:00:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201010",
+      "b_id": "8201010"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201011",
+      "title": "Advanced High-Performance Compute GPU Nodes (NVIDIA H100)",
+      "department": "Indian Institute of Technology (IIT) Madras",
+      "ministry": "Ministry of Education",
+      "type": "PRODUCT",
+      "categoryDomain": "IT & Telecommunications",
+      "estimatedBidValueInr": 52000000,
+      "emdAmountInr": 1040000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 39000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Advanced High-Performance Compute GPU Nodes (NVIDIA H100)",
+              "quantity": 8,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Indian Institute of Technology (IIT) Madras"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Indian Institute of Technology (IIT) Madras Stores",
+              "state": "Tamil Nadu",
+              "pincode": "600036",
+              "quantity": 8
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201011",
+      "b_id": "8201011"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201012",
+      "title": "Digital Radiography X-Ray Systems 500mA with Ceiling Suspension",
+      "department": "Safdarjung Hospital & VMMC, New Delhi",
+      "ministry": "Ministry of Health & Family Welfare",
+      "type": "PRODUCT",
+      "categoryDomain": "Medical & Healthcare",
+      "estimatedBidValueInr": 38000000,
+      "emdAmountInr": 760000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 28500000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Digital Radiography X-Ray Systems 500mA with Ceiling Suspension",
+              "quantity": 4,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Safdarjung Hospital & VMMC, New Delhi"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Safdarjung Hospital & VMMC, New Delhi Stores",
+              "state": "Delhi",
+              "pincode": "110029",
+              "quantity": 4
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201012",
+      "b_id": "8201012"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201013",
+      "title": "Forged Alloy Steel Rotor Shafts for Supercritical Steam Turbines",
+      "department": "Bharat Heavy Electricals Limited (BHEL) Haridwar",
+      "ministry": "Ministry of Heavy Industries",
+      "type": "PRODUCT",
+      "categoryDomain": "Heavy Manufacturing",
+      "estimatedBidValueInr": 64000000,
+      "emdAmountInr": 1280000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 48000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Forged Alloy Steel Rotor Shafts for Supercritical Steam Turbines",
+              "quantity": 6,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Bharat Heavy Electricals Limited (BHEL) Haridwar"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Bharat Heavy Electricals Limited (BHEL) Haridwar Stores",
+              "state": "Uttarakhand",
+              "pincode": "249403",
+              "quantity": 6
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201013",
+      "b_id": "8201013"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201014",
+      "title": "Stainless Steel Grade 301LN Side Wall Panels for Vande Bharat",
+      "department": "Integral Coach Factory (ICF) Perambur, Chennai",
+      "ministry": "Ministry of Railways",
+      "type": "PRODUCT",
+      "categoryDomain": "Railways & Heavy Transport",
+      "estimatedBidValueInr": 41000000,
+      "emdAmountInr": 820000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 30750000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Stainless Steel Grade 301LN Side Wall Panels for Vande Bharat",
+              "quantity": 120,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Integral Coach Factory (ICF) Perambur, Chennai"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Integral Coach Factory (ICF) Perambur, Chennai Stores",
+              "state": "Tamil Nadu",
+              "pincode": "600038",
+              "quantity": 120
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201014",
+      "b_id": "8201014"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201015",
+      "title": "Marine Grade Low-Smoke Zero-Halogen (LSZH) Power Cables IP68",
+      "department": "Mazagon Dock Shipbuilders Limited (MDL), Mumbai",
+      "ministry": "Ministry of Defence",
+      "type": "PRODUCT",
+      "categoryDomain": "Defence & Security",
+      "estimatedBidValueInr": 27000000,
+      "emdAmountInr": 540000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 20250000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Marine Grade Low-Smoke Zero-Halogen (LSZH) Power Cables IP68",
+              "quantity": 5000,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Mazagon Dock Shipbuilders Limited (MDL), Mumbai"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Mazagon Dock Shipbuilders Limited (MDL), Mumbai Stores",
+              "state": "Maharashtra",
+              "pincode": "400010",
+              "quantity": 5000
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201015",
+      "b_id": "8201015"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201016",
+      "title": "765 kV Extra High Voltage Substation Porcelain Disc Insulators",
+      "department": "Power Grid Corporation of India Limited (POWERGRID)",
+      "ministry": "Ministry of Power",
+      "type": "PRODUCT",
+      "categoryDomain": "Power & Solar Energy",
+      "estimatedBidValueInr": 36000000,
+      "emdAmountInr": 720000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 27000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "765 kV Extra High Voltage Substation Porcelain Disc Insulators",
+              "quantity": 24000,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Power Grid Corporation of India Limited (POWERGRID)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Power Grid Corporation of India Limited (POWERGRID) Stores",
+              "state": "Haryana",
+              "pincode": "122001",
+              "quantity": 24000
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201016",
+      "b_id": "8201016"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201017",
+      "title": "Ballistic Helmets Level III-A with Night Vision Shrouds",
+      "department": "Central Reserve Police Force (CRPF) Directorate",
+      "ministry": "Ministry of Home Affairs",
+      "type": "PRODUCT",
+      "categoryDomain": "Defence & Security",
+      "estimatedBidValueInr": 18500000,
+      "emdAmountInr": 370000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 13875000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Ballistic Helmets Level III-A with Night Vision Shrouds",
+              "quantity": 2500,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Central Reserve Police Force (CRPF) Directorate"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Central Reserve Police Force (CRPF) Directorate Stores",
+              "state": "Delhi",
+              "pincode": "110003",
+              "quantity": 2500
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201017",
+      "b_id": "8201017"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201018",
+      "title": "High-Density Polyethylene (HDPE) Tarpaulins 250 GSM for Wheat Storage",
+      "department": "Food Corporation of India (FCI) Regional Office",
+      "ministry": "Ministry of Agriculture & Farmers Welfare",
+      "type": "PRODUCT",
+      "categoryDomain": "Agriculture & Environment",
+      "estimatedBidValueInr": 14000000,
+      "emdAmountInr": 280000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 10500000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "High-Density Polyethylene (HDPE) Tarpaulins 250 GSM for Wheat Storage",
+              "quantity": 15000,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Food Corporation of India (FCI) Regional Office"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Food Corporation of India (FCI) Regional Office Stores",
+              "state": "Punjab",
+              "pincode": "141001",
+              "quantity": 15000
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201018",
+      "b_id": "8201018"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201019",
+      "title": "LED Street Lighting Fixtures 120W with CCMS Smart Feeder Panels",
+      "department": "Central Public Works Department (CPWD) Northern Zone",
+      "ministry": "Ministry of Housing and Urban Affairs",
+      "type": "PRODUCT",
+      "categoryDomain": "Power & Solar Energy",
+      "estimatedBidValueInr": 9800000,
+      "emdAmountInr": 196000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 7350000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "LED Street Lighting Fixtures 120W with CCMS Smart Feeder Panels",
+              "quantity": 1800,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Central Public Works Department (CPWD) Northern Zone"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Central Public Works Department (CPWD) Northern Zone Stores",
+              "state": "Chandigarh",
+              "pincode": "160001",
+              "quantity": 1800
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201019",
+      "b_id": "8201019"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201020",
+      "title": "Enterprise NVMe All-Flash SAN Storage 500TB with 100GbE NICs",
+      "department": "Centre for Development of Advanced Computing (C-DAC)",
+      "ministry": "Ministry of Electronics & IT",
+      "type": "PRODUCT",
+      "categoryDomain": "IT & Telecommunications",
+      "estimatedBidValueInr": 22500000,
+      "emdAmountInr": 450000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 16875000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Enterprise NVMe All-Flash SAN Storage 500TB with 100GbE NICs",
+              "quantity": 2,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Centre for Development of Advanced Computing (C-DAC)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Centre for Development of Advanced Computing (C-DAC) Stores",
+              "state": "Maharashtra",
+              "pincode": "411007",
+              "quantity": 2
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201020",
+      "b_id": "8201020"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201021",
+      "title": "Heavy Duty Steel Wire Reinforced Conveyor Belting 1600mm",
+      "department": "Coal India Limited (CIL) Headquarters",
+      "ministry": "Ministry of Coal",
+      "type": "PRODUCT",
+      "categoryDomain": "Heavy Manufacturing",
+      "estimatedBidValueInr": 49000000,
+      "emdAmountInr": 980000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 36750000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Heavy Duty Steel Wire Reinforced Conveyor Belting 1600mm",
+              "quantity": 8000,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Coal India Limited (CIL) Headquarters"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Coal India Limited (CIL) Headquarters Stores",
+              "state": "West Bengal",
+              "pincode": "700156",
+              "quantity": 8000
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201021",
+      "b_id": "8201021"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201022",
+      "title": "Refractory Magnesite Carbon Bricks for Basic Oxygen Furnaces",
+      "department": "Steel Authority of India Limited (SAIL) Rourkela",
+      "ministry": "Ministry of Steel",
+      "type": "PRODUCT",
+      "categoryDomain": "Heavy Manufacturing",
+      "estimatedBidValueInr": 33000000,
+      "emdAmountInr": 660000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 24750000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Refractory Magnesite Carbon Bricks for Basic Oxygen Furnaces",
+              "quantity": 450,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Steel Authority of India Limited (SAIL) Rourkela"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Steel Authority of India Limited (SAIL) Rourkela Stores",
+              "state": "Odisha",
+              "pincode": "769011",
+              "quantity": 450
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201022",
+      "b_id": "8201022"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201023",
+      "title": "Automated Rubber-Tyred Gantry (ARTG) Crane Spares & Drive Motors",
+      "department": "Jawaharlal Nehru Port Authority (JNPA)",
+      "ministry": "Ministry of Ports, Shipping and Waterways",
+      "type": "PRODUCT",
+      "categoryDomain": "Heavy Manufacturing",
+      "estimatedBidValueInr": 28000000,
+      "emdAmountInr": 560000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 21000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Automated Rubber-Tyred Gantry (ARTG) Crane Spares & Drive Motors",
+              "quantity": 15,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Jawaharlal Nehru Port Authority (JNPA)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Jawaharlal Nehru Port Authority (JNPA) Stores",
+              "state": "Maharashtra",
+              "pincode": "400707",
+              "quantity": 15
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201023",
+      "b_id": "8201023"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201024",
+      "title": "Doppler VHF Omni-Directional Range (DVOR) Antenna Navigational Aids",
+      "department": "Airports Authority of India (AAI) Rajiv Gandhi Bhawan",
+      "ministry": "Ministry of Civil Aviation",
+      "type": "PRODUCT",
+      "categoryDomain": "IT & Telecommunications",
+      "estimatedBidValueInr": 62000000,
+      "emdAmountInr": 1240000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 46500000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Doppler VHF Omni-Directional Range (DVOR) Antenna Navigational Aids",
+              "quantity": 4,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Airports Authority of India (AAI) Rajiv Gandhi Bhawan"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Airports Authority of India (AAI) Rajiv Gandhi Bhawan Stores",
+              "state": "Delhi",
+              "pincode": "110003",
+              "quantity": 4
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201024",
+      "b_id": "8201024"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201025",
+      "title": "Continuous Real-Time Water Quality Monitoring Systems (BOD/COD/DO)",
+      "department": "National Water Development Agency (NWDA)",
+      "ministry": "Ministry of Jal Shakti",
+      "type": "PRODUCT",
+      "categoryDomain": "Agriculture & Environment",
+      "estimatedBidValueInr": 12000000,
+      "emdAmountInr": 240000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 9000000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Continuous Real-Time Water Quality Monitoring Systems (BOD/COD/DO)",
+              "quantity": 25,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for National Water Development Agency (NWDA)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "National Water Development Agency (NWDA) Stores",
+              "state": "Madhya Pradesh",
+              "pincode": "462001",
+              "quantity": 25
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201025",
+      "b_id": "8201025"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201026",
+      "title": "Ultra-High Vacuum Cryogenic Chamber with Temperature Controller",
+      "department": "CSIR-National Physical Laboratory (NPL)",
+      "ministry": "Ministry of Science and Technology",
+      "type": "PRODUCT",
+      "categoryDomain": "Scientific & Research",
+      "estimatedBidValueInr": 17500000,
+      "emdAmountInr": 350000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 13125000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Ultra-High Vacuum Cryogenic Chamber with Temperature Controller",
+              "quantity": 1,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for CSIR-National Physical Laboratory (NPL)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "CSIR-National Physical Laboratory (NPL) Stores",
+              "state": "Delhi",
+              "pincode": "110012",
+              "quantity": 1
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201026",
+      "b_id": "8201026"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201027",
+      "title": "Solar Photovoltaic Testing Equipment and Sun Simulators Class AAA",
+      "department": "Solar Energy Corporation of India (SECI)",
+      "ministry": "Ministry of New and Renewable Energy",
+      "type": "PRODUCT",
+      "categoryDomain": "Power & Solar Energy",
+      "estimatedBidValueInr": 21000000,
+      "emdAmountInr": 420000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 15750000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Solar Photovoltaic Testing Equipment and Sun Simulators Class AAA",
+              "quantity": 2,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Solar Energy Corporation of India (SECI)"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Solar Energy Corporation of India (SECI) Stores",
+              "state": "Rajasthan",
+              "pincode": "302001",
+              "quantity": 2
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201027",
+      "b_id": "8201027"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201028",
+      "title": "Computerized High-Speed Jacquard Powerlooms with CAD Stations",
+      "department": "National Institute of Fashion Technology (NIFT) Gandhinagar",
+      "ministry": "Ministry of Textiles",
+      "type": "PRODUCT",
+      "categoryDomain": "Textiles & Handloom",
+      "estimatedBidValueInr": 8500000,
+      "emdAmountInr": 170000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 6375000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Computerized High-Speed Jacquard Powerlooms with CAD Stations",
+              "quantity": 8,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for National Institute of Fashion Technology (NIFT) Gandhinagar"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "National Institute of Fashion Technology (NIFT) Gandhinagar Stores",
+              "state": "Gujarat",
+              "pincode": "382007",
+              "quantity": 8
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201028",
+      "b_id": "8201028"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201029",
+      "title": "Handloom Weaving Accessories and Cotton Yarn Packs for SHGs",
+      "department": "National Rural Livelihoods Promotion Society",
+      "ministry": "Ministry of Rural Development",
+      "type": "PRODUCT",
+      "categoryDomain": "Textiles & Handloom",
+      "estimatedBidValueInr": 6200000,
+      "emdAmountInr": 124000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 4650000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Handloom Weaving Accessories and Cotton Yarn Packs for SHGs",
+              "quantity": 1200,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for National Rural Livelihoods Promotion Society"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "National Rural Livelihoods Promotion Society Stores",
+              "state": "Bihar",
+              "pincode": "800001",
+              "quantity": 1200
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201029",
+      "b_id": "8201029"
+  },
+  {
+      "bidNumber": "GEM/2026/B/8201030",
+      "title": "Field Portable X-Ray Fluorescence (pXRF) Mineral Analyzers",
+      "department": "Geological Survey of India (GSI) Western Region",
+      "ministry": "Ministry of Mines",
+      "type": "PRODUCT",
+      "categoryDomain": "Scientific & Research",
+      "estimatedBidValueInr": 14500000,
+      "emdAmountInr": 290000,
+      "isEmdExemptForMse": true,
+      "epbgPercentage": 3.0,
+      "minAnnualTurnoverInr": 10875000,
+      "yearsExperienceRequired": 3,
+      "pastPerformancePercentage": 25,
+      "deliveryPeriodDays": 45,
+      "splittingRatio": "75:25 MSE Preference",
+      "makeInIndiaClass": "CLASS_1",
+      "boqItems": [
+          {
+              "itemTitle": "Field Portable X-Ray Fluorescence (pXRF) Mineral Analyzers",
+              "quantity": 6,
+              "unit": "Units",
+              "specsSummary": "Official GeM specifications meeting IS/ISO standards for Geological Survey of India (GSI) Western Region"
+          }
+      ],
+      "consignees": [
+          {
+              "location": "Geological Survey of India (GSI) Western Region Stores",
+              "state": "Rajasthan",
+              "pincode": "302004",
+              "quantity": 6
+          }
+      ],
+      "requiredDocuments": [
+          "Udyam MSE Registration Certificate",
+          "OEM Authorization Form",
+          "CA Certified Annual Turnover Certificate",
+          "Past Performance Completion Proofs"
+      ],
+      "closingTimeUtc": "2026-11-20T14:30:00Z",
+      "docUrl": "https://bidplus.gem.gov.in/showbidDocument/8201030",
+      "b_id": "8201030"
+  }
 ];
 
 
