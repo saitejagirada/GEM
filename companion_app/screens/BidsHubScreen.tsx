@@ -1,10 +1,12 @@
 /**
- * GeM Bids Hub Screen - High-Performance Virtualized Bids & Tenders Browser
- * Renders all 34 verified live opportunities with zero touch lag:
- * - Virtualized FlatList with React.memo item rendering
- * - Scope toggle: [ 🌐 All Available Bids (34) ] vs [ ⭐ Relevant / Matched Only ]
- * - 1-tap direct verified GeM PDF download via PortalDocService
- * - Zero login barrier: public citizen/vendor discovery mode
+ * GeM Bids & Tenders Hub Screen - NotebookLM-Inspired Procurement Browser
+ * Conforms to Screen 3 of the GeM Mobile UI Specification:
+ * - SegmentedTabs: Ongoing, Live RA, Closed with dynamic counts
+ * - SearchField with clean icon & clear button
+ * - Filter chips: All, Goods, Services, Filters [icon]
+ * - Compact Bid Cards matching Screen 3 layout
+ * - Filter bottom sheet for Department, Est Value, and MSE/EMD criteria
+ * - Full Bid Inspector modal integration
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -13,12 +15,11 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   ScrollView,
-  SafeAreaView,
   Alert,
   Linking,
   RefreshControl,
+  Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
@@ -26,565 +27,495 @@ import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { BidInspectorScreen } from './BidInspectorScreen';
-import { BidCountdownBadge } from '../components/BidCountdownBadge';
-import { TouchButton } from '../components/TouchButton';
-import { useTheme } from '../theme/ThemeContext';
-import { DataNotice } from '../components/DataNotice';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import {
+  SearchField,
+  SegmentedTabs,
+  CompactChip,
+  StatusBadge,
+  PrimaryButton,
+  SecondaryButton,
+  MetricBox,
+  FilterBottomSheetModal,
+} from '../components/SharedUI';
+import { formatLakhs, formatDateSafe } from '../utils/formatters';
 
-export type GeMStatusTab = 'ONGOING' | 'RA' | 'CLOSED' | 'CANCELLED' | 'ALL';
+export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed';
 
 interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
   userProfile: UserAgentProfile;
   initialFilter?: string;
-  mode?: 'bids' | 'tenders' | 'all';
   onSyncLive?: () => Promise<void> | void;
   isSyncing?: boolean;
+  onInspectBid?: (bid: DeconstructedBidDoc) => void;
 }
-
-type ScopeFilter = 'ALL' | 'MATCHED';
-type TypeFilter = 'ALL' | 'PRODUCT' | 'SERVICE' | 'CUSTOM' | 'BOQ' | 'RA';
-
-interface BidCardProps {
-  bid: DeconstructedBidDoc;
-  matchScore: number;
-  turnoverEligible: boolean;
-  verdictSummary: string;
-  onInspect: (bid: DeconstructedBidDoc) => void;
-  onOpenDoc: (bidNumber?: string, docUrl?: string) => void;
-  colors: ReturnType<typeof useTheme>['colors'];
-  fontMultiplier: number;
-  isDark: boolean;
-}
-
-// Memoized Card Item for Zero Touch Lag & Smooth 60 FPS Scrolling
-const MemoizedBidCard = React.memo<BidCardProps>(({
-  bid,
-  matchScore,
-  turnoverEligible,
-  verdictSummary,
-  onInspect,
-  onOpenDoc,
-  colors,
-  fontMultiplier,
-  isDark,
-}) => {
-  const f = BidDocService.getFundamentalsSummary(bid);
-  const isHighMatch = matchScore >= 75;
-  const isService = bid.type === 'SERVICE';
-  const isRa = bid.isRa || bid.type === 'RA' || bid.lifecycleStatus === 'BID_TO_RA';
-  const lifecycle = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
-  const isClosed = lifecycle === 'CLOSED' || lifecycle === 'AWARDED';
-  const isCancelled = lifecycle === 'CANCELLED' || bid.isCancelled;
-
-  return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Card Header: Type + lifecycle + bid number */}
-      <View style={styles.cardTop}>
-        <View style={styles.badgeRow}>
-          <View
-            style={[
-              styles.typeBadge,
-              {
-                backgroundColor: isRa
-                  ? '#FEE2E2'
-                  : isService
-                  ? '#E0F2FE'
-                  : bid.type === 'CUSTOM'
-                  ? '#FEF3C7'
-                  : bid.type === 'BOQ'
-                  ? '#F3E8FF'
-                  : '#EDE9FE',
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.typeBadgeText,
-                {
-                  color: isRa
-                    ? '#B91C1C'
-                    : isService
-                    ? '#0369A1'
-                    : bid.type === 'CUSTOM'
-                    ? '#B45309'
-                    : bid.type === 'BOQ'
-                    ? '#7E22CE'
-                    : '#6D28D9',
-                },
-              ]}
-            >
-              {isRa
-                ? 'REVERSE AUCTION'
-                : isService
-                ? 'SERVICE'
-                : bid.type === 'CUSTOM'
-                ? 'CUSTOM'
-                : bid.type === 'BOQ'
-                ? 'BOQ'
-                : 'GOODS'}
-            </Text>
-          </View>
-          {isCancelled ? (
-            <View style={[styles.statusBadge, { backgroundColor: '#FEE2E2' }]}>
-              <Text style={{ color: '#DC2626', fontSize: 9.5, fontWeight: '800' }}>🚫 CANCELLED</Text>
-            </View>
-          ) : isClosed ? (
-            <View style={[styles.statusBadge, { backgroundColor: isDark ? '#334155' : '#F1F5F9' }]}>
-              <Text style={{ color: isDark ? '#94A3B8' : '#475569', fontSize: 9.5, fontWeight: '800' }}>
-                🔒 EVALUATION ({bid.evaluationStage || 'TECH'})
-              </Text>
-            </View>
-          ) : (
-            <BidCountdownBadge closingTimeUtc={bid.closingTimeUtc} />
-          )}
-        </View>
-        <Text style={[styles.bidNumText, { color: colors.textMuted }]}>{bid.bidNumber}</Text>
-      </View>
-
-      {/* Bid Title */}
-      <Text
-        style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-        numberOfLines={2}
-      >
-        {bid.title}
-      </Text>
-
-      {/* Department & Ministry */}
-      <Text style={[styles.deptText, { color: colors.textMuted }]} numberOfLines={1}>
-        {bid.department} • {bid.categoryDomain || bid.ministry}
-      </Text>
-
-      {/* Match Score Banner */}
-      <View
-        style={[
-          styles.matchBanner,
-          { backgroundColor: isHighMatch ? (isDark ? '#064E3B' : '#DCFCE7') : (isDark ? '#451A03' : '#FEF3C7') },
-        ]}
-      >
-        <Text style={[styles.matchBannerText, { color: isHighMatch ? '#166534' : '#B45309' }]}>
-          {matchScore}% fit score · {verdictSummary}
-        </Text>
-      </View>
-
-      {/* 4 Quick Fundamentals Grid */}
-      <View style={[styles.cardGrid, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC' }]}>
-        <View style={styles.gridCell}>
-          <Text style={[styles.cellLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-          <Text style={[styles.cellValue, { color: colors.textPrimary }]}>{f.estimatedValueLabel}</Text>
-        </View>
-        <View style={styles.gridCell}>
-          <Text style={[styles.cellLabel, { color: colors.textMuted }]}>EMD STATUS</Text>
-          <Text
-            style={[
-              styles.cellValue,
-              { color: bid.isEmdExemptForMse ? colors.emerald : '#F59E0B' },
-            ]}
-          >
-            {bid.isEmdExemptForMse ? '🛡️ MSE Exempt (₹0)' : f.emdLabel}
-          </Text>
-        </View>
-        <View style={styles.gridCell}>
-          <Text style={[styles.cellLabel, { color: colors.textMuted }]}>MIN TURNOVER</Text>
-          <Text
-            style={[
-              styles.cellValue,
-              { color: turnoverEligible ? colors.textPrimary : '#EF4444' },
-            ]}
-          >
-            {f.turnoverLabel} {turnoverEligible ? '✓' : '⚠️'}
-          </Text>
-        </View>
-        <View style={styles.gridCell}>
-          <Text style={[styles.cellLabel, { color: colors.textMuted }]}>DELIVERY / SLA</Text>
-          <Text style={[styles.cellValue, { color: colors.textPrimary }]}>
-            {isService
-              ? `${bid.serviceDetails?.durationMonths || 12} Mos SLA`
-              : f.deliveryPeriodLabel}
-          </Text>
-        </View>
-      </View>
-
-      {/* Card Actions: Zero-PDF Inspect + 1-Tap GeM Doc PDF */}
-      <View style={styles.cardActions}>
-        <TouchButton
-          title="Inspect record"
-          variant="outline"
-          size="small"
-          icon="📋"
-          onPress={() => onInspect(bid)}
-          style={{ flex: 1 }}
-        />
-        <TouchButton
-          title="Open document"
-          variant="primary"
-          size="small"
-          onPress={() => onOpenDoc(bid.bidNumber, bid.docUrl)}
-          style={{ flex: 1 }}
-        />
-      </View>
-    </View>
-  );
-});
 
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
   userProfile,
-  initialFilter = '',
-  mode = 'all',
   onSyncLive,
-  isSyncing,
+  isSyncing = false,
+  onInspectBid,
 }) => {
-  const { colors, fontMultiplier, isDark } = useTheme();
+  const { colors, fontMultiplier } = useTheme();
 
-  const [searchQuery, setSearchQuery] = useState(initialFilter);
-  const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
-  const [statusTab, setStatusTab] = useState<GeMStatusTab>('ONGOING');
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('ALL');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>(mode === 'tenders' ? 'CUSTOM' : 'ALL');
+  const [activeStatusTab, setActiveStatusTab] = useState<GeMStatusTab>('Ongoing');
+  const [activeTypeChip, setActiveTypeChip] = useState<'All' | 'Goods' | 'Services'>('All');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [savedBidNumbers, setSavedBidNumbers] = useState<Set<string>>(new Set());
+  const [inspectingBid, setInspectingBid] = useState<DeconstructedBidDoc | null>(null);
 
-  const now = useMemo(() => new Date(), []);
-  const statusCounts = useMemo(() => {
+  // Bottom Sheet Filter State
+  const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
+  const [filterMseOnly, setFilterMseOnly] = useState<boolean>(false);
+  const [filterMinValLakhs, setFilterMinValLakhs] = useState<number>(0);
+
+  // Status Tab Counts
+  const counts = useMemo(() => {
     let ongoing = 0;
-    let ra = 0;
+    let liveRa = 0;
     let closed = 0;
-    let cancelled = 0;
-    for (const b of bids) {
-      const s = GeMLiveSyncService.computeLifecycleStatus(b, now);
-      if (s === 'ONGOING' || s === 'BID_TO_RA') ongoing++;
-      if (s === 'BID_TO_RA' || b.isRa || b.type === 'RA') ra++;
-      if (s === 'CLOSED' || s === 'AWARDED') closed++;
-      if (s === 'CANCELLED' || b.isCancelled) cancelled++;
-    }
-    return { ongoing, ra, closed, cancelled, total: bids.length };
-  }, [bids, now]);
 
-  const ranked = useMemo(() => UserAgentService.rankDailyBids(userProfile, bids), [userProfile, bids]);
+    bids.forEach((bid) => {
+      const status = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
+      const isRa = bid.isRa || bid.type === 'RA' || status === 'BID_TO_RA';
+      if (isRa) {
+        liveRa++;
+      } else if (status === 'CLOSED' || status === 'AWARDED' || status === 'CANCELLED') {
+        closed++;
+      } else {
+        ongoing++;
+      }
+    });
 
-  const handleOpenDoc = useCallback((bidNumber?: string, docUrl?: string) => {
-    const targetUrl = PortalDocService.resolvePdfUrl(bidNumber, docUrl);
-    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
-      Alert.alert('Security Notice', 'Document link is not from an official verified GeM domain.');
-      return;
-    }
-    Linking.canOpenURL(targetUrl)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(targetUrl);
-        } else {
-          Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber || 'N/A'}\n\nLink:\n${targetUrl}`);
-        }
-      })
-      .catch(() => {
-        Alert.alert('Official GeM Portal Document', `Bid: ${bidNumber || 'N/A'}\n\nLink:\n${targetUrl}`);
-      });
-  }, []);
+    return { Ongoing: ongoing, 'Live RA': liveRa, Closed: closed };
+  }, [bids]);
 
-  const handleInspect = useCallback((bid: DeconstructedBidDoc) => {
-    setSelectedBid(bid);
-  }, []);
+  // Filtered Bids Query
+  const filteredBids = useMemo(() => {
+    return bids.filter((bid) => {
+      const status = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
+      const isRa = bid.isRa || bid.type === 'RA' || status === 'BID_TO_RA';
 
-  // Filter pipeline
-  const filtered = useMemo(() => {
-    return ranked.filter(({ bid, evaluation }) => {
-      // 0. GeM Lifecycle Status Filter (Mirroring bidplus.gem.gov.in)
-      const computedStatus = GeMLiveSyncService.computeLifecycleStatus(bid, now);
-      if (statusTab === 'ONGOING') {
-        if (computedStatus !== 'ONGOING' && computedStatus !== 'BID_TO_RA') return false;
-      } else if (statusTab === 'RA') {
-        if (computedStatus !== 'BID_TO_RA' && !bid.isRa && bid.type !== 'RA') return false;
-      } else if (statusTab === 'CLOSED') {
-        if (computedStatus !== 'CLOSED' && computedStatus !== 'AWARDED') return false;
-      } else if (statusTab === 'CANCELLED') {
-        if (computedStatus !== 'CANCELLED' && !bid.isCancelled) return false;
+      // 1. Status Tab filter
+      if (activeStatusTab === 'Live RA') {
+        if (!isRa) return false;
+      } else if (activeStatusTab === 'Closed') {
+        if (status !== 'CLOSED' && status !== 'AWARDED' && status !== 'CANCELLED') return false;
+      } else {
+        // Ongoing
+        if (isRa || status === 'CLOSED' || status === 'AWARDED' || status === 'CANCELLED') return false;
       }
 
-      // 1. Scope filter
-      if (scopeFilter === 'MATCHED') {
-        const isRelevant = evaluation.matchScore >= 60 || evaluation.isEligible;
-        if (!isRelevant) return false;
+      // 2. Type Chip filter
+      if (activeTypeChip === 'Goods' && bid.type === 'SERVICE') return false;
+      if (activeTypeChip === 'Services' && bid.type !== 'SERVICE') return false;
+
+      // 3. MSE filter
+      if (filterMseOnly && !bid.isEmdExemptForMse) return false;
+
+      // 4. Min Value filter
+      if (filterMinValLakhs > 0) {
+        const val = bid.estimatedBidValueInr || 0;
+        if (val < filterMinValLakhs * 100000) return false;
       }
 
-      // 2. Type filter
-      if (typeFilter !== 'ALL') {
-        if (typeFilter === 'RA') {
-          if (!bid.isRa && bid.type !== 'RA' && computedStatus !== 'BID_TO_RA') return false;
-        } else if (bid.type !== typeFilter) {
-          return false;
-        }
-      }
-
-      // 3. Search query
+      // 5. Search query
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const numMatch = bid.bidNumber.toLowerCase().includes(q);
-        const titleMatch = bid.title.toLowerCase().includes(q);
-        const deptMatch = bid.department.toLowerCase().includes(q);
-        const minMatch = bid.ministry.toLowerCase().includes(q);
-        const catMatch = (bid.categoryDomain || '').toLowerCase().includes(q);
-        if (!numMatch && !titleMatch && !deptMatch && !minMatch && !catMatch) {
-          return false;
-        }
+        const q = searchQuery.toLowerCase();
+        const matchesBid = bid.bidNumber.toLowerCase().includes(q);
+        const matchesTitle = bid.title.toLowerCase().includes(q);
+        const matchesDept = bid.department.toLowerCase().includes(q);
+        if (!matchesBid && !matchesTitle && !matchesDept) return false;
       }
 
       return true;
     });
-  }, [ranked, statusTab, scopeFilter, typeFilter, searchQuery, now]);
+  }, [bids, activeStatusTab, activeTypeChip, filterMseOnly, filterMinValLakhs, searchQuery]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: (typeof ranked)[0] }) => (
-      <MemoizedBidCard
-        bid={item.bid}
-        matchScore={item.evaluation.matchScore}
-        turnoverEligible={item.evaluation.turnoverEligible}
-        verdictSummary={item.evaluation.verdictSummary}
-        onInspect={handleInspect}
-        onOpenDoc={handleOpenDoc}
-        colors={colors}
-        fontMultiplier={fontMultiplier}
-        isDark={isDark}
-      />
-    ),
-    [handleInspect, handleOpenDoc, colors, fontMultiplier, isDark]
-  );
+  const toggleSaveBid = (bidNumber: string) => {
+    setSavedBidNumbers((prev) => {
+      const next = new Set(prev);
+      if (next.has(bidNumber)) next.delete(bidNumber);
+      else next.add(bidNumber);
+      return next;
+    });
+  };
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <DataNotice />
-      {/* Sleek Top Search Bar with Inline Refresh & Clear */}
-      <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search bid number, title or ministry..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
+  const handleOpenDoc = useCallback((bidNumber: string, docUrl?: string) => {
+    const verifiedUrl = PortalDocService.getOfficialDocUrl(bidNumber, docUrl);
+    Linking.openURL(verifiedUrl).catch(() => {
+      Alert.alert('Bid Document', `Download URL: ${verifiedUrl}`);
+    });
+  }, []);
+
+  const handleInspect = (bid: DeconstructedBidDoc) => {
+    if (onInspectBid) {
+      onInspectBid(bid);
+    } else {
+      setInspectingBid(bid);
+    }
+  };
+
+  // Render individual bid card
+  const renderBidCard = ({ item }: { item: DeconstructedBidDoc }) => {
+    const isSaved = savedBidNumbers.has(item.bidNumber);
+    const isService = item.type === 'SERVICE';
+    const isRa = item.isRa || item.type === 'RA' || item.lifecycleStatus === 'BID_TO_RA';
+    const match = UserAgentService.evaluateBidMatch(item, userProfile);
+    const estVal = item.estimatedBidValueInr || 2500000;
+    const boqCount = item.boqItems?.length || 1;
+
+    return (
+      <View
+        style={[
+          styles.bidCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        {/* Card Header: Type Tag, Bid Number, Bookmark */}
+        <View style={styles.cardHeaderRow}>
+          <View style={styles.cardHeaderLeft}>
+            <StatusBadge
+              label={isRa ? 'RA' : isService ? 'SERVICES' : 'GOODS'}
+              tone={isRa ? 'warning' : isService ? 'violet' : 'neutral'}
+            />
+            <Text style={[styles.bidNumberText, { color: colors.textSecondary }]}>
+              {item.bidNumber}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => toggleSaveBid(item.bidNumber)}
+            hitSlop={8}
+            style={styles.bookmarkBtn}
+            accessibilityLabel="Bookmark bid"
+          >
+            <Text style={[styles.bookmarkIcon, { color: isSaved ? colors.primary : colors.textMuted }]}>
+              {isSaved ? '★' : '☆'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Bid Title */}
+        <Text
+          style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}
+          numberOfLines={2}
+        >
+          {item.title}
+        </Text>
+
+        {/* Buyer Department */}
+        <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
+          {item.department} • {item.ministry}
+        </Text>
+
+        {/* 2x2 Glanceable Metrics Grid */}
+        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+            <Text style={[styles.metricValue, { color: colors.primary }]}>{formatLakhs(estVal)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY / SCOPE</Text>
+            <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
+              {boqCount} {boqCount === 1 ? 'Package' : 'Line Items'}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSING (IST)</Text>
+            <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
+              {formatDateSafe(item.closingTimeUtc)}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>MSE / EMD</Text>
+            <Text
+              style={[
+                styles.metricValue,
+                { color: item.isEmdExemptForMse ? colors.success : colors.warning },
+              ]}
+            >
+              {item.isEmdExemptForMse ? '100% Exempt' : 'EMD Applicable'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Actions: View Bid Details + PDF download */}
+        <View style={styles.cardActionsRow}>
+          <SecondaryButton
+            label="PDF Doc ↗"
+            onPress={() => handleOpenDoc(item.bidNumber, item.docUrl)}
+            style={{ flex: 1, marginRight: 8 }}
           />
-          {searchQuery.length > 0 && (
-            <TouchButton
-              title="✕"
-              variant="ghost"
-              size="small"
-              onPress={() => setSearchQuery('')}
-              hitSlopPadding={4}
-            />
-          )}
-          {onSyncLive && (
-            <TouchButton
-              title={isSyncing ? "⟳ Syncing..." : "⟳"}
-              variant="ghost"
-              size="small"
-              onPress={onSyncLive}
-              style={styles.inlineRefreshBtn}
-              textStyle={{ fontSize: 16, color: colors.primary, fontWeight: '900' }}
-              hitSlopPadding={4}
-            />
-          )}
-        </View>
-
-        {/* Row 1: Segmented GeM Status Bar (Ongoing, Live RA, Closed, All) */}
-        <View style={styles.statusSegmentRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusSegmentScroll}>
-            <TouchButton
-              title={`Ongoing (${statusCounts.ongoing})`}
-              variant={statusTab === 'ONGOING' ? 'primary' : 'ghost'}
-              size="small"
-              onPress={() => setStatusTab('ONGOING')}
-              style={styles.segmentedTabBtn}
-            />
-            <TouchButton
-              title={`Reverse auction (${statusCounts.ra})`}
-              variant={statusTab === 'RA' ? 'primary' : 'ghost'}
-              size="small"
-              onPress={() => setStatusTab('RA')}
-              style={styles.segmentedTabBtn}
-            />
-            <TouchButton
-              title={`Closed (${statusCounts.closed})`}
-              variant={statusTab === 'CLOSED' ? 'primary' : 'ghost'}
-              size="small"
-              onPress={() => setStatusTab('CLOSED')}
-              style={styles.segmentedTabBtn}
-            />
-            <TouchButton
-              title={`All (${statusCounts.total})`}
-              variant={statusTab === 'ALL' ? 'primary' : 'ghost'}
-              size="small"
-              onPress={() => setStatusTab('ALL')}
-              style={styles.segmentedTabBtn}
-            />
-            {statusCounts.cancelled > 0 && (
-              <TouchButton
-                title={`Cancelled (${statusCounts.cancelled})`}
-                variant={statusTab === 'CANCELLED' ? 'primary' : 'ghost'}
-                size="small"
-                onPress={() => setStatusTab('CANCELLED')}
-                style={styles.segmentedTabBtn}
-              />
-            )}
-          </ScrollView>
-        </View>
-
-        {/* Row 2: Consolidated Filter Chips (Vehicles + Matched Scope) */}
-        <View style={styles.chipRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowScroll}>
-            <TouchButton
-              title="All types"
-              variant={typeFilter === 'ALL' && scopeFilter === 'ALL' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => {
-                setTypeFilter('ALL');
-                setScopeFilter('ALL');
-              }}
-              style={styles.filterChip}
-            />
-            <TouchButton
-              title="Matched only"
-              variant={scopeFilter === 'MATCHED' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => setScopeFilter(scopeFilter === 'MATCHED' ? 'ALL' : 'MATCHED')}
-              style={styles.filterChip}
-            />
-            <TouchButton
-              title={`Products (${bids.filter((b) => b.type === 'PRODUCT').length})`}
-              variant={typeFilter === 'PRODUCT' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => {
-                setTypeFilter(typeFilter === 'PRODUCT' ? 'ALL' : 'PRODUCT');
-              }}
-              style={styles.filterChip}
-            />
-            <TouchButton
-              title={`Services (${bids.filter((b) => b.type === 'SERVICE').length})`}
-              variant={typeFilter === 'SERVICE' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => {
-                setTypeFilter(typeFilter === 'SERVICE' ? 'ALL' : 'SERVICE');
-              }}
-              style={styles.filterChip}
-            />
-            <TouchButton
-              title={`BOQ (${bids.filter((b) => b.type === 'BOQ').length})`}
-              variant={typeFilter === 'BOQ' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => {
-                setTypeFilter(typeFilter === 'BOQ' ? 'ALL' : 'BOQ');
-              }}
-              style={styles.filterChip}
-            />
-            <TouchButton
-              title={`Custom (${bids.filter((b) => b.type === 'CUSTOM').length})`}
-              variant={typeFilter === 'CUSTOM' ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => {
-                setTypeFilter(typeFilter === 'CUSTOM' ? 'ALL' : 'CUSTOM');
-              }}
-              style={styles.filterChip}
-            />
-          </ScrollView>
+          <PrimaryButton
+            label="View Bid Details"
+            onPress={() => handleInspect(item)}
+            style={{ flex: 1.5 }}
+          />
         </View>
       </View>
+    );
+  };
 
-      {/* Virtualized FlatList with Pull-To-Refresh */}
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* 1. Status Tabs: Ongoing (100) | Live RA (12) | Closed */}
+      <View style={styles.topSection}>
+        <SegmentedTabs
+          options={['Ongoing', 'Live RA', 'Closed']}
+          selected={activeStatusTab}
+          onSelect={(tab) => setActiveStatusTab(tab as GeMStatusTab)}
+          counts={counts}
+          style={{ marginBottom: 12 }}
+        />
+
+        {/* 2. Search Field */}
+        <SearchField
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search by bid number, item or department"
+          style={{ marginBottom: 10 }}
+        />
+
+        {/* 3. Filter Chips: All | Goods | Services | Filters */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipRow}
+        >
+          <CompactChip
+            label="Filters"
+            icon="⚙️"
+            selected={showFilterModal || filterMseOnly || filterMinValLakhs > 0}
+            onPress={() => setShowFilterModal(true)}
+          />
+          <CompactChip
+            label="All"
+            selected={activeTypeChip === 'All'}
+            onPress={() => setActiveTypeChip('All')}
+          />
+          <CompactChip
+            label="Goods"
+            selected={activeTypeChip === 'Goods'}
+            onPress={() => setActiveTypeChip('Goods')}
+          />
+          <CompactChip
+            label="Services"
+            selected={activeTypeChip === 'Services'}
+            onPress={() => setActiveTypeChip('Services')}
+          />
+        </ScrollView>
+      </View>
+
+      {/* 4. Bid List */}
       <FlatList
-        data={filtered}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.bid.bidNumber}
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        windowSize={5}
-        removeClippedSubviews={true}
+        data={filteredBids}
+        keyExtractor={(item) => item.bidNumber}
+        renderItem={renderBidCard}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           onSyncLive ? (
             <RefreshControl
-              refreshing={Boolean(isSyncing)}
+              refreshing={isSyncing}
               onRefresh={onSyncLive}
-              colors={['#0B3B60', '#FF9933']}
-              tintColor="#FF9933"
+              colors={[colors.primary]}
+              tintColor={colors.primary}
             />
           ) : undefined
         }
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>
-              {filtered.length} {filtered.length === 1 ? 'public bid record' : 'public bid records'}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyEmoji}>📋</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No opportunities found</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Try adjusting your search criteria or switching to a different status tab.
             </Text>
+            <SecondaryButton
+              label="Reset Filters"
+              onPress={() => {
+                setSearchQuery('');
+                setActiveTypeChip('All');
+                setFilterMseOnly(false);
+                setFilterMinValLakhs(0);
+              }}
+              style={{ marginTop: 14 }}
+            />
           </View>
         }
       />
 
-      {/* Zero-PDF Bid Inspector Modal */}
-      <BidInspectorScreen
-        bid={selectedBid}
-        visible={!!selectedBid}
-        onClose={() => setSelectedBid(null)}
-        userProfile={userProfile}
-      />
-    </SafeAreaView>
+      {/* Filter Bottom Sheet */}
+      <FilterBottomSheetModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        title="Refine Opportunities"
+        onReset={() => {
+          setActiveTypeChip('All');
+          setFilterMseOnly(false);
+          setFilterMinValLakhs(0);
+        }}
+        onApply={() => {}}
+      >
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary }]}>Procurement Vehicle</Text>
+        <View style={styles.sheetPillWrap}>
+          {(['All', 'Goods', 'Services'] as const).map((t) => (
+            <CompactChip
+              key={t}
+              label={t}
+              selected={activeTypeChip === t}
+              onPress={() => setActiveTypeChip(t)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
+
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary, marginTop: 14 }]}>
+          MSME Privilege
+        </Text>
+        <CompactChip
+          label="100% EMD Exemption Only"
+          selected={filterMseOnly}
+          onPress={() => setFilterMseOnly((p) => !p)}
+        />
+
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary, marginTop: 14 }]}>
+          Minimum Estimated Value
+        </Text>
+        <View style={styles.sheetPillWrap}>
+          {[0, 10, 25, 50, 100].map((v) => (
+            <CompactChip
+              key={v}
+              label={v === 0 ? 'Any Value' : `₹${v}L+`}
+              selected={filterMinValLakhs === v}
+              onPress={() => setFilterMinValLakhs(v)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
+      </FilterBottomSheetModal>
+
+      {/* Bid Detail Inspection Modal */}
+      {inspectingBid && (
+        <BidInspectorScreen
+          bid={inspectingBid}
+          userProfile={userProfile}
+          visible={true}
+          onClose={() => setInspectingBid(null)}
+        />
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  searchSection: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
+  container: {
+    flex: 1,
   },
-  searchInputWrapper: {
+  topSection: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 8,
+  },
+  filterChipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    minHeight: 42,
   },
-  searchIcon: { fontSize: 16, marginRight: 6 },
-  searchInput: { flex: 1, fontSize: 13, fontWeight: '600', paddingVertical: 4 },
-  inlineRefreshBtn: { paddingHorizontal: 6, minHeight: 36, justifyContent: 'center' },
-  statusSegmentRow: { marginTop: 8 },
-  statusSegmentScroll: { gap: 6 },
-  segmentedTabBtn: { marginRight: 6 },
-  statusBadge: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6 },
-  chipRow: { marginTop: 6 },
-  chipRowScroll: { gap: 6 },
-  filterChip: { marginRight: 6 },
-  listContent: { paddingHorizontal: 12, paddingBottom: 40 },
-  listHeader: { paddingVertical: 4 },
-  listHeaderCount: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: {
-    borderRadius: 14,
+  listContent: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingTop: 4,
+    paddingBottom: 40,
+  },
+  bidCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  typeBadge: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6 },
-  typeBadgeText: { fontSize: 9.5, fontWeight: '900' },
-  bidNumText: { fontSize: 11, fontWeight: '700' },
-  bidTitle: { fontWeight: '800', lineHeight: 19, marginBottom: 3 },
-  deptText: { fontSize: 11, marginBottom: 8, fontWeight: '500' },
-  matchBanner: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
-  matchBannerText: { fontSize: 10, fontWeight: '800' },
-  cardGrid: {
+  cardHeaderRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    padding: 8,
-    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bidNumberText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  bookmarkBtn: {
+    padding: 4,
+  },
+  bookmarkIcon: {
+    fontSize: 18,
+  },
+  bidTitle: {
+    fontWeight: '700',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  deptText: {
+    fontSize: 12,
     marginBottom: 10,
   },
-  gridCell: { width: '48%' },
-  cellLabel: { fontSize: 9, fontWeight: '800', marginBottom: 2 },
-  cellValue: { fontSize: 11.5, fontWeight: '800' },
-  cardActions: { flexDirection: 'row', gap: 8 },
+  metaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 12,
+  },
+  metricItem: {
+    width: '50%',
+    padding: 4,
+  },
+  metricLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
+  emptyEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  sheetSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  sheetPillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
 });

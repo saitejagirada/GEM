@@ -1,8 +1,10 @@
 /**
- * GeM Official Portal Onboarding & Registration Guide Screen
- * Replicates the official onboarding portal from https://mkp.gem.gov.in/registration/signup#!/buyer
- * and https://mkp.gem.gov.in/registration/signup#!/seller.
- * Allows any public user to inspect requirements, compute MSE benefits, and launch official portals.
+ * GeM Onboarding & Registration Screen
+ * Conforms to Screens 7 & 8 of the GeM Mobile UI Specification:
+ * - Screen 7: Buyer Registration with 3-Step Progress Tracker (Department, Officer Details, Review)
+ * - Screen 8: Seller / MSE KYC with 4-Step Progress Tracker (Business, Tax IDs, Classification, Review)
+ * - Rounded input fields with explicit labels and placeholders
+ * - MSE statutory benefit privileges (100% EMD waiver & 10-day payment SLA)
  */
 
 import React, { useState, useCallback } from 'react';
@@ -11,463 +13,754 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TextInput,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
 import { PortalOnboardingService, MsmeTier, BusinessConstitution } from '../services/PortalOnboardingService';
-import { TouchButton } from '../components/TouchButton';
-import { useTheme } from '../theme/ThemeContext';
-import { DataNotice } from '../components/DataNotice';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import {
+  SegmentedTabs,
+  CompactChip,
+  StatusBadge,
+  PrimaryButton,
+  SecondaryButton,
+} from '../components/SharedUI';
 
-export const PortalRegistrationScreen: React.FC = () => {
-  const { colors, fontMultiplier, isDark } = useTheme();
+export interface PortalRegistrationScreenProps {
+  initialMode?: 'BUYER' | 'SELLER';
+  onBack?: () => void;
+}
 
-  const [activeTab, setActiveTab] = useState<'BUYER' | 'SELLER' | 'HELPDESK'>('BUYER');
+export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> = ({
+  initialMode = 'BUYER',
+  onBack,
+}) => {
+  const { colors, fontMultiplier } = useTheme();
 
-  // Interactive Buyer State
-  const [buyerName, setBuyerName] = useState('');
-  const [buyerEmail, setBuyerEmail] = useState('');
-  const [buyerMinistry, setBuyerMinistry] = useState('');
-  const [buyerOffice, setBuyerOffice] = useState('');
-  const [buyerRole, setBuyerRole] = useState<'PRIMARY_HOD' | 'BUYER' | 'CONSIGNEE' | 'PAO_DDO'>('PRIMARY_HOD');
-  const [buyerCheckResult, setBuyerCheckResult] = useState<ReturnType<typeof PortalOnboardingService.validateBuyerOnboarding> | null>(null);
+  const [activeRole, setActiveRole] = useState<'BUYER' | 'SELLER'>(initialMode);
 
-  // Interactive Seller State
-  const [sellerName, setSellerName] = useState('');
-  const [sellerConstitution, setSellerConstitution] = useState<BusinessConstitution>('PRIVATE_LIMITED');
-  const [sellerPan, setSellerPan] = useState('');
-  const [sellerGstin, setSellerGstin] = useState('');
-  const [sellerUdyam, setSellerUdyam] = useState('');
-  const [sellerTier, setSellerTier] = useState<MsmeTier>('MICRO');
-  const [sellerCheckResult, setSellerCheckResult] = useState<ReturnType<typeof PortalOnboardingService.validateSellerOnboarding> | null>(null);
+  // Buyer Stepper (Screen 7)
+  const [buyerStep, setBuyerStep] = useState<number>(1);
+  const [buyerMinistry, setBuyerMinistry] = useState<string>('Ministry of Finance');
+  const [buyerOffice, setBuyerOffice] = useState<string>('Directorate of Income Tax');
+  const [buyerName, setBuyerName] = useState<string>('Rajesh Kumar');
+  const [buyerEmail, setBuyerEmail] = useState<string>('rajesh.kumar@gov.in');
+  const [buyerRole, setBuyerRole] = useState<'Primary User / HOD' | 'Secondary Buyer'>('Primary User / HOD');
 
-  const handleTestBuyer = useCallback(() => {
-    const res = PortalOnboardingService.validateBuyerOnboarding({
-      fullName: buyerName,
-      officialGovEmail: buyerEmail,
-      designation: 'Officer',
-      mobileNumber: '9876543210',
-      ministry: buyerMinistry,
-      department: 'Department of Operations',
-      officeName: buyerOffice,
-      role: buyerRole,
-    });
-    setBuyerCheckResult(res);
-  }, [buyerName, buyerEmail, buyerMinistry, buyerOffice, buyerRole]);
+  // Seller Stepper (Screen 8)
+  const [sellerStep, setSellerStep] = useState<number>(1);
+  const [enterpriseName, setEnterpriseName] = useState<string>('Garuda Tech & Electrical Solutions');
+  const [businessType, setBusinessType] = useState<string>('Private Limited');
+  const [sellerPan, setSellerPan] = useState<string>('AABCG1234F');
+  const [sellerGstin, setSellerGstin] = useState<string>('07AABCG1234F1Z8');
+  const [sellerUdyam, setSellerUdyam] = useState<string>('UDYAM-DL-01-0098765');
+  const [classification, setClassification] = useState<MsmeTier>('MICRO');
 
-  const handleTestSeller = useCallback(() => {
-    const res = PortalOnboardingService.validateSellerOnboarding({
-      companyName: sellerName,
-      constitution: sellerConstitution,
-      panNumber: sellerPan,
-      gstin: sellerGstin,
-      authorizedSignatoryAadhaarLast4: '1234',
-      bankAccountNumber: '91802003456789',
-      bankIfsc: 'SBIN0001234',
-      hasUdyamRegistration: !!sellerUdyam.trim(),
-      udyamRegistrationNumber: sellerUdyam,
-      msmeTier: sellerTier,
-      annualTurnoverInr: 25000000,
-      isOem: true,
-    });
-    setSellerCheckResult(res);
-  }, [sellerName, sellerConstitution, sellerPan, sellerGstin, sellerUdyam, sellerTier]);
-
-  const openOfficialUrl = useCallback((url: string) => {
+  const openOfficialSignup = (type: 'buyer' | 'seller') => {
+    const url = `https://mkp.gem.gov.in/registration/signup#!/${type}`;
     Linking.openURL(url).catch(() => {
-      Alert.alert('Official GeM Portal', `Visit ${url} in your browser.`);
+      Alert.alert('GeM Signup', `Visit ${url} in your browser.`);
     });
-  }, []);
-
-  const msmeBenefits = PortalOnboardingService.calculateMsmePrivileges(sellerTier);
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <DataNotice>Onboarding guide · This companion validates form completeness; final registration happens on the official GeM portal.</DataNotice>
-      {/* Top Segment: Buyer Portal | Seller Portal | Helpdesk */}
-      <View style={[styles.topTabsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchButton
-          title="Buyer registration"
-          variant={activeTab === 'BUYER' ? 'primary' : 'secondary'}
-          size="small"
-          onPress={() => setActiveTab('BUYER')}
-          style={{ flex: 1 }}
-        />
-        <TouchButton
-          title="Seller / MSE KYC"
-          variant={activeTab === 'SELLER' ? 'primary' : 'secondary'}
-          size="small"
-          onPress={() => setActiveTab('SELLER')}
-          style={{ flex: 1 }}
-        />
-        <TouchButton
-          title="Helpdesk"
-          variant={activeTab === 'HELPDESK' ? 'primary' : 'secondary'}
-          size="small"
-          onPress={() => setActiveTab('HELPDESK')}
-          style={{ flex: 1 }}
-        />
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Top Header / Back navigation */}
+      <View style={styles.topNavRow}>
+        {onBack && (
+          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+            <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
+          </Pressable>
+        )}
+        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 18 * fontMultiplier }]}>
+          {activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
+        </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* TAB 1: BUYER ONBOARDING */}
-        {activeTab === 'BUYER' && (
-          <View>
-            {/* Official Notice matching user screenshot */}
-            <View style={[styles.noticeCard, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
-              <Text style={[styles.noticeTitle, { color: '#1E40AF' }]}>
-                Buyer registration guidance
-              </Text>
-              <Text style={[styles.noticeBody, { color: '#334155' }]}>
-                If you want to register as the buyers/users involved in procurement process please contact Primary user (HOD) of your organisation.{'\n\n'}
-                <Text style={{ fontWeight: '800' }}>Note:</Text> Only non-buying roles i.e. Primary User (HOD) / Verifying Authority can register directly from the portal. Secondary users (Buyer, Consignee, PAO) are created by the HOD.
-              </Text>
-            </View>
+      {/* Role Switcher */}
+      <SegmentedTabs
+        options={['Buyer Registration', 'Seller / MSE KYC']}
+        selected={activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
+        onSelect={(tab) => {
+          setActiveRole(tab === 'Buyer Registration' ? 'BUYER' : 'SELLER');
+        }}
+        style={{ marginBottom: 16 }}
+      />
 
-            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-                Buyer Eligibility Validator
-              </Text>
-              <Text style={[styles.cardSub, { color: colors.textMuted }]}>
-                Check whether the information needed for a buyer registration is present.
-              </Text>
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Officer Full Legal Name</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. Dr. Rajesh Kumar"
-                placeholderTextColor={colors.textMuted}
-                value={buyerName}
-                onChangeText={setBuyerName}
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Official Government Email (.gov.in / .nic.in mandatory)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. rajesh.kumar@nic.in"
-                placeholderTextColor={colors.textMuted}
-                value={buyerEmail}
-                onChangeText={setBuyerEmail}
-                autoCapitalize="none"
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Ministry / Department</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. Ministry of Defence / Health"
-                placeholderTextColor={colors.textMuted}
-                value={buyerMinistry}
-                onChangeText={setBuyerMinistry}
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Office Name / Establishment</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. Central Ordnance Depot"
-                placeholderTextColor={colors.textMuted}
-                value={buyerOffice}
-                onChangeText={setBuyerOffice}
-              />
-
-              <View style={styles.roleRow}>
-                <TouchButton
-                  title="Primary User (HOD)"
-                  variant={buyerRole === 'PRIMARY_HOD' ? 'primary' : 'secondary'}
-                  size="small"
-                  onPress={() => setBuyerRole('PRIMARY_HOD')}
-                  style={{ flex: 1 }}
-                />
-                <TouchButton
-                  title="Secondary Buyer"
-                  variant={buyerRole === 'BUYER' ? 'primary' : 'secondary'}
-                  size="small"
-                  onPress={() => setBuyerRole('BUYER')}
-                  style={{ flex: 1 }}
-                />
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <TouchButton
-                  title="Check form details"
-                  variant="saffron"
-                  size="medium"
-                  onPress={handleTestBuyer}
-                />
-              </View>
-
-              {buyerCheckResult ? (
-                <View style={[styles.resultCard, { backgroundColor: buyerCheckResult.isValid ? '#F0FDF4' : '#FEF2F2', borderColor: buyerCheckResult.isValid ? '#86EFAC' : '#FCA5A5' }]}>
-                  <Text style={[styles.resultTitle, { color: buyerCheckResult.isValid ? '#15803D' : '#B91C1C' }]}>
-                    {buyerCheckResult.isValid ? 'Ready for official registration' : 'Review the highlighted requirements'}
-                  </Text>
-                  {buyerCheckResult.errors.map((err, i) => (
-                    <Text key={i} style={[styles.resultError, { color: '#B91C1C' }]}>• {err}</Text>
-                  ))}
-                  {buyerCheckResult.isValid ? (
-                    <Text style={{ color: '#166534', fontSize: 11, marginTop: 4 }}>
-                      Your final role and permissions are confirmed by GeM during registration.
+      {/* =========================================================================
+          SCREEN 7: BUYER REGISTRATION
+      ========================================================================= */}
+      {activeRole === 'BUYER' && (
+        <View>
+          {/* Progress Tracker (3 Steps: Department -> Officer -> Review) */}
+          <View style={styles.stepperContainer}>
+            {[
+              { step: 1, label: 'Department' },
+              { step: 2, label: 'Officer Details' },
+              { step: 3, label: 'Review' },
+            ].map((s, idx) => {
+              const isActive = buyerStep === s.step;
+              const isPast = buyerStep > s.step;
+              return (
+                <Pressable
+                  key={s.step}
+                  onPress={() => setBuyerStep(s.step)}
+                  style={styles.stepItem}
+                >
+                  <View
+                    style={[
+                      styles.stepCircle,
+                      {
+                        backgroundColor: isActive
+                          ? colors.primary
+                          : isPast
+                          ? colors.success
+                          : colors.surfaceSubtle,
+                        borderColor: isActive ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.stepNum,
+                        { color: isActive || isPast ? colors.textInverse : colors.textSecondary },
+                      ]}
+                    >
+                      {isPast ? '✓' : s.step}
                     </Text>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {/* Direct Link to Official Portal */}
-              <View style={{ marginTop: 16 }}>
-                <TouchButton
-                  title="Open Official Buyer Portal (mkp.gem.gov.in) ➔"
-                  variant="primary"
-                  size="medium"
-                  icon="🌐"
-                  onPress={() => openOfficialUrl('https://mkp.gem.gov.in/registration/signup#!/buyer')}
-                />
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* TAB 2: SELLER & MSME ONBOARDING */}
-        {activeTab === 'SELLER' && (
-          <View>
-            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-                Seller Onboarding & MSE Advantage Calculator
-              </Text>
-              <Text style={[styles.cardSub, { color: colors.textMuted }]}>
-                Verify statutory EMD exemptions and 25% annual procurement reservation
-              </Text>
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Enterprise Name</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. Akash Solar Technologies Pvt Ltd"
-                placeholderTextColor={colors.textMuted}
-                value={sellerName}
-                onChangeText={setSellerName}
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>PAN Number (10 Alphanumeric)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. ABCDE1234F"
-                placeholderTextColor={colors.textMuted}
-                value={sellerPan}
-                onChangeText={setSellerPan}
-                autoCapitalize="characters"
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>GSTIN (15 Characters)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. 07ABCDE1234F1Z5"
-                placeholderTextColor={colors.textMuted}
-                value={sellerGstin}
-                onChangeText={setSellerGstin}
-                autoCapitalize="characters"
-              />
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Udyam Registration Number</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="e.g. UDYAM-DL-01-0089123"
-                placeholderTextColor={colors.textMuted}
-                value={sellerUdyam}
-                onChangeText={setSellerUdyam}
-                autoCapitalize="characters"
-              />
-
-              {/* MSME Tier Picker */}
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Enterprise Classification</Text>
-              <View style={styles.tierRow}>
-                {(['MICRO', 'SMALL', 'MEDIUM', 'LARGE'] as const).map((tier) => (
-                  <TouchButton
-                    key={tier}
-                    title={tier}
-                    variant={sellerTier === tier ? 'emerald' : 'secondary'}
-                    size="small"
-                    onPress={() => setSellerTier(tier)}
-                    style={{ flex: 1 }}
-                  />
-                ))}
-              </View>
-
-              {/* Statutory Privileges Card */}
-              <View style={[styles.privilegeCard, { backgroundColor: isDark ? colors.surfaceSubtle : '#F0FDF4', borderColor: '#BBF7D0' }]}>
-                <Text style={[styles.privilegeTitle, { color: '#166534' }]}>
-                  🛡️ Statutory Privileges for {sellerTier} Enterprises
-                </Text>
-                <Text style={styles.privilegeItem}>
-                  • <Text style={{ fontWeight: '800' }}>EMD Waiver:</Text> {msmeBenefits.emdWaiverPercent}% Waived across all tenders
-                </Text>
-                <Text style={styles.privilegeItem}>
-                  • <Text style={{ fontWeight: '800' }}>Purchase Preference:</Text> {msmeBenefits.purchasePreferenceBand}
-                </Text>
-                <Text style={styles.privilegeItem}>
-                  • <Text style={{ fontWeight: '800' }}>Annual Quota:</Text> {msmeBenefits.procurementQuotaPercent}% mandatory reservation
-                </Text>
-                <Text style={styles.privilegeItem}>
-                  • <Text style={{ fontWeight: '800' }}>Payment SLA:</Text> Deemed acceptance & treasury payout in {msmeBenefits.paymentSlaDays} days
-                </Text>
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <TouchButton
-                  title="Validate KYC Readiness"
-                  variant="saffron"
-                  size="medium"
-                  onPress={handleTestSeller}
-                />
-              </View>
-
-              {sellerCheckResult ? (
-                <View style={[styles.resultCard, { backgroundColor: sellerCheckResult.isValid ? '#F0FDF4' : '#FEF2F2', borderColor: sellerCheckResult.isValid ? '#86EFAC' : '#FCA5A5' }]}>
-                  <Text style={[styles.resultTitle, { color: sellerCheckResult.isValid ? '#15803D' : '#B91C1C' }]}>
-                    {sellerCheckResult.isValid ? '✓ Seller Ready for GeM Registration' : '⚠️ Missing Mandatory KYC Details'}
+                  </View>
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      {
+                        color: isActive ? colors.primary : colors.textSecondary,
+                        fontWeight: isActive ? '700' : '400',
+                      },
+                    ]}
+                  >
+                    {s.label}
                   </Text>
-                  {sellerCheckResult.errors.map((err, i) => (
-                    <Text key={i} style={[styles.resultError, { color: '#B91C1C' }]}>• {err}</Text>
+                  {idx < 2 && <View style={[styles.stepLine, { backgroundColor: colors.border }]} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Form Card */}
+          <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {buyerStep === 1 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Department &amp; Office Establishment
+                </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Specify the Central or State ministry and designated office unit.
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Ministry / Department <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. Ministry of Finance"
+                    placeholderTextColor={colors.textMuted}
+                    value={buyerMinistry}
+                    onChangeText={setBuyerMinistry}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Office Name / Establishment <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. Directorate of Income Tax"
+                    placeholderTextColor={colors.textMuted}
+                    value={buyerOffice}
+                    onChangeText={setBuyerOffice}
+                  />
+                </View>
+
+                <PrimaryButton
+                  label="Continue to Step 2: Officer Details →"
+                  onPress={() => setBuyerStep(2)}
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            )}
+
+            {buyerStep === 2 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Officer In-Charge Information
+                </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Per statutory GeM policy, government buyers must register using official gov.in / nic.in domains.
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Officer Full Legal Name <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. Rajesh Kumar"
+                    placeholderTextColor={colors.textMuted}
+                    value={buyerName}
+                    onChangeText={setBuyerName}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Official Government Email <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="name@gov.in or name@nic.in"
+                    placeholderTextColor={colors.textMuted}
+                    value={buyerEmail}
+                    onChangeText={setBuyerEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Buyer Role <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <View style={styles.radioGroup}>
+                    {(['Primary User / HOD', 'Secondary Buyer'] as const).map((r) => (
+                      <Pressable
+                        key={r}
+                        onPress={() => setBuyerRole(r)}
+                        style={[
+                          styles.radioOption,
+                          {
+                            backgroundColor: buyerRole === r ? colors.primaryTint : colors.surfaceSubtle,
+                            borderColor: buyerRole === r ? colors.primary : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.radioDot, { color: colors.primary }]}>
+                          {buyerRole === r ? '●' : '○'}
+                        </Text>
+                        <Text style={[styles.radioLabel, { color: colors.textPrimary }]}>{r}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.btnRow}>
+                  <SecondaryButton
+                    label="← Back"
+                    onPress={() => setBuyerStep(1)}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <PrimaryButton
+                    label="Continue to Step 3: Review →"
+                    onPress={() => setBuyerStep(3)}
+                    style={{ flex: 2 }}
+                  />
+                </View>
+              </View>
+            )}
+
+            {buyerStep === 3 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Review &amp; Official Submission
+                </Text>
+                <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Ministry:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerMinistry}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Office Unit:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerOffice}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Officer Name:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerName}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Gov Email:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerEmail}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Designated Role:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.primary }]}>{buyerRole}</Text>
+                  </View>
+                </View>
+
+                <PrimaryButton
+                  label="Submit to Official GeM Portal ↗"
+                  onPress={() => openOfficialSignup('buyer')}
+                  style={{ marginTop: 14 }}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* =========================================================================
+          SCREEN 8: SELLER / MSE KYC
+      ========================================================================= */}
+      {activeRole === 'SELLER' && (
+        <View>
+          {/* Progress Tracker (4 Steps: Business -> Tax IDs -> Classification -> Review) */}
+          <View style={styles.stepperContainer}>
+            {[
+              { step: 1, label: 'Business' },
+              { step: 2, label: 'Tax IDs' },
+              { step: 3, label: 'Classification' },
+              { step: 4, label: 'Review' },
+            ].map((s, idx) => {
+              const isActive = sellerStep === s.step;
+              const isPast = sellerStep > s.step;
+              return (
+                <Pressable
+                  key={s.step}
+                  onPress={() => setSellerStep(s.step)}
+                  style={styles.stepItem}
+                >
+                  <View
+                    style={[
+                      styles.stepCircle,
+                      {
+                        backgroundColor: isActive
+                          ? colors.primary
+                          : isPast
+                          ? colors.success
+                          : colors.surfaceSubtle,
+                        borderColor: isActive ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.stepNum,
+                        { color: isActive || isPast ? colors.textInverse : colors.textSecondary },
+                      ]}
+                    >
+                      {isPast ? '✓' : s.step}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      {
+                        color: isActive ? colors.primary : colors.textSecondary,
+                        fontWeight: isActive ? '700' : '400',
+                      },
+                    ]}
+                  >
+                    {s.label}
+                  </Text>
+                  {idx < 3 && <View style={[styles.stepLine, { backgroundColor: colors.border }]} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Form Card */}
+          <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {sellerStep === 1 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Enterprise &amp; Constitution
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Enterprise / Company Name <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. Garuda Tech Solutions Pvt Ltd"
+                    placeholderTextColor={colors.textMuted}
+                    value={enterpriseName}
+                    onChangeText={setEnterpriseName}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Business Constitution <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <View style={styles.chipWrap}>
+                    {['Proprietorship', 'Private Limited', 'Partnership', 'LLP', 'Society'].map((type) => (
+                      <CompactChip
+                        key={type}
+                        label={type}
+                        selected={businessType === type}
+                        onPress={() => setBusinessType(type)}
+                        style={{ marginBottom: 8 }}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <PrimaryButton
+                  label="Continue to Step 2: Tax IDs →"
+                  onPress={() => setSellerStep(2)}
+                  style={{ marginTop: 12 }}
+                />
+              </View>
+            )}
+
+            {sellerStep === 2 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Registration &amp; Tax Identifiers
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    Income Tax PAN <Text style={{ color: colors.crimson }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. ABCDE1234F"
+                    placeholderTextColor={colors.textMuted}
+                    value={sellerPan}
+                    onChangeText={setSellerPan}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    GSTIN (Goods and Services Tax ID)
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. 07ABCDE1234F1Z5"
+                    placeholderTextColor={colors.textMuted}
+                    value={sellerGstin}
+                    onChangeText={setSellerGstin}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
+                    MSME Udyam Registration Number
+                  </Text>
+                  <TextInput
+                    style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. UDYAM-DL-01-0012345"
+                    placeholderTextColor={colors.textMuted}
+                    value={sellerUdyam}
+                    onChangeText={setSellerUdyam}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.btnRow}>
+                  <SecondaryButton
+                    label="← Back"
+                    onPress={() => setSellerStep(1)}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <PrimaryButton
+                    label="Continue to Step 3: Classification →"
+                    onPress={() => setSellerStep(3)}
+                    style={{ flex: 2 }}
+                  />
+                </View>
+              </View>
+            )}
+
+            {sellerStep === 3 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Enterprise Classification
+                </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Select your certified enterprise category per MSME Development Act criteria:
+                </Text>
+
+                <View style={styles.classificationGrid}>
+                  {(['MICRO', 'SMALL', 'MEDIUM', 'LARGE'] as MsmeTier[]).map((tier) => (
+                    <Pressable
+                      key={tier}
+                      onPress={() => setClassification(tier)}
+                      style={[
+                        styles.tierCard,
+                        {
+                          backgroundColor: classification === tier ? colors.primaryTint : colors.surfaceSubtle,
+                          borderColor: classification === tier ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.tierTitle, { color: colors.textPrimary }]}>{tier}</Text>
+                      <Text style={[styles.tierSub, { color: colors.textMuted }]}>
+                        {tier === 'MICRO'
+                          ? 'Inv ≤ ₹1 Cr | Turn ≤ ₹5 Cr'
+                          : tier === 'SMALL'
+                          ? 'Inv ≤ ₹10 Cr | Turn ≤ ₹50 Cr'
+                          : tier === 'MEDIUM'
+                          ? 'Inv ≤ ₹50 Cr | Turn ≤ ₹250 Cr'
+                          : 'General Non-MSME'}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
-              ) : null}
 
-              <View style={{ marginTop: 16 }}>
-                <TouchButton
-                  title="Open Official Seller Registration (mkp.gem.gov.in) ➔"
-                  variant="primary"
-                  size="medium"
-                  icon="🌐"
-                  onPress={() => openOfficialUrl('https://mkp.gem.gov.in/registration/signup#!/seller')}
+                {/* MSE Statutory Benefit Notice */}
+                <View style={[styles.benefitNotice, { backgroundColor: colors.successTint }]}>
+                  <Text style={[styles.benefitTitle, { color: colors.success }]}>
+                    🏛️ Verified MSE Statutory Privileges
+                  </Text>
+                  <Text style={[styles.benefitDesc, { color: colors.textPrimary }]}>
+                    • 100% EMD Exemption on all eligible public procurement tenders.{'\n'}
+                    • 25% annual government procurement quota reserved for MSEs.{'\n'}
+                    • 10-day statutory CRAC deemed payment guarantee under GFR 149.
+                  </Text>
+                </View>
+
+                <View style={styles.btnRow}>
+                  <SecondaryButton
+                    label="← Back"
+                    onPress={() => setSellerStep(2)}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <PrimaryButton
+                    label="Continue to Step 4: Review →"
+                    onPress={() => setSellerStep(4)}
+                    style={{ flex: 2 }}
+                  />
+                </View>
+              </View>
+            )}
+
+            {sellerStep === 4 && (
+              <View>
+                <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
+                  Review &amp; Portal Verification
+                </Text>
+
+                <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Enterprise:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{enterpriseName}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Type:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{businessType}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>PAN:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerPan}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>GSTIN:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerGstin || 'Not provided'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Udyam Number:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerUdyam || 'Not provided'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Classification:</Text>
+                    <Text style={[styles.reviewVal, { color: colors.emerald }]}>{classification} ENTERPRISE</Text>
+                  </View>
+                </View>
+
+                <PrimaryButton
+                  label="Complete Verification on GeM Portal ↗"
+                  onPress={() => openOfficialSignup('seller')}
+                  style={{ marginTop: 14 }}
                 />
               </View>
-            </View>
+            )}
           </View>
-        )}
-
-        {/* TAB 3: HELPDESK & POLICIES */}
-        {activeTab === 'HELPDESK' && (
-          <View>
-            <View style={[styles.formCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-                GeM National Helpdesk & Public Resources
-              </Text>
-
-              <View style={styles.helpItem}>
-                <Text style={styles.helpIcon}>📞</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>Toll Free Helpline</Text>
-                  <Text style={[styles.helpDesc, { color: colors.textMuted }]}>
-                    1800-419-3436 / 1800-102-3436 (Mon-Sat 9 AM to 8 PM)
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.helpItem}>
-                <Text style={styles.helpIcon}>🎓</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>GeM e-Learning & LMS</Text>
-                  <Text style={[styles.helpDesc, { color: colors.textMuted }]}>
-                    Free interactive certification courses for buyers and sellers.
-                  </Text>
-                  <TouchButton
-                    title="Open e-Learning (elearning.gem.gov.in)"
-                    variant="outline"
-                    size="small"
-                    onPress={() => openOfficialUrl('https://elearning.gem.gov.in')}
-                    style={{ marginTop: 6 }}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.helpItem}>
-                <Text style={styles.helpIcon}>⚖️</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>Incident Management & Delisted Sellers</Text>
-                  <Text style={[styles.helpDesc, { color: colors.textMuted }]}>
-                    Check public repository of errant sellers suspended under GFR Rule 144(xi).
-                  </Text>
-                  <TouchButton
-                    title="View Suspended Sellers List"
-                    variant="outline"
-                    size="small"
-                    onPress={() => openOfficialUrl('https://gem.gov.in/incidentmanagement/sellers')}
-                    style={{ marginTop: 6 }}
-                  />
-                </View>
-              </View>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+        </View>
+      )}
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topTabsRow: {
-    flexDirection: 'row',
-    padding: 8,
-    gap: 6,
-    borderBottomWidth: 1,
+  container: {
+    flex: 1,
   },
-  scrollContent: { padding: 12, paddingBottom: 40 },
-  noticeCard: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
+  contentContainer: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 40,
+  },
+  topNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  noticeTitle: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
-  noticeBody: { fontSize: 11.5, lineHeight: 17 },
+  backBtn: {
+    marginRight: 10,
+    padding: 4,
+  },
+  backArrow: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  navTitle: {
+    fontWeight: '700',
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 6,
+  },
+  stepItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
+  },
+  stepCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  stepNum: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stepLabel: {
+    fontSize: 11,
+    marginRight: 6,
+  },
+  stepLine: {
+    flex: 1,
+    height: 1,
+    marginRight: 6,
+  },
   formCard: {
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 16,
   },
-  cardTitle: { fontWeight: '900', marginBottom: 2 },
-  cardSub: { fontSize: 11.5, marginBottom: 12 },
-  fieldLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4, marginTop: 8 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  roleRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  tierRow: { flexDirection: 'row', gap: 6, marginTop: 4, marginBottom: 8 },
-  resultCard: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 12,
-  },
-  resultTitle: { fontSize: 12, fontWeight: '800', marginBottom: 4 },
-  resultError: { fontSize: 11, lineHeight: 16 },
-  privilegeCard: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 6,
+  formSecHeader: {
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 4,
   },
-  privilegeTitle: { fontSize: 12, fontWeight: '800', marginBottom: 4 },
-  privilegeItem: { fontSize: 11, color: '#14532D', lineHeight: 16 },
-  helpItem: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+  formDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 16,
   },
-  helpIcon: { fontSize: 24 },
-  helpTitle: { fontSize: 13, fontWeight: '800' },
-  helpDesc: { fontSize: 11.5, marginTop: 2, lineHeight: 16 },
+  inputGroup: {
+    marginBottom: 14,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  inputBox: {
+    height: 44,
+    borderRadius: DESIGN_TOKENS.inputRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  radioGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  radioOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  radioDot: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  radioLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  classificationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  tierCard: {
+    width: '48%',
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 10,
+  },
+  tierTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  tierSub: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  benefitNotice: {
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  benefitTitle: {
+    fontSize: 13,
+    fontWeight: '750',
+    marginBottom: 4,
+  },
+  benefitDesc: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  reviewCard: {
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+  },
+  reviewKey: {
+    fontSize: 12,
+  },
+  reviewVal: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

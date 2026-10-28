@@ -1,9 +1,19 @@
 /**
- * GeM Mobile Companion App
- * - Public discovery surfaces for catalogue records, bids, auctions and contracts
- * - Buyer/seller onboarding guidance and external portal hand-offs
- * - Local fixtures can be combined with synced records; the official portal remains authoritative
- * - Shared accessibility controls for colour mode and font sizing
+ * GeM Mobile Companion App - NotebookLM-Inspired Procurement Experience
+ * Conforms to the GeM Mobile UI Specification & 10-Screen Blueprint:
+ * - Clean 56px Header: India flag mark, GeM wordmark, subtitle, notifications bell, profile avatar
+ * - 64px 5-Tab Fixed Bottom Bar: Home, Search, Bids, Auctions, More with pale blue active surface
+ * - 10-Screen Route Hierarchy:
+ *   1. Home (/home) -> HomeScreen
+ *   2. Search / Products (/marketplace) -> MarketplaceScreen
+ *   3. Bids (/bids) -> BidsHubScreen
+ *   4. Auctions (/auctions) -> AuctionsHubScreen & ReverseAuctionScreen
+ *   5. Executed Contracts (/contracts) -> OrdersKnowledgeScreen
+ *   6. Categories (/categories) -> CategoriesScreen
+ *   7. Buyer Registration (/registration/buyer) -> PortalRegistrationScreen
+ *   8. Seller KYC (/registration/seller) -> PortalRegistrationScreen
+ *   9. Help & Resources (/help) -> HelpScreen
+ *   10. More / Profile (/more) -> MoreProfileScreen
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -17,44 +27,44 @@ import {
   Alert,
   TextInput,
   Pressable,
-  useWindowDimensions,
 } from 'react-native';
-import { ThemeProvider, useTheme } from './theme/ThemeContext';
-import { TouchButton } from './components/TouchButton';
+import { ThemeProvider, useTheme, DESIGN_TOKENS } from './theme/ThemeContext';
+import { HomeScreen } from './screens/HomeScreen';
 import { MarketplaceScreen } from './screens/MarketplaceScreen';
 import { BidsHubScreen } from './screens/BidsHubScreen';
 import { AuctionsHubScreen } from './screens/AuctionsHubScreen';
 import { OrdersKnowledgeScreen } from './screens/OrdersKnowledgeScreen';
+import { CategoriesScreen } from './screens/CategoriesScreen';
 import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
-import { PortalsDirectoryScreen } from './screens/PortalsDirectoryScreen';
+import { HelpScreen } from './screens/HelpScreen';
+import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
+import type { MarketplaceCategory } from './services/MarketplaceService';
 
-export type ProductionTab = 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL';
+export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
+export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
 
-const PRODUCTION_TABS: { id: ProductionTab; label: string; icon: string }[] = [
-  { id: 'MARKET', label: 'Market', icon: '◈' },
-  { id: 'BIDS', label: 'Bids', icon: '▦' },
-  { id: 'AUCTIONS', label: 'Auctions', icon: '↘' },
-  { id: 'ORDERS', label: 'Contracts', icon: '▤' },
-  { id: 'PORTAL', label: 'Portal', icon: '◎' },
+const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: string }[] = [
+  { id: 'HOME', label: 'Home', icon: '🏠' },
+  { id: 'SEARCH', label: 'Search', icon: '🔍' },
+  { id: 'BIDS', label: 'Bids', icon: '📄' },
+  { id: 'AUCTIONS', label: 'Auctions', icon: '⚡' },
+  { id: 'MORE', label: 'More', icon: '⋯' },
 ];
 
 const MainAppContent: React.FC = () => {
-  const { colors, toggleColorMode, isDark, fontScale, setFontScale, fontMultiplier } = useTheme();
-  const { width } = useWindowDimensions();
-  const isCompactHeader = width < 420;
+  const { colors, fontMultiplier, isDark } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<ProductionTab>('MARKET');
-  const [portalMode, setPortalMode] = useState<'DIRECTORY' | 'REGISTRATION'>('DIRECTORY');
+  const [activeTab, setActiveTab] = useState<MainTab>('HOME');
+  const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
   const [bids, setBids] = useState<DeconstructedBidDoc[]>(GeMLiveSyncService.getLiveBids());
   const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
   const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [cloudConnected, setCloudConnected] = useState<boolean>(true);
 
   // Quick lookup modal
   const [showLookupModal, setShowLookupModal] = useState<boolean>(false);
@@ -75,13 +85,11 @@ const MainAppContent: React.FC = () => {
 
       if (combined && combined.length > 0) {
         setBids(combined);
-        setCloudConnected(true);
       }
       if (profile) setUserProfile(profile);
       if (pulse) setMarketPulse(pulse);
     } catch {
       setBids(GeMLiveSyncService.getLiveBids());
-      setCloudConnected(true);
     } finally {
       setIsSyncing(false);
     }
@@ -120,209 +128,293 @@ const MainAppContent: React.FC = () => {
     }
   }, [bids, lookupInput]);
 
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? colors.background : colors.primaryDark }]}>
-      <StatusBar barStyle="light-content" backgroundColor={isDark ? colors.background : colors.primaryDark} />
+  const handleHomeNavigate = (target: string) => {
+    if (target === 'MARKET') {
+      setActiveTab('SEARCH');
+      setSubScreen('NONE');
+    } else if (target === 'BIDS') {
+      setActiveTab('BIDS');
+      setSubScreen('NONE');
+    } else if (target === 'AUCTIONS') {
+      setActiveTab('AUCTIONS');
+      setSubScreen('NONE');
+    } else if (target === 'ORDERS') {
+      setSubScreen('CONTRACTS');
+    } else if (target === 'CATEGORIES') {
+      setSubScreen('CATEGORIES');
+    } else if (target === 'HELP') {
+      setSubScreen('HELP');
+    } else if (target === 'MORE') {
+      setActiveTab('MORE');
+      setSubScreen('NONE');
+    } else if (target === 'REG_BUYER') {
+      setSubScreen('REG_BUYER');
+    } else if (target === 'REG_SELLER') {
+      setSubScreen('REG_SELLER');
+    }
+  };
 
-      {/* National identity accent */}
-      <View style={styles.tricolorBar} accessibilityLabel="National colour accent">
+  const handleSelectCategory = (cat: MarketplaceCategory) => {
+    setSubScreen('NONE');
+    setActiveTab('SEARCH');
+  };
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.surface}
+      />
+
+      {/* Tricolor National Accent Micro-bar */}
+      <View style={styles.tricolorBar}>
         <View style={{ flex: 1, backgroundColor: '#FF9933' }} />
         <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
         <View style={{ flex: 1, backgroundColor: '#138808' }} />
       </View>
 
-      {/* Shared application header */}
-      <View style={[styles.topBar, { backgroundColor: isDark ? colors.surface : colors.primary }]}>
-        <View style={styles.brandRow}>
-          <View style={[styles.brandMark, { backgroundColor: isDark ? colors.primary : '#FFFFFF' }]}>
-            <Text style={[styles.brandMarkText, { color: isDark ? colors.textInverse : colors.primary }]}>G</Text>
+      {/* 56px NotebookLM-Inspired Sticky Top Header */}
+      <View
+        style={[
+          styles.headerBar,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        {/* Left: GeM Brand */}
+        <Pressable
+          style={styles.brandRow}
+          onPress={() => {
+            setActiveTab('HOME');
+            setSubScreen('NONE');
+          }}
+        >
+          <View style={[styles.flagPill, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={styles.flagEmoji}>🇮🇳</Text>
           </View>
-          <View>
-            <Text style={[styles.headerTitle, { fontSize: (isCompactHeader ? 14 : 15) * fontMultiplier }]}>GeM companion</Text>
-            <Text style={styles.headerSubtitle}>{isCompactHeader ? 'Public procurement discovery' : 'Marketplace discovery · gem.gov.in'}</Text>
+          <View style={styles.brandTextCol}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.brandGeM, { color: colors.primary }]}>GeM</Text>
+              <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
+            </View>
+            <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
+              Government e-Marketplace
+            </Text>
           </View>
-        </View>
+        </Pressable>
 
-        <View style={styles.controlsRow}>
-          <TouchButton
-            title={isSyncing ? 'Syncing' : 'Connected'}
-            variant="ghost"
-            size="small"
-            onPress={loadData}
-            textStyle={{ color: '#86EFAC', fontSize: 10, fontWeight: '800' }}
-            style={styles.statusPill}
-          />
-
-          <TouchButton
-            title={isDark ? 'Light' : 'Dark'}
-            variant="ghost"
-            size="small"
-            onPress={toggleColorMode}
-            textStyle={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}
-            style={styles.iconBtn}
-          />
-
-          <TouchButton
-            title={fontScale === 'small' ? 'A-' : fontScale === 'large' ? 'A+' : 'A'}
-            variant="ghost"
-            size="small"
-            onPress={() => {
-              setFontScale(fontScale === 'small' ? 'medium' : fontScale === 'medium' ? 'large' : 'small');
-            }}
-            textStyle={{ color: '#FFFFFF', fontSize: 12, fontWeight: '900' }}
-            style={styles.iconBtn}
-          />
-
-          <TouchButton
-            title="Lookup"
-            variant="ghost"
-            size="small"
+        {/* Right: Notifications & Profile Avatar */}
+        <View style={styles.headerRightActions}>
+          <Pressable
+            style={styles.headerIconBtn}
             onPress={() => setShowLookupModal(true)}
-            textStyle={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}
-            style={styles.iconBtn}
-          />
+            hitSlop={8}
+            accessibilityLabel="Instant bid lookup"
+          >
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>🔍</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => Alert.alert('Notifications', 'All your bids and contracts are up to date.')}
+            hitSlop={8}
+            accessibilityLabel="Notifications"
+          >
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>🔔</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.profileAvatar, { backgroundColor: colors.primary }]}
+            onPress={() => {
+              setActiveTab('MORE');
+              setSubScreen('NONE');
+            }}
+            hitSlop={8}
+            accessibilityLabel="Profile menu"
+          >
+            <Text style={[styles.avatarInitial, { color: colors.textInverse }]}>S</Text>
+          </Pressable>
         </View>
       </View>
 
       {/* Screen Body */}
       <View style={[styles.screenBody, { backgroundColor: colors.background }]}>
-        {activeTab === 'MARKET' && <MarketplaceScreen />}
-        {activeTab === 'BIDS' && (
-          <BidsHubScreen
-            bids={bids}
-            userProfile={userProfile}
-            mode="all"
-            onSyncLive={loadData}
-            isSyncing={isSyncing}
+        {/* Sub-screens taking full overlay view */}
+        {subScreen === 'CATEGORIES' && (
+          <CategoriesScreen
+            onSelectCategory={handleSelectCategory}
+            onBack={() => setSubScreen('NONE')}
           />
         )}
-        {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
-        {activeTab === 'ORDERS' && <OrdersKnowledgeScreen />}
-        {activeTab === 'PORTAL' && (
+        {subScreen === 'CONTRACTS' && (
           <View style={{ flex: 1 }}>
-            <View style={[styles.portalSubTabRow, { backgroundColor: isDark ? colors.surface : colors.surfaceSubtle, borderBottomColor: colors.border }]}>
-              <TouchButton
-                title="🏛️ Sub-Domains Directory"
-                variant={portalMode === 'DIRECTORY' ? 'primary' : 'ghost'}
-                size="small"
-                onPress={() => setPortalMode('DIRECTORY')}
-                style={{ flex: 1 }}
-                textStyle={{ fontSize: 11, fontWeight: '800' }}
-              />
-              <TouchButton
-                title="📝 Buyer/Seller Signup"
-                variant={portalMode === 'REGISTRATION' ? 'primary' : 'ghost'}
-                size="small"
-                onPress={() => setPortalMode('REGISTRATION')}
-                style={{ flex: 1 }}
-                textStyle={{ fontSize: 11, fontWeight: '800' }}
-              />
+            <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+              <Pressable onPress={() => setSubScreen('NONE')} hitSlop={10} style={styles.backBtn}>
+                <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
+              </Pressable>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Executed Contracts</Text>
             </View>
-            {portalMode === 'DIRECTORY' ? <PortalsDirectoryScreen /> : <PortalRegistrationScreen />}
+            <OrdersKnowledgeScreen />
           </View>
+        )}
+        {subScreen === 'REG_BUYER' && (
+          <PortalRegistrationScreen
+            initialMode="BUYER"
+            onBack={() => setSubScreen('NONE')}
+          />
+        )}
+        {subScreen === 'REG_SELLER' && (
+          <PortalRegistrationScreen
+            initialMode="SELLER"
+            onBack={() => setSubScreen('NONE')}
+          />
+        )}
+        {subScreen === 'HELP' && (
+          <HelpScreen onBack={() => setSubScreen('NONE')} />
+        )}
+
+        {/* Primary Tab Views */}
+        {subScreen === 'NONE' && (
+          <>
+            {activeTab === 'HOME' && (
+              <HomeScreen
+                bids={bids}
+                onNavigateTab={handleHomeNavigate}
+                onSelectBid={(bid) => setSelectedBid(bid)}
+              />
+            )}
+            {activeTab === 'SEARCH' && <MarketplaceScreen />}
+            {activeTab === 'BIDS' && (
+              <BidsHubScreen
+                bids={bids}
+                userProfile={userProfile}
+                onSyncLive={loadData}
+                isSyncing={isSyncing}
+                onInspectBid={(bid) => setSelectedBid(bid)}
+              />
+            )}
+            {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
+            {activeTab === 'MORE' && (
+              <MoreProfileScreen onNavigateTab={handleHomeNavigate} />
+            )}
+          </>
         )}
       </View>
 
-      {/* Primary navigation */}
-      <View style={[styles.bottomNav, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        {PRODUCTION_TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
+      {/* 64px Fixed Bottom Navigation Bar */}
+      <View
+        style={[
+          styles.bottomNav,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+          },
+        ]}
+      >
+        {BOTTOM_NAV_ITEMS.map((item) => {
+          const isActive = activeTab === item.id && subScreen === 'NONE';
           return (
             <Pressable
-              key={tab.id}
-              onPress={() => setActiveTab(tab.id)}
+              key={item.id}
+              onPress={() => {
+                setActiveTab(item.id);
+                setSubScreen('NONE');
+              }}
               style={[
-                styles.navTabItem,
+                styles.navItem,
                 isActive && {
-                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : 'rgba(11, 59, 96, 0.08)',
+                  backgroundColor: colors.primaryTint,
                 },
               ]}
               hitSlop={6}
             >
-              <Text style={[styles.navTabIcon, isActive && styles.navTabIconActive]}>{tab.icon}</Text>
               <Text
                 style={[
-                  styles.navTabText,
+                  styles.navIcon,
                   {
-                    color: isActive ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted,
-                    fontWeight: isActive ? '800' : '600',
+                    color: isActive ? colors.primary : colors.textMuted,
+                    fontSize: isActive ? 18 : 16,
                   },
                 ]}
               >
-                {tab.label}
+                {item.icon}
               </Text>
-              {isActive && (
-                <View
-                  style={[
-                    styles.navActiveDot,
-                    { backgroundColor: isDark ? '#38BDF8' : '#0B3B60' },
-                  ]}
-                />
-              )}
+              <Text
+                style={[
+                  styles.navLabel,
+                  {
+                    color: isActive ? colors.primary : colors.textMuted,
+                    fontWeight: isActive ? '700' : '500',
+                    fontSize: 11 * fontMultiplier,
+                  },
+                ]}
+              >
+                {item.label}
+              </Text>
             </Pressable>
           );
         })}
       </View>
 
-      {/* Modal: bid lookup */}
+      {/* Quick Bid Lookup Modal */}
       <Modal visible={showLookupModal} animationType="slide" transparent onRequestClose={() => setShowLookupModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.lookupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.lookupHeader}>
-              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>Bid lookup</Text>
-              <TouchButton
-                title="✕"
-                variant="ghost"
-                size="small"
-                onPress={() => setShowLookupModal(false)}
-              />
+              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>Quick Bid Search</Text>
+              <Pressable onPress={() => setShowLookupModal(false)} hitSlop={10}>
+                <Text style={[styles.lookupClose, { color: colors.textMuted }]}>✕</Text>
+              </Pressable>
             </View>
-            <Text style={[styles.lookupSub, { color: colors.textMuted }]}>
-              Search a bid number or title to inspect the locally available record before opening the official document.
+            <Text style={[styles.lookupDesc, { color: colors.textSecondary }]}>
+              Enter any GeM Bid Number to instantly inspect specifications and requirements.
             </Text>
-
             <TextInput
-              style={[styles.lookupInput, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', color: colors.textPrimary, borderColor: colors.border }]}
+              style={[
+                styles.lookupInput,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.border,
+                  color: colors.textPrimary,
+                },
+              ]}
               placeholder="e.g. GEM/2026/B/890123"
               placeholderTextColor={colors.textMuted}
               value={lookupInput}
               onChangeText={setLookupInput}
               autoCapitalize="characters"
+              onSubmitEditing={handleQuickLookup}
+              returnKeyType="search"
             />
-
-            <View style={styles.quickPills}>
-              <TouchButton
-                title="Solar LED #890123"
-                variant="secondary"
-                size="small"
-                onPress={() => setLookupInput('GEM/2026/B/890123')}
-              />
-              <TouchButton
-                title="PoE Switches #890456"
-                variant="secondary"
-                size="small"
-                onPress={() => setLookupInput('GEM/2026/B/890456')}
-              />
+            <View style={styles.lookupBtnRow}>
+              <Pressable
+                style={[styles.lookupCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setShowLookupModal(false)}
+              >
+                <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.lookupSubmitBtn, { backgroundColor: colors.primary }]}
+                onPress={handleQuickLookup}
+              >
+                <Text style={{ color: colors.textInverse, fontWeight: '700' }}>Search Bid</Text>
+              </Pressable>
             </View>
-
-            <TouchButton
-              title="View bid details"
-              variant="primary"
-              size="medium"
-              onPress={handleQuickLookup}
-              style={{ marginTop: 12 }}
-            />
           </View>
         </View>
       </Modal>
 
-      {/* Zero-PDF Bid Inspector Modal */}
-      <BidInspectorScreen
-        bid={selectedBid}
-        visible={!!selectedBid}
-        onClose={() => setSelectedBid(null)}
-        userProfile={userProfile}
-      />
+      {/* Bid Detail Modal */}
+      {selectedBid && (
+        <BidInspectorScreen
+          bid={selectedBid}
+          userProfile={userProfile}
+          visible={true}
+          onClose={() => setSelectedBid(null)}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -336,101 +428,169 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  tricolorBar: { height: 3.5, flexDirection: 'row' },
-  portalSubTabRow: {
+  safeArea: {
+    flex: 1,
+  },
+  tricolorBar: {
+    height: 3,
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 8,
+  },
+  headerBar: {
+    height: DESIGN_TOKENS.headerHeight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
-  topBar: {
+  brandRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 11,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
-  brandMark: {
+  flagPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  flagEmoji: {
+    fontSize: 16,
+  },
+  brandTextCol: {},
+  brandGeM: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: 6,
+  },
+  brandSubtitle: {
+    fontSize: 10,
+    marginTop: -2,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  headerIconText: {
+    fontSize: 16,
+  },
+  profileAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
-  brandMarkText: { fontSize: 17, fontWeight: '900' },
-  headerTitle: { color: '#FFFFFF', fontWeight: '900', letterSpacing: -0.3 },
-  headerSubtitle: { color: '#B9D5EC', fontSize: 9.5, fontWeight: '600', marginTop: 1 },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
-  statusPill: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderRadius: 999,
-    minHeight: 30,
-    paddingHorizontal: 9,
+  avatarInitial: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  iconBtn: {
-    minHeight: 30,
-    paddingHorizontal: 7,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  screenBody: {
+    flex: 1,
   },
-  screenBody: { flex: 1 },
-  bottomNav: {
+  subHeaderBar: {
+    height: 48,
     flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingTop: 7,
-    paddingBottom: 9,
-    paddingHorizontal: 10,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  backBtn: {
+    marginRight: 10,
+    padding: 4,
+  },
+  backArrow: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  subHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  bottomNav: {
+    height: DESIGN_TOKENS.bottomNavHeight,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
+    borderTopWidth: 1,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
   },
-  navTabItem: {
+  navItem: {
     flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 3,
-    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    height: 52,
+    borderRadius: 12,
+    paddingVertical: 4,
   },
-  navTabIcon: { fontSize: 18, lineHeight: 20, marginBottom: 2, fontWeight: '800' },
-  navTabIconActive: { transform: [{ scale: 1.1 }] },
-  navTabText: { fontSize: 10, letterSpacing: -0.1 },
-  navActiveDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 2,
+  navIcon: {
+    marginBottom: 2,
   },
+  navLabel: {},
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
+    padding: 20,
   },
   lookupCard: {
-    width: '100%',
-    borderRadius: 14,
+    borderRadius: 16,
+    borderWidth: 1,
     padding: 18,
-    borderWidth: 1,
-    elevation: 8,
   },
-  lookupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  lookupTitle: { fontSize: 16, fontWeight: '900' },
-  lookupSub: { fontSize: 11.5, lineHeight: 16, marginBottom: 12 },
-  lookupInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
+  lookupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  lookupTitle: {
+    fontSize: 17,
     fontWeight: '700',
-    marginBottom: 8,
   },
-  quickPills: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  lookupClose: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  lookupDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  lookupInput: {
+    height: 44,
+    borderRadius: DESIGN_TOKENS.inputRadius,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  lookupBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  lookupCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  lookupSubmitBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
 });

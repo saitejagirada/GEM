@@ -1,35 +1,70 @@
 /**
- * GeM Contracts & Statutory Knowledge Screen
- * Replicates https://gem.gov.in/view_contracts and post-award transparency:
- * - 5 Verified Executed Public Contracts (₹1.32 Cr CVC Pre-qualification)
- * - Statutory 10-Day CRAC Deemed Acceptance Rule (carting restriction for errant buyers)
- * - PFMS Treasury Disbursement Tracker
- * - Public Contract Search link (view_contracts)
+ * GeM Executed Contracts Screen
+ * Conforms to Screen 5 of the GeM Mobile UI Specification:
+ * - SearchField: "Search contract number, department or item"
+ * - Filter chips: All, Ministry, Department, CRAC Verified, Filters [icon]
+ * - Verified Contract Cards with CRAC VERIFIED status badge, contract number,
+ *   title, buyer department, and 2x2 Meta Grid (Order Value, Status, PFMS UTR, Delivery SLA)
+ * - Outline [View Details] action and official document access
+ * - Contract Detail modal
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
+  FlatList,
+  Modal,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
 import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
-import { TouchButton } from '../components/TouchButton';
-import { useTheme } from '../theme/ThemeContext';
-import { formatInr, formatLakhs } from '../utils/formatters';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import {
+  SearchField,
+  CompactChip,
+  StatusBadge,
+  PrimaryButton,
+  SecondaryButton,
+  FilterBottomSheetModal,
+} from '../components/SharedUI';
+import { formatInr, formatDateSafe } from '../utils/formatters';
 import type { AcceptedOrder } from '../types/index';
-import { DataNotice } from '../components/DataNotice';
 
 export const OrdersKnowledgeScreen: React.FC = () => {
-  const { colors, fontMultiplier, isDark } = useTheme();
+  const { colors, fontMultiplier } = useTheme();
 
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'CRAC' | 'DEFENCE' | 'RAILWAYS'>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<AcceptedOrder | null>(null);
+  const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
 
-  const totalAcceptedValueInr = MOCK_ACCEPTED_ORDERS.reduce((acc, o) => acc + o.orderValueInr, 0);
+  const filteredOrders = useMemo(() => {
+    return MOCK_ACCEPTED_ORDERS.filter((order) => {
+      if (activeFilter === 'CRAC' && order.cracStatus !== 'CRAC_ACCEPTED' && order.cracStatus !== 'PAYMENT_DISBURSED') {
+        return false;
+      }
+      if (activeFilter === 'DEFENCE' && !order.ministry.toLowerCase().includes('defence')) {
+        return false;
+      }
+      if (activeFilter === 'RAILWAYS' && !order.ministry.toLowerCase().includes('railway')) {
+        return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesContract = order.contractNumber.toLowerCase().includes(q);
+        const matchesTitle = order.title.toLowerCase().includes(q);
+        const matchesDept = order.buyerDepartment.toLowerCase().includes(q);
+        if (!matchesContract && !matchesTitle && !matchesDept) return false;
+      }
+
+      return true;
+    });
+  }, [activeFilter, searchQuery]);
 
   const openContractsPortal = useCallback(() => {
     Linking.openURL('https://gem.gov.in/view_contracts').catch(() => {
@@ -37,190 +72,425 @@ export const OrdersKnowledgeScreen: React.FC = () => {
     });
   }, []);
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <DataNotice>Contract discovery · Values and workflow details should be checked against the official contract record.</DataNotice>
-      {/* Top Banner: Public Transparency */}
-      <View style={[styles.topBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View>
-          <Text style={[styles.topBannerTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-            Contracts &amp; order records
-          </Text>
-          <Text style={[styles.topBannerSub, { color: colors.textMuted }]}>
-            Review contract values, CRAC milestones and PFMS references in one place.
+  const renderContractCard = ({ item }: { item: AcceptedOrder }) => {
+    const isCracVerified = item.cracStatus === 'CRAC_ACCEPTED' || item.cracStatus === 'PAYMENT_DISBURSED';
+
+    return (
+      <View
+        style={[
+          styles.contractCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        {/* Card Header: CRAC VERIFIED Badge + Contract Number */}
+        <View style={styles.cardHeaderRow}>
+          <StatusBadge
+            label={isCracVerified ? 'CRAC VERIFIED' : 'PENDING'}
+            tone={isCracVerified ? 'success' : 'warning'}
+            dot
+          />
+          <Text style={[styles.contractNumber, { color: colors.textSecondary }]}>
+            {item.contractNumber}
           </Text>
         </View>
 
-        <TouchButton
-          title="Search All GeM Contracts (gem.gov.in) ➔"
-          variant="outline"
-          size="small"
-          icon="🌐"
-          onPress={openContractsPortal}
-          style={{ marginTop: 8 }}
+        {/* Title & Department */}
+        <Text
+          style={[styles.contractTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
+          numberOfLines={2}
+        >
+          {item.title}
+        </Text>
+
+        <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
+          {item.buyerDepartment} • {item.ministry}
+        </Text>
+
+        {/* 2x2 Meta Grid: Order Value, Status, PFMS UTR, Delivery SLA */}
+        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>ORDER VALUE</Text>
+            <Text style={[styles.metricValue, { color: colors.primary }]}>
+              {formatInr(item.orderValueInr)}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>STATUS</Text>
+            <Text style={[styles.metricValue, { color: colors.emerald }]}>
+              {item.cracStatus === 'PAYMENT_DISBURSED' ? 'Accepted & Disbursed' : 'CRAC Accepted'}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>PFMS UTR</Text>
+            <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
+              {item.pfmsUtrNumber || 'PFMS-TREASURY-01'}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>DELIVERY SLA</Text>
+            <Text
+              style={[
+                styles.metricValue,
+                { color: item.slaCompliance === 'EARLY_DELIVERY' ? colors.success : colors.textPrimary },
+              ]}
+            >
+              {item.slaCompliance === 'EARLY_DELIVERY' ? 'Completed Early' : 'Completed On Time'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Button: Outline View Details */}
+        <SecondaryButton
+          label="View Contract Details"
+          onPress={() => setSelectedOrder(item)}
+          style={{ marginTop: 4 }}
         />
       </View>
+    );
+  };
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* CRAC workflow reference */}
-        <View style={[styles.cracCard, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
-          <View style={styles.cracHeaderRow}>
-            <Text style={styles.cracIcon}>⚖️</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cracTitle, { color: '#1E40AF' }]}>
-                CRAC 10-day workflow reference
-              </Text>
-              <Text style={[styles.cracSub, { color: '#3B82F6' }]}>
-                Confirm the current policy and order terms on the official portal
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.cracBody}>
-            Use this card as a workflow reminder only. The applicable CRAC window, acceptance path and payment steps depend on the current order terms and official GeM guidance.
-          </Text>
-        </View>
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Search & Filter Toolbar */}
+      <View style={styles.topSection}>
+        <SearchField
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search contract number, department or item"
+          style={{ marginBottom: 10 }}
+        />
 
-        {/* 5 Verified Orders Showcase */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>
-            Executed contract records ({MOCK_ACCEPTED_ORDERS.length})
-          </Text>
-          <View style={[styles.volPill, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={styles.volPillText}>Total: {formatLakhs(totalAcceptedValueInr)}</Text>
-          </View>
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipRow}
+        >
+          <CompactChip
+            label="Filters"
+            icon="⚙️"
+            selected={showFilterModal}
+            onPress={() => setShowFilterModal(true)}
+          />
+          <CompactChip
+            label="All Contracts"
+            selected={activeFilter === 'ALL'}
+            onPress={() => setActiveFilter('ALL')}
+          />
+          <CompactChip
+            label="CRAC Verified"
+            selected={activeFilter === 'CRAC'}
+            onPress={() => setActiveFilter('CRAC')}
+          />
+          <CompactChip
+            label="Defence"
+            selected={activeFilter === 'DEFENCE'}
+            onPress={() => setActiveFilter('DEFENCE')}
+          />
+          <CompactChip
+            label="Railways"
+            selected={activeFilter === 'RAILWAYS'}
+            onPress={() => setActiveFilter('RAILWAYS')}
+          />
+        </ScrollView>
+      </View>
 
-        {MOCK_ACCEPTED_ORDERS.map((order) => (
-          <View
-            key={order.contractNumber}
-            style={[styles.orderCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          >
-            <View style={styles.orderTopRow}>
-              <View style={[styles.orderStatusPill, { backgroundColor: '#DCFCE7' }]}>
-                <Text style={styles.orderStatusText}>CRAC {order.cracStatus}</Text>
-              </View>
-              <Text style={[styles.contractNum, { color: colors.textMuted }]}>{order.contractNumber}</Text>
-            </View>
-
-            <Text style={[styles.orderTitle, { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier }]}>
-              {order.title}
+      {/* Contract List */}
+      <FlatList
+        data={filteredOrders}
+        keyExtractor={(item) => item.contractNumber}
+        renderItem={renderContractCard}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyEmoji}>📑</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No contracts found</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Try clearing search terms or selecting &quot;All Contracts&quot;.
             </Text>
+          </View>
+        }
+      />
 
-            <Text style={[styles.buyerText, { color: colors.textMuted }]}>
-              Buyer: <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>{order.buyerDepartment}</Text> • {order.ministry}
-            </Text>
+      {/* Filter Bottom Sheet */}
+      <FilterBottomSheetModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        title="Filter Executed Contracts"
+        onReset={() => setActiveFilter('ALL')}
+        onApply={() => {}}
+      >
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary }]}>Ministry / Department</Text>
+        <View style={styles.sheetPillWrap}>
+          {[
+            { id: 'ALL', label: 'All Ministries' },
+            { id: 'DEFENCE', label: 'Ministry of Defence' },
+            { id: 'RAILWAYS', label: 'Ministry of Railways' },
+            { id: 'CRAC', label: 'CRAC Disbursed Only' },
+          ].map((item) => (
+            <CompactChip
+              key={item.id}
+              label={item.label}
+              selected={activeFilter === item.id}
+              onPress={() => setActiveFilter(item.id as typeof activeFilter)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
+      </FilterBottomSheetModal>
 
-            <View style={[styles.metaGrid, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC' }]}>
-              <View style={styles.metaCell}>
-                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CONTRACT VALUE</Text>
-                <Text style={[styles.metaValue, { color: colors.emerald }]}>
-                  {formatLakhs(order.orderValueInr)}
-                </Text>
+      {/* Contract Detail Modal */}
+      {selectedOrder && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedOrder(null)}>
+          <View style={styles.modalOverlay}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setSelectedOrder(null)} />
+            <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={[styles.modalContractNum, { color: colors.primary }]}>
+                    {selectedOrder.contractNumber}
+                  </Text>
+                  <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                    {selectedOrder.title}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setSelectedOrder(null)} hitSlop={10}>
+                  <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>
+                </Pressable>
               </View>
-              <View style={styles.metaCell}>
-                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CRAC STATUS</Text>
-                <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{order.cracStatus}</Text>
-              </View>
-              <View style={styles.metaCell}>
-                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>PFMS UTR</Text>
-                <Text style={[styles.metaValue, { color: colors.primary }]}>{order.pfmsUtrNumber || 'PFMS-TREASURY-DBT'}</Text>
-              </View>
-              <View style={styles.metaCell}>
-                <Text style={[styles.metaLabel, { color: colors.textMuted }]}>SLA COMPLIANCE</Text>
-                <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{order.slaCompliance}</Text>
-              </View>
-            </View>
 
-            <View style={{ marginTop: 8 }}>
-              <TouchButton
-                title="View Inspection &amp; PFMS Details"
-                variant="outline"
-                size="small"
-                icon="📄"
-                onPress={() =>
-                  Alert.alert(
-                    `Contract: ${order.contractNumber}`,
-                    `Title: ${order.title}\nBuyer: ${order.buyerDepartment}\nMinistry: ${order.ministry}\nOrder Value: ${formatLakhs(order.orderValueInr)}\nOrder Date: ${order.orderDate}\nCRAC Acceptance: ${order.cracStatus} (${order.cracDate || 'Verified'})\nInvoice: ${order.invoiceNumber}\nPFMS UTR: ${order.pfmsUtrNumber || 'Disbursed via RBI e-Kuber'}`
-                  )
-                }
-              />
+              <ScrollView style={styles.modalBody}>
+                <View style={[styles.detailSection, { borderBottomColor: colors.borderSubtle }]}>
+                  <Text style={[styles.detailSecTitle, { color: colors.textPrimary }]}>Buyer Establishment</Text>
+                  <Text style={[styles.detailVal, { color: colors.textSecondary }]}>
+                    {selectedOrder.buyerDepartment}
+                  </Text>
+                  <Text style={[styles.detailVal, { color: colors.textSecondary }]}>
+                    {selectedOrder.ministry}
+                  </Text>
+                </View>
+
+                <View style={[styles.detailSection, { borderBottomColor: colors.borderSubtle }]}>
+                  <Text style={[styles.detailSecTitle, { color: colors.textPrimary }]}>Commercial Value & Payment</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailKey, { color: colors.textSecondary }]}>Order Value:</Text>
+                    <Text style={[styles.detailValBold, { color: colors.primary }]}>
+                      {formatInr(selectedOrder.orderValueInr)}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailKey, { color: colors.textSecondary }]}>Quantity Delivered:</Text>
+                    <Text style={[styles.detailValBold, { color: colors.textPrimary }]}>
+                      {selectedOrder.quantity.toLocaleString()} Units
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailKey, { color: colors.textSecondary }]}>CRAC Acceptance Date:</Text>
+                    <Text style={[styles.detailValBold, { color: colors.textPrimary }]}>
+                      {selectedOrder.cracDate}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailKey, { color: colors.textSecondary }]}>PFMS Bank UTR:</Text>
+                    <Text style={[styles.detailValBold, { color: colors.emerald }]}>
+                      {selectedOrder.pfmsUtrNumber || 'Disbursed via PFMS'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ marginTop: 12 }}>
+                  <Text style={[styles.detailSecTitle, { color: colors.textPrimary }]}>
+                    Statutory CRAC 10-Day Rule
+                  </Text>
+                  <Text style={[styles.cracRuleText, { color: colors.textSecondary }]}>
+                    Per Ministry of Finance OM No. F.1/26/2018-PPD, once consignee receives goods, 10-day deemed acceptance automatically triggers if no rejection is logged, preventing carting delays for MSMEs.
+                  </Text>
+                </View>
+              </ScrollView>
+
+              <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+                <SecondaryButton
+                  label="Close"
+                  onPress={() => setSelectedOrder(null)}
+                  style={{ flex: 1, marginRight: 8 }}
+                />
+                <PrimaryButton
+                  label="Search All Contracts (gem.gov.in) ↗"
+                  onPress={openContractsPortal}
+                  style={{ flex: 1.6 }}
+                />
+              </View>
             </View>
           </View>
-        ))}
-
-        {/* Public Transparency Statement */}
-        <View style={[styles.publicNotice, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
-          <Text style={[styles.publicNoticeText, { color: colors.textMuted }]}>
-            This screen is a discovery and workflow companion. Use the linked official portal for the authoritative contract, payment and vendor record.
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </Modal>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  topBanner: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
+  container: {
+    flex: 1,
   },
-  topBannerTitle: { fontWeight: '900', letterSpacing: -0.2 },
-  topBannerSub: { fontSize: 11.5, marginTop: 2 },
-  scrollContent: { padding: 12, paddingBottom: 40 },
-  cracCard: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 14,
+  topSection: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 8,
   },
-  cracHeaderRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 },
-  cracIcon: { fontSize: 20 },
-  cracTitle: { fontSize: 12.5, fontWeight: '800' },
-  cracSub: { fontSize: 10, marginTop: 1 },
-  cracBody: { fontSize: 11.5, color: '#1E293B', lineHeight: 17 },
-  sectionHeader: {
+  filterChipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
   },
-  sectionTitle: { fontWeight: '800' },
-  volPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  volPillText: { color: '#15803D', fontSize: 10.5, fontWeight: '800' },
-  orderCard: {
-    borderRadius: 14,
+  listContent: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingTop: 4,
+    paddingBottom: 40,
+  },
+  contractCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  orderStatusPill: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 4 },
-  orderStatusText: { color: '#15803D', fontSize: 9.5, fontWeight: '800' },
-  contractNum: { fontSize: 11, fontWeight: '700' },
-  orderTitle: { fontWeight: '800', lineHeight: 18, marginBottom: 4 },
-  buyerText: { fontSize: 11, marginBottom: 8 },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  contractNumber: {
+    fontSize: 12,
+    fontWeight: '650',
+  },
+  contractTitle: {
+    fontWeight: '700',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  deptText: {
+    fontSize: 12,
+    marginBottom: 10,
+  },
   metaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    padding: 8,
-    borderRadius: 8,
-  },
-  metaCell: { width: '48%' },
-  metaLabel: { fontSize: 8.5, fontWeight: '800', marginBottom: 2 },
-  metaValue: { fontSize: 11, fontWeight: '800' },
-  publicNotice: {
-    padding: 12,
     borderRadius: 10,
-    marginTop: 8,
+    padding: 8,
+    marginBottom: 10,
   },
-  publicNoticeText: { fontSize: 11, lineHeight: 16, textAlign: 'center' },
+  metricItem: {
+    width: '50%',
+    padding: 4,
+  },
+  metricLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
+  emptyEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  sheetSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  sheetPillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    maxHeight: '80%',
+    paddingBottom: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  modalContractNum: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    maxWidth: 280,
+  },
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+  },
+  detailSection: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  detailSecTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  detailVal: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  detailKey: {
+    fontSize: 12,
+  },
+  detailValBold: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cracRuleText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
 });

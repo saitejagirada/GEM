@@ -1,11 +1,12 @@
 /**
- * GeM Marketplace Screen - High-Performance Public Discovery Catalog
- * Replicates the official Government e-Marketplace catalog (mkp.gem.gov.in):
- * - 9 Popular Product Categories (IT, Autos, Furniture, Medical, Electrical, Stationery, etc.)
- * - Trending & Emerging Services (Security, Cabs, Manpower, Cloud, Drones)
- * - GeM Outlet Stores (Saras Ajeevika, ODOP, Startup Runway, Womaniya)
- * - GFR 149 Procurement Mode Calculator
- * - Virtualized FlatList for 60+ FPS zero-lag browsing
+ * GeM Marketplace Screen - NotebookLM-Inspired Procurement Catalog
+ * Conforms to Screen 2 of the GeM Mobile UI Specification:
+ * - SearchField with clean icon & clear button
+ * - SegmentedTabs (All, Products, Services)
+ * - Compact horizontal filter chips & Filter Bottom Sheet
+ * - 2-Column Popular Categories Grid
+ * - Clean Catalog Product Cards with INR formatting, ratings, OEM brands, and dual actions
+ * - Collapsible GFR 149 procurement calculator
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -14,10 +15,8 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   Modal,
   ScrollView,
-  SafeAreaView,
   Alert,
   Linking,
   Pressable,
@@ -26,48 +25,64 @@ import {
   MarketplaceService,
   MarketplaceItem,
   OFFICIAL_PRODUCT_CATEGORIES,
-  OFFICIAL_SERVICE_CATEGORIES,
-  OFFICIAL_OUTLET_STORES,
 } from '../services/MarketplaceService';
-import { TouchButton } from '../components/TouchButton';
-import { BrowseMegaMenuModal } from '../components/BrowseMegaMenuModal';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import {
+  SearchField,
+  SegmentedTabs,
+  CompactChip,
+  StatusBadge,
+  PrimaryButton,
+  SecondaryButton,
+  FilterBottomSheetModal,
+  SectionHeader,
+} from '../components/SharedUI';
 import { formatInr } from '../utils/formatters';
-import { DataNotice } from '../components/DataNotice';
+
+const POPULAR_2COL_CATEGORIES = [
+  { id: 'it-products', name: 'Computers & IT', icon: '💻', count: '1,420 items', tint: '#E8F1FF' },
+  { id: 'medical', name: 'Medical Supplies', icon: '🩺', count: '890 items', tint: '#E7F8EE' },
+  { id: 'office-furniture', name: 'Office Furniture', icon: '🪑', count: '640 items', tint: '#FFF4DB' },
+  { id: 'automobiles', name: 'Electric Vehicles', icon: '🚙', count: '310 items', tint: '#F0EAFE' },
+];
 
 export const MarketplaceScreen: React.FC = () => {
-  const { colors, fontMultiplier, isDark } = useTheme();
+  const { colors, fontMultiplier } = useTheme();
 
-  const [activeType, setActiveType] = useState<'ALL' | 'PRODUCT' | 'SERVICE'>('ALL');
+  const [activeTypeTab, setActiveTypeTab] = useState<'All' | 'Products' | 'Services'>('All');
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
-  const [selectedOutlet, setSelectedOutlet] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
-  const [showMegaMenu, setShowMegaMenu] = useState<boolean>(false);
+  const [savedItemIds, setSavedItemIds] = useState<Set<string>>(new Set());
+  const [comparedItemIds, setComparedItemIds] = useState<Set<string>>(new Set());
 
-  // GFR 149 Mode Calculator state
+  // Filter bottom sheet state
+  const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
+  const [filterBrand, setFilterBrand] = useState<string>('ALL');
+
+  // GFR 149 Accordion state
   const [isGfrExpanded, setIsGfrExpanded] = useState<boolean>(false);
-  const [gfrCalculatorValue, setGfrCalculatorValue] = useState<string>('');
-  const [gfrResult, setGfrResult] = useState<ReturnType<typeof MarketplaceService.evaluateGfrProcurementMode> | null>(null);
+  const [gfrOrderValue, setGfrOrderValue] = useState<number>(45000);
 
-  // Filter items
+  // Map active tab to service type
+  const serviceType = useMemo(() => {
+    if (activeTypeTab === 'Products') return 'PRODUCT';
+    if (activeTypeTab === 'Services') return 'SERVICE';
+    return 'ALL';
+  }, [activeTypeTab]);
+
+  // Query catalog
   const filteredItems = useMemo(() => {
-    return MarketplaceService.getItems({
-      type: activeType,
+    let items = MarketplaceService.getItems({
+      type: serviceType,
       category: selectedCategory,
-      outletStore: selectedOutlet,
       query: searchQuery,
     });
-  }, [activeType, selectedCategory, selectedOutlet, searchQuery]);
-
-  const handleCalculateGfr = useCallback(() => {
-    const val = parseInt(gfrCalculatorValue.replace(/[^0-9]/g, ''), 10);
-    if (!val || isNaN(val)) {
-      Alert.alert('Enter Order Value', 'Please enter a valid INR order value (e.g., 45000)');
-      return;
+    if (filterBrand !== 'ALL') {
+      items = items.filter((it) => it.oemBrand.toLowerCase().includes(filterBrand.toLowerCase()));
     }
-    setGfrResult(MarketplaceService.evaluateGfrProcurementMode(val));
-  }, [gfrCalculatorValue]);
+    return items;
+  }, [serviceType, selectedCategory, searchQuery, filterBrand]);
 
   const handleOpenGemPortal = useCallback((item?: MarketplaceItem) => {
     const targetUrl = item
@@ -78,471 +93,699 @@ export const MarketplaceScreen: React.FC = () => {
     });
   }, []);
 
-  // Fast Memoized Render Item
-  const renderItem = useCallback(
-    ({ item }: { item: MarketplaceItem }) => {
-      const isService = item.type === 'SERVICE';
-      return (
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {/* Top row: Category Badge & Outlet Badge */}
-          <View style={styles.cardHeader}>
-            <View style={[styles.categoryBadge, { backgroundColor: isService ? '#E0F2FE' : '#EDE9FE' }]}>
-              <Text style={[styles.categoryBadgeText, { color: isService ? '#0369A1' : '#6D28D9' }]}>
-                {isService ? '🛠️ SERVICE' : '📦 PRODUCT'} • {item.category}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              {item.outletStore ? (
-                <View style={styles.outletBadge}>
-                  <Text style={styles.outletBadgeText}>{item.outletStore.toUpperCase()}</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
+  const toggleSaveItem = (id: string) => {
+    setSavedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-          {/* Title */}
-          <Text
-            style={[styles.itemTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-            numberOfLines={2}
-          >
-            {item.title}
-          </Text>
+  const toggleCompareItem = (id: string) => {
+    setComparedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        if (next.size >= 3) {
+          Alert.alert('Comparison Limit', 'You can compare up to 3 items at a time.');
+          return prev;
+        }
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
-          {/* OEM / Brand */}
-          <Text style={[styles.oemText, { color: colors.textMuted }]}>
-            OEM / Brand: <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>{item.oemBrand}</Text>
-          </Text>
+  const gfrResult = useMemo(() => {
+    return MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue);
+  }, [gfrOrderValue]);
 
-          {/* L1 Price & Rating Banner */}
-          <View style={[styles.priceBox, { backgroundColor: isDark ? colors.surfaceSubtle : '#F0FDF4' }]}>
-            <View>
-              <Text style={[styles.l1Label, { color: '#15803D' }]}>REFERENCE PRICE</Text>
-              <Text style={[styles.l1Price, { color: colors.emerald, fontSize: 17 * fontMultiplier }]}>
-                ₹{formatInr(item.l1PriceInr)}
-                <Text style={[styles.priceUnit, { color: colors.textMuted }]}> {item.priceUnit}</Text>
-              </Text>
-            </View>
-            <View style={styles.ordersBadge}>
-              <Text style={styles.ordersBadgeText}>{item.rating} rating · {formatInr(item.totalOrders)} orders</Text>
-            </View>
-          </View>
+  // Header Component for FlatList
+  const renderListHeader = () => (
+    <View style={styles.headerWrapper}>
+      {/* Search Input */}
+      <SearchField
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search products, e.g. laptop, gloves..."
+        style={{ marginBottom: 12 }}
+      />
 
-          {/* Quick Specifications */}
-          <View style={[styles.specGrid, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC' }]}>
-            {Object.entries(item.specSummary).slice(0, 3).map(([key, val]) => (
-              <View key={key} style={styles.specRow}>
-                <Text style={[styles.specKey, { color: colors.textMuted }]}>{key}:</Text>
-                <Text style={[styles.specVal, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {val}
-                </Text>
-              </View>
-            ))}
-          </View>
+      {/* Segmented Tabs: All | Products | Services */}
+      <SegmentedTabs
+        options={['All', 'Products', 'Services']}
+        selected={activeTypeTab}
+        onSelect={(tab) => setActiveTypeTab(tab as 'All' | 'Products' | 'Services')}
+        style={{ marginBottom: 12 }}
+      />
 
-          {/* Actions: View Specifications & Open on GeM */}
-          <View style={styles.cardActions}>
-            <TouchButton
-              title="View details"
-              variant="outline"
-              size="small"
-              icon="📋"
-              onPress={() => setSelectedItem(item)}
-              style={{ flex: 1 }}
-            />
-            <TouchButton
-              title="Open official portal"
-              variant="primary"
-              size="small"
-              icon="🌐"
-              onPress={() => handleOpenGemPortal(item)}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
-      );
-    },
-    [colors, fontMultiplier, isDark, handleOpenGemPortal]
-  );
-
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <DataNotice />
-      {/* Top Search & Filter Bar */}
-      <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.searchRow}>
-          {/* Official GeM BROWSE Mega-Menu Button matching mkp.gem.gov.in */}
-          <TouchButton
-            title="BROWSE"
-            icon="☰"
-            variant="primary"
-            size="small"
-            onPress={() => setShowMegaMenu(true)}
-            style={styles.browseBtn}
-            textStyle={{ fontWeight: '900', fontSize: 11 }}
+      {/* Horizontal Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterChipScroll}
+        contentContainerStyle={styles.filterChipRow}
+      >
+        <CompactChip
+          label="Filters"
+          icon="⚙️"
+          selected={showFilterModal || filterBrand !== 'ALL'}
+          onPress={() => setShowFilterModal(true)}
+        />
+        <CompactChip
+          label="All"
+          selected={selectedCategory === 'All Categories'}
+          onPress={() => setSelectedCategory('All Categories')}
+        />
+        {OFFICIAL_PRODUCT_CATEGORIES.slice(0, 5).map((cat) => (
+          <CompactChip
+            key={cat.id}
+            label={cat.name}
+            selected={selectedCategory === cat.name}
+            onPress={() => setSelectedCategory(selectedCategory === cat.name ? 'All Categories' : cat.name)}
           />
+        ))}
+      </ScrollView>
 
-          <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search products, services or categories..."
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchButton
-                title="✕"
-                variant="ghost"
-                size="small"
-                onPress={() => setSearchQuery('')}
-                hitSlopPadding={4}
-              />
-            )}
-          </View>
-        </View>
-
-        <View style={styles.catalogIntro}>
-          <Text style={[styles.catalogIntroTitle, { color: colors.textPrimary }]}>Find what your department needs</Text>
-          <Text style={[styles.catalogIntroText, { color: colors.textMuted }]}>Browse products, services and initiative stores in one consistent catalogue.</Text>
-        </View>
-
-        {/* Type Segments: All | Products | Services */}
-        <View style={styles.typeRow}>
-          {(['ALL', 'PRODUCT', 'SERVICE'] as const).map((t) => (
-            <TouchButton
-              key={t}
-              title={t === 'ALL' ? 'All records' : t === 'PRODUCT' ? 'Products' : 'Services'}
-              variant={activeType === t ? 'primary' : 'secondary'}
-              size="small"
+      {/* 2-Column Popular Categories Grid */}
+      <View style={styles.gridSection}>
+        <SectionHeader title="Popular categories" />
+        <View style={styles.catGrid}>
+          {POPULAR_2COL_CATEGORIES.map((cat) => (
+            <Pressable
+              key={cat.id}
+              style={[
+                styles.catGridCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: selectedCategory === cat.name ? colors.primary : colors.border,
+                },
+              ]}
               onPress={() => {
-                setActiveType(t);
-                setSelectedCategory('All Categories');
+                const target = OFFICIAL_PRODUCT_CATEGORIES.find((c) => c.id === cat.id);
+                setSelectedCategory(target ? target.name : cat.name);
               }}
-              style={styles.typeBtn}
-            />
+            >
+              <View style={[styles.catIconSquare, { backgroundColor: cat.tint }]}>
+                <Text style={styles.catIconEmoji}>{cat.icon}</Text>
+              </View>
+              <View style={styles.catGridInfo}>
+                <Text style={[styles.catGridTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {cat.name}
+                </Text>
+                <Text style={[styles.catGridCount, { color: colors.textMuted }]}>{cat.count}</Text>
+              </View>
+            </Pressable>
           ))}
         </View>
       </View>
 
-      {/* Horizontal Category Chips */}
-      <View style={styles.categoriesSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-          <TouchButton
-            title="All Categories"
-            variant={selectedCategory === 'All Categories' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setSelectedCategory('All Categories')}
-            style={styles.chip}
-          />
-          {(activeType === 'SERVICE' ? OFFICIAL_SERVICE_CATEGORIES : OFFICIAL_PRODUCT_CATEGORIES).map((c) => (
-            <TouchButton
-              key={c.id}
-              title={`${c.icon} ${c.name}`}
-              variant={selectedCategory === c.name ? 'saffron' : 'secondary'}
-              size="small"
-              onPress={() => setSelectedCategory(c.name)}
-              style={styles.chip}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Outlet Stores Ribbon */}
-      <View style={styles.outletsSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.outletScroll}>
-          <TouchButton
-            title="All Outlets"
-            variant={selectedOutlet === 'ALL' ? 'emerald' : 'secondary'}
-            size="small"
-            onPress={() => setSelectedOutlet('ALL')}
-            style={styles.outletChip}
-          />
-          {OFFICIAL_OUTLET_STORES.map((o) => (
-            <TouchButton
-              key={o.id}
-              title={`${o.name} (${o.badge})`}
-              variant={selectedOutlet === o.id ? 'emerald' : 'secondary'}
-              size="small"
-              onPress={() => setSelectedOutlet(o.id)}
-              style={styles.outletChip}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Collapsible GFR 149 Rule Fast Calculator */}
-      <View style={[styles.gfrBanner, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
+      {/* GFR 149 Procurement Mode Accordion */}
+      <View
+        style={[
+          styles.gfrAccordion,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
         <Pressable
-          style={styles.gfrHeaderRow}
-          onPress={() => setIsGfrExpanded(!isGfrExpanded)}
-          hitSlop={8}
+          style={styles.gfrHeaderPressable}
+          onPress={() => setIsGfrExpanded((prev) => !prev)}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.gfrTitle, { color: '#1E40AF' }]}>⚖️ GFR 149 Procurement Rule Checker {isGfrExpanded ? '▴' : '▾'}</Text>
-            <Text style={styles.gfrSub}>Check if Direct Purchase or Bidding applies</Text>
+          <View style={styles.gfrHeaderTitleRow}>
+            <Text style={styles.gfrBadgeIcon}>⚖️</Text>
+            <Text style={[styles.gfrTitleText, { color: colors.textPrimary }]}>
+              GFR 149 Procurement Mode Guide
+            </Text>
           </View>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563EB' }}>
-            {isGfrExpanded ? 'Hide' : 'Calculate'}
+          <Text style={[styles.gfrChevron, { color: colors.textSecondary }]}>
+            {isGfrExpanded ? '▲' : '▼'}
           </Text>
         </Pressable>
+
         {isGfrExpanded && (
-          <>
-            <View style={styles.gfrInputRow}>
-              <TextInput
-                style={[styles.gfrInput, { backgroundColor: colors.surface, color: colors.textPrimary, borderColor: colors.border }]}
-                placeholder="Order Value ₹ (e.g. 75000)"
-                placeholderTextColor={colors.textMuted}
-                value={gfrCalculatorValue}
-                onChangeText={setGfrCalculatorValue}
-                keyboardType="numeric"
-              />
-              <TouchButton
-                title="Check GFR Mode"
-                variant="primary"
-                size="small"
-                onPress={handleCalculateGfr}
-              />
+          <View style={[styles.gfrContent, { borderTopColor: colors.borderSubtle }]}>
+            <Text style={[styles.gfrDesc, { color: colors.textSecondary }]}>
+              Indian General Financial Rules (GFR Rule 149) govern mandatory public procurement thresholds:
+            </Text>
+            <View style={styles.gfrPillRow}>
+              {[25000, 150000, 750000].map((v) => (
+                <CompactChip
+                  key={v}
+                  label={formatInr(v)}
+                  selected={gfrOrderValue === v}
+                  onPress={() => setGfrOrderValue(v)}
+                />
+              ))}
             </View>
-            {gfrResult ? (
-              <View style={styles.gfrResultCard}>
-                <Text style={styles.gfrResultMode}>Mode: {gfrResult.description}</Text>
-                <Text style={styles.gfrResultReq}>{gfrResult.mandatoryRequirement}</Text>
-              </View>
-            ) : null}
-          </>
+            <View style={[styles.gfrResultCard, { backgroundColor: colors.surfaceSubtle }]}>
+              <Text style={[styles.gfrModeTag, { color: colors.primary }]}>{gfrResult.mode}</Text>
+              <Text style={[styles.gfrRuleName, { color: colors.textPrimary }]}>{gfrResult.ruleName}</Text>
+              <Text style={[styles.gfrRuleExplanation, { color: colors.textSecondary }]}>
+                {gfrResult.explanation}
+              </Text>
+            </View>
+          </View>
         )}
       </View>
 
-      {/* Virtualized Products & Services FlatList */}
+      {/* Results Title Row */}
+      <SectionHeader
+        title={`Catalog Results (${filteredItems.length})`}
+        style={{ marginTop: 8 }}
+      />
+    </View>
+  );
+
+  // Render individual product card
+  const renderProductCard = ({ item }: { item: MarketplaceItem }) => {
+    const isSaved = savedItemIds.has(item.id);
+    const isCompared = comparedItemIds.has(item.id);
+    const specs = Object.entries(item.specSummary || {}).slice(0, 2);
+
+    return (
+      <View
+        style={[
+          styles.productCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.productTopRow}>
+          {/* Thumbnail placeholder */}
+          <View style={[styles.thumbnailBox, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={styles.thumbnailEmoji}>
+              {item.type === 'SERVICE' ? '🛠️' : '📦'}
+            </Text>
+          </View>
+
+          {/* Product main meta */}
+          <View style={styles.productMetaCol}>
+            <View style={styles.badgeRow}>
+              <StatusBadge
+                label={item.type === 'SERVICE' ? 'SERVICE' : 'PRODUCT'}
+                tone={item.type === 'SERVICE' ? 'violet' : 'neutral'}
+              />
+              <Text style={[styles.brandText, { color: colors.textSecondary }]}>{item.oemBrand}</Text>
+              {item.msePreference && (
+                <StatusBadge label="MSE" tone="success" style={{ marginLeft: 4 }} />
+              )}
+            </View>
+
+            <Text
+              style={[styles.productTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceInr, { color: colors.primary, fontSize: 16 * fontMultiplier }]}>
+                {formatInr(item.l1PriceInr)}
+              </Text>
+              <Text style={[styles.priceUnit, { color: colors.textMuted }]}>/ {item.priceUnit}</Text>
+              <View style={styles.ratingBadge}>
+                <Text style={styles.starIcon}>★</Text>
+                <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Specifications snippet */}
+        {specs.length > 0 && (
+          <View style={[styles.specsRow, { backgroundColor: colors.surfaceSubtle }]}>
+            {specs.map(([k, v]) => (
+              <Text key={k} style={[styles.specText, { color: colors.textSecondary }]} numberOfLines={1}>
+                <Text style={{ fontWeight: '600' }}>{k}:</Text> {v}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* Action Buttons: Primary View Details + Secondary Actions */}
+        <View style={styles.actionRow}>
+          <SecondaryButton
+            label={isSaved ? 'Saved ✓' : 'Save'}
+            icon="🔖"
+            onPress={() => toggleSaveItem(item.id)}
+            style={{ flex: 1, marginRight: 6 }}
+          />
+          <SecondaryButton
+            label={isCompared ? 'Comparing' : 'Compare'}
+            icon="⚖️"
+            onPress={() => toggleCompareItem(item.id)}
+            style={{ flex: 1, marginRight: 6 }}
+          />
+          <PrimaryButton
+            label="View details"
+            onPress={() => setSelectedItem(item)}
+            style={{ flex: 1.4 }}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={filteredItems}
-        renderItem={renderItem}
-        keyExtractor={(i) => i.id}
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        windowSize={5}
-        removeClippedSubviews={true}
+        keyExtractor={(item) => item.id}
+        renderItem={renderProductCard}
+        ListHeaderComponent={renderListHeader}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-          <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>
-              {filteredItems.length} catalogue {filteredItems.length === 1 ? 'record' : 'records'}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyEmoji]}>🔍</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Try clearing search terms or selecting &quot;All Categories&quot;.
             </Text>
+            <SecondaryButton
+              label="Reset Filters"
+              onPress={() => {
+                setSearchQuery('');
+                setSelectedCategory('All Categories');
+                setFilterBrand('ALL');
+              }}
+              style={{ marginTop: 16 }}
+            />
           </View>
         }
       />
 
-      {/* Item Specification Modal */}
-      {selectedItem ? (
-        <Modal visible={!!selectedItem} animationType="slide" onRequestClose={() => setSelectedItem(null)}>
-          <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: colors.background }]}>
-            <View style={[styles.modalHeader, { backgroundColor: colors.primary }]}>
-              <TouchButton
-                title="✕ Close"
-                variant="ghost"
-                size="small"
-                onPress={() => setSelectedItem(null)}
-                textStyle={{ color: '#FFFFFF', fontWeight: '800' }}
-              />
-              <Text style={styles.modalTitle}>Catalogue record</Text>
-              <View style={{ width: 40 }} />
-            </View>
+      {/* Filter Bottom Sheet Modal */}
+      <FilterBottomSheetModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        title="Refine Catalog"
+        onReset={() => {
+          setSelectedCategory('All Categories');
+          setFilterBrand('ALL');
+        }}
+        onApply={() => {}}
+      >
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary }]}>Brand / OEM</Text>
+        <View style={styles.sheetPillWrap}>
+          {['ALL', 'Dell', 'HP', 'Lenovo', 'Godrej', 'Tata', 'Ambuja'].map((b) => (
+            <CompactChip
+              key={b}
+              label={b}
+              selected={filterBrand === b}
+              onPress={() => setFilterBrand(b)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
 
-            <ScrollView contentContainerStyle={styles.modalBody}>
-              <Text style={[styles.modalItemTitle, { color: colors.textPrimary }]}>{selectedItem.title}</Text>
-              <Text style={[styles.modalItemCat, { color: colors.textMuted }]}>{selectedItem.category} • {selectedItem.oemBrand}</Text>
+        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary, marginTop: 14 }]}>
+          Categories
+        </Text>
+        <View style={styles.sheetPillWrap}>
+          <CompactChip
+            label="All Categories"
+            selected={selectedCategory === 'All Categories'}
+            onPress={() => setSelectedCategory('All Categories')}
+            style={{ marginBottom: 8 }}
+          />
+          {OFFICIAL_PRODUCT_CATEGORIES.map((cat) => (
+            <CompactChip
+              key={cat.id}
+              label={cat.name}
+              selected={selectedCategory === cat.name}
+              onPress={() => setSelectedCategory(cat.name)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
+      </FilterBottomSheetModal>
 
-              <View style={[styles.modalPriceCard, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.modalL1, { color: colors.emerald }]}>
-                  Reference price: ₹{formatInr(selectedItem.l1PriceInr)} {selectedItem.priceUnit}
-                </Text>
-                <Text style={[styles.modalMii, { color: colors.textSecondary }]}>
-                  🇮🇳 Make In India Content: {selectedItem.makeInIndiaPercent}%
-                </Text>
-                <Text style={[styles.modalMse, { color: '#0369A1' }]}>
-                  🛡️ MSME Preference: {selectedItem.msePreference ? 'Eligible (L1 + 15%)' : 'Standard'}
-                </Text>
+      {/* Product Detail Modal */}
+      {selectedItem && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedItem(null)}>
+          <View style={styles.modalOverlay}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setSelectedItem(null)} />
+            <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{selectedItem.title}</Text>
+                <Pressable onPress={() => setSelectedItem(null)} hitSlop={10}>
+                  <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>
+                </Pressable>
               </View>
 
-              <Text style={[styles.specHeader, { color: colors.textPrimary }]}>Technical parameters</Text>
-              {Object.entries(selectedItem.specSummary).map(([k, v]) => (
-                <View key={k} style={[styles.modalSpecRow, { borderBottomColor: colors.border }]}>
-                  <Text style={[styles.modalSpecKey, { color: colors.textMuted }]}>{k}</Text>
-                  <Text style={[styles.modalSpecVal, { color: colors.textPrimary }]}>{v}</Text>
+              <ScrollView style={styles.modalBody}>
+                <View style={styles.modalPriceBox}>
+                  <Text style={[styles.modalPrice, { color: colors.primary }]}>
+                    {formatInr(selectedItem.l1PriceInr)}
+                  </Text>
+                  <Text style={[styles.modalUnit, { color: colors.textSecondary }]}>
+                    per {selectedItem.priceUnit} (Min Order: {selectedItem.minOrderQty})
+                  </Text>
                 </View>
-              ))}
 
-              <View style={{ marginTop: 24 }}>
-                <TouchButton
-                  title="View on Official GeM Portal ➔"
-                  variant="primary"
-                  size="large"
+                <Text style={[styles.modalSecHeader, { color: colors.textPrimary }]}>Technical Specifications</Text>
+                {Object.entries(selectedItem.specSummary || {}).map(([key, val]) => (
+                  <View key={key} style={[styles.specRowDetail, { borderBottomColor: colors.borderSubtle }]}>
+                    <Text style={[styles.specKey, { color: colors.textSecondary }]}>{key}</Text>
+                    <Text style={[styles.specVal, { color: colors.textPrimary }]}>{val}</Text>
+                  </View>
+                ))}
+
+                <View style={{ marginTop: 16 }}>
+                  <Text style={[styles.modalSecHeader, { color: colors.textPrimary }]}>Procurement Compliance</Text>
+                  <Text style={[styles.complianceText, { color: colors.textSecondary }]}>
+                    • Make in India Local Content: {selectedItem.makeInIndiaPercent}%
+                  </Text>
+                  <Text style={[styles.complianceText, { color: colors.textSecondary }]}>
+                    • MSE Purchase Preference: {selectedItem.msePreference ? 'Eligible' : 'Standard'}
+                  </Text>
+                </View>
+              </ScrollView>
+
+              <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
+                <SecondaryButton
+                  label="Close"
+                  onPress={() => setSelectedItem(null)}
+                  style={{ flex: 1, marginRight: 8 }}
+                />
+                <PrimaryButton
+                  label="Open Official Portal ↗"
                   onPress={() => handleOpenGemPortal(selectedItem)}
+                  style={{ flex: 1.5 }}
                 />
               </View>
-            </ScrollView>
-          </SafeAreaView>
+            </View>
+          </View>
         </Modal>
-      ) : null}
-
-      {/* BROWSE Mega-Menu Modal */}
-      <BrowseMegaMenuModal
-        visible={showMegaMenu}
-        onClose={() => setShowMegaMenu(false)}
-        onSelectCategory={(cat, sub) => {
-          setSelectedCategory(cat);
-          if (sub) setSearchQuery(sub);
-        }}
-        onSelectOutlet={(outlet) => {
-          setSelectedOutlet(outlet);
-        }}
-      />
-    </SafeAreaView>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  searchSection: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-  },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  browseBtn: { paddingHorizontal: 10, minHeight: 42 },
-  catalogIntro: {
-    paddingTop: 12,
-    paddingBottom: 2,
-  },
-  catalogIntroTitle: { fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },
-  catalogIntroText: { fontSize: 11.5, lineHeight: 16, marginTop: 3 },
-  publicNoticeBanner: {
-    backgroundColor: 'rgba(11, 59, 96, 0.08)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 6,
-  },
-  publicNoticeText: { color: '#0B3B60', fontSize: 10.5, fontWeight: '700', textAlign: 'center' },
-  searchInputWrapper: {
+  container: {
     flex: 1,
+  },
+  listContent: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 40,
+  },
+  headerWrapper: {
+    marginBottom: 8,
+  },
+  filterChipScroll: {
+    marginBottom: 16,
+  },
+  filterChipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    minHeight: 42,
   },
-  searchIcon: { fontSize: 16, marginRight: 6 },
-  searchInput: { flex: 1, fontSize: 13, fontWeight: '600', paddingVertical: 4 },
-  typeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  typeBtn: { flex: 1 },
-  categoriesSection: { paddingVertical: 6 },
-  chipScroll: { paddingHorizontal: 12, gap: 6 },
-  chip: { marginRight: 6 },
-  outletsSection: { paddingBottom: 6 },
-  outletScroll: { paddingHorizontal: 12, gap: 6 },
-  outletChip: { marginRight: 6 },
-  gfrBanner: {
-    marginHorizontal: 12,
-    marginBottom: 8,
+  gridSection: {
+    marginBottom: 16,
+  },
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  catGridCard: {
+    width: '48%',
+    borderRadius: 12,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  gfrHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 },
-  gfrTitle: { fontSize: 12, fontWeight: '800' },
-  gfrSub: { fontSize: 10, color: '#3B82F6', marginTop: 1 },
-  gfrInputRow: { flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: 8 },
-  gfrInput: {
-    flex: 1,
-    borderWidth: 1,
+  catIconSquare: {
+    width: 36,
+    height: 36,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  catIconEmoji: {
+    fontSize: 16,
+  },
+  catGridInfo: {
+    flex: 1,
+  },
+  catGridTitle: {
     fontSize: 12,
     fontWeight: '700',
   },
-  gfrResultCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: '#93C5FD',
+  catGridCount: {
+    fontSize: 10,
+    marginTop: 2,
   },
-  gfrResultMode: { color: '#1E40AF', fontSize: 11, fontWeight: '800' },
-  gfrResultReq: { color: '#334155', fontSize: 10, marginTop: 2, lineHeight: 14 },
-  listContent: { paddingHorizontal: 12, paddingBottom: 40 },
-  listHeader: { paddingVertical: 6 },
-  listHeaderCount: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  card: {
-    borderRadius: 14,
+  gfrAccordion: {
+    borderRadius: 12,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  gfrHeaderPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+  },
+  gfrHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gfrBadgeIcon: {
+    fontSize: 15,
+    marginRight: 8,
+  },
+  gfrTitleText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  gfrChevron: {
+    fontSize: 11,
+  },
+  gfrContent: {
+    borderTopWidth: 1,
+    padding: 12,
+  },
+  gfrDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  gfrPillRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  gfrResultCard: {
+    borderRadius: 8,
+    padding: 10,
+  },
+  gfrModeTag: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  gfrRuleName: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  gfrRuleExplanation: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  productCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  categoryBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  categoryBadgeText: { fontSize: 9.5, fontWeight: '800' },
-  outletBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  outletBadgeText: { color: '#92400E', fontSize: 9, fontWeight: '800' },
-  itemTitle: { fontWeight: '800', lineHeight: 19, marginBottom: 4 },
-  oemText: { fontSize: 11, marginBottom: 8 },
-  priceBox: {
+  productTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  thumbnailBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
     alignItems: 'center',
-    padding: 8,
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  thumbnailEmoji: {
+    fontSize: 26,
+  },
+  productMetaCol: {
+    flex: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  brandText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  productTitle: {
+    fontWeight: '700',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceInr: {
+    fontWeight: '700',
+  },
+  priceUnit: {
+    fontSize: 11,
+    marginLeft: 4,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  starIcon: {
+    fontSize: 10,
+    color: '#D97706',
+    marginRight: 2,
+  },
+  ratingText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  specsRow: {
     borderRadius: 8,
+    padding: 8,
+    marginBottom: 10,
+  },
+  specText: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyEmoji: {
+    fontSize: 32,
     marginBottom: 8,
   },
-  l1Label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  l1Price: { fontWeight: '900' },
-  priceUnit: { fontSize: 11, fontWeight: '500' },
-  ordersBadge: { backgroundColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6 },
-  ordersBadgeText: { fontSize: 10, fontWeight: '700', color: '#334155' },
-  specGrid: { padding: 8, borderRadius: 8, marginBottom: 10, gap: 4 },
-  specRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  specKey: { fontSize: 10.5, fontWeight: '600' },
-  specVal: { fontSize: 10.5, fontWeight: '700', maxWidth: '65%' },
-  cardActions: { flexDirection: 'row', gap: 8 },
-  modalSafeArea: { flex: 1 },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 260,
+  },
+  sheetSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  sheetPillWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    maxHeight: '80%',
+    paddingBottom: 24,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 16,
   },
-  modalTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  modalBody: { padding: 16 },
-  modalItemTitle: { fontSize: 18, fontWeight: '900', lineHeight: 24, marginBottom: 4 },
-  modalItemCat: { fontSize: 12, marginBottom: 14 },
-  modalPriceCard: {
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 16,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 10,
   },
-  modalL1: { fontSize: 16, fontWeight: '900' },
-  modalMii: { fontSize: 12, fontWeight: '700' },
-  modalMse: { fontSize: 12, fontWeight: '700' },
-  specHeader: { fontSize: 14, fontWeight: '800', marginBottom: 10 },
-  modalSpecRow: {
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+  },
+  modalPriceBox: {
+    marginBottom: 14,
+  },
+  modalPrice: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  modalUnit: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalSecHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  specRowDetail: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomWidth: 1,
   },
-  modalSpecKey: { fontSize: 12, fontWeight: '600' },
-  modalSpecVal: { fontSize: 12, fontWeight: '700', maxWidth: '60%', textAlign: 'right' },
+  specKey: {
+    fontSize: 12,
+  },
+  specVal: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  complianceText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
 });
