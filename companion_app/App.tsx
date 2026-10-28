@@ -1,15 +1,9 @@
 /**
- * GeM Mobile Companion App - Production National Portal Application
- * Reconstructs the entire official Government e-Marketplace (GeM) architecture:
- * - Public Zero-Login Information & Discovery Access (Browse products, services, bids & auctions freely)
- * - 5 Comprehensive Production Hubs:
- *   1. 🛒 Marketplace (10,917+ Products across 9 categories, Trending Services & Outlets)
- *   2. 📦 Bids (All 34 Live Tenders & Bids with 1-tap official showbidDocument PDF download)
- *   3. ⚡ Auctions (Live Reverse Auction Decrement Room & Forward e-Scrap Lots)
- *   4. 📑 Contracts (5 Verified Executed Contracts, 10-Day Statutory CRAC Deemed Acceptance)
- *   5. 🏛️ GeM Portal (Buyer & Seller Onboarding matching mkp.gem.gov.in & MSME benefits)
- * - Official Accessibility: Dark Mode toggle & Font Sizing (A-, A, A+) matching gem.gov.in
- * - Zero touch lag & 60+ FPS virtualized performance
+ * GeM Mobile Companion App
+ * - Public discovery surfaces for catalogue records, bids, auctions and contracts
+ * - Buyer/seller onboarding guidance and external portal hand-offs
+ * - Local fixtures can be combined with synced records; the official portal remains authoritative
+ * - Shared accessibility controls for colour mode and font sizing
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -23,6 +17,7 @@ import {
   Alert,
   TextInput,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { ThemeProvider, useTheme } from './theme/ThemeContext';
 import { TouchButton } from './components/TouchButton';
@@ -41,15 +36,17 @@ import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './
 export type ProductionTab = 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL';
 
 const PRODUCTION_TABS: { id: ProductionTab; label: string; icon: string }[] = [
-  { id: 'MARKET', label: 'Market', icon: '🛒' },
-  { id: 'BIDS', label: 'Bids', icon: '📦' },
-  { id: 'AUCTIONS', label: 'Auctions', icon: '⚡' },
-  { id: 'ORDERS', label: 'Contracts', icon: '📑' },
-  { id: 'PORTAL', label: 'GeM Portal', icon: '🏛️' },
+  { id: 'MARKET', label: 'Market', icon: '◈' },
+  { id: 'BIDS', label: 'Bids', icon: '▦' },
+  { id: 'AUCTIONS', label: 'Auctions', icon: '↘' },
+  { id: 'ORDERS', label: 'Contracts', icon: '▤' },
+  { id: 'PORTAL', label: 'Portal', icon: '◎' },
 ];
 
 const MainAppContent: React.FC = () => {
   const { colors, toggleColorMode, isDark, fontScale, setFontScale, fontMultiplier } = useTheme();
+  const { width } = useWindowDimensions();
+  const isCompactHeader = width < 420;
 
   const [activeTab, setActiveTab] = useState<ProductionTab>('MARKET');
   const [portalMode, setPortalMode] = useState<'DIRECTORY' | 'REGISTRATION'>('DIRECTORY');
@@ -127,31 +124,28 @@ const MainAppContent: React.FC = () => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? colors.background : colors.primaryDark }]}>
       <StatusBar barStyle="light-content" backgroundColor={isDark ? colors.background : colors.primaryDark} />
 
-      {/* Official Government Tricolor Accent */}
-      <View style={styles.tricolorBar}>
+      {/* National identity accent */}
+      <View style={styles.tricolorBar} accessibilityLabel="National colour accent">
         <View style={{ flex: 1, backgroundColor: '#FF9933' }} />
         <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
         <View style={{ flex: 1, backgroundColor: '#138808' }} />
       </View>
 
-      {/* Official Government Top Header Bar */}
+      {/* Shared application header */}
       <View style={[styles.topBar, { backgroundColor: isDark ? colors.surface : colors.primary }]}>
-        {/* Left: National Identity */}
         <View style={styles.brandRow}>
-          <View style={styles.nationalEmblemPill}>
-            <Text style={styles.nationalEmblemText}>🇮🇳 GeM</Text>
+          <View style={[styles.brandMark, { backgroundColor: isDark ? colors.primary : '#FFFFFF' }]}>
+            <Text style={[styles.brandMarkText, { color: isDark ? colors.textInverse : colors.primary }]}>G</Text>
           </View>
           <View>
-            <Text style={[styles.headerTitle, { fontSize: 15 * fontMultiplier }]}>Government e-Marketplace</Text>
-            <Text style={styles.headerSubtitle}>National Public Procurement Portal • gem.gov.in</Text>
+            <Text style={[styles.headerTitle, { fontSize: (isCompactHeader ? 14 : 15) * fontMultiplier }]}>GeM companion</Text>
+            <Text style={styles.headerSubtitle}>{isCompactHeader ? 'Public procurement discovery' : 'Marketplace discovery · gem.gov.in'}</Text>
           </View>
         </View>
 
-        {/* Right: Portal Controls (Status, Dark Mode, Font Size, Lookup) */}
         <View style={styles.controlsRow}>
-          {/* Live Catalog Badge with National Scale */}
           <TouchButton
-            title={isSyncing ? '⟳ Syncing' : `🟢 GeM Live (45,399+)`}
+            title={isSyncing ? 'Syncing' : 'Connected'}
             variant="ghost"
             size="small"
             onPress={loadData}
@@ -159,17 +153,15 @@ const MainAppContent: React.FC = () => {
             style={styles.statusPill}
           />
 
-          {/* Dark / Light Mode Toggle */}
           <TouchButton
-            title={isDark ? '☀️' : '🌙'}
+            title={isDark ? 'Light' : 'Dark'}
             variant="ghost"
             size="small"
             onPress={toggleColorMode}
-            textStyle={{ fontSize: 15 }}
+            textStyle={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}
             style={styles.iconBtn}
           />
 
-          {/* Font Size A- / A / A+ */}
           <TouchButton
             title={fontScale === 'small' ? 'A-' : fontScale === 'large' ? 'A+' : 'A'}
             variant="ghost"
@@ -181,13 +173,12 @@ const MainAppContent: React.FC = () => {
             style={styles.iconBtn}
           />
 
-          {/* Zero-PDF Lookup */}
           <TouchButton
-            title="📄"
+            title="Lookup"
             variant="ghost"
             size="small"
             onPress={() => setShowLookupModal(true)}
-            textStyle={{ fontSize: 14 }}
+            textStyle={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}
             style={styles.iconBtn}
           />
         </View>
@@ -232,7 +223,7 @@ const MainAppContent: React.FC = () => {
         )}
       </View>
 
-      {/* 5 Production Bottom Navigation Tabs */}
+      {/* Primary navigation */}
       <View style={[styles.bottomNav, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
         {PRODUCTION_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -273,12 +264,12 @@ const MainAppContent: React.FC = () => {
         })}
       </View>
 
-      {/* MODAL: Instant Zero-PDF Bid Number Lookup */}
+      {/* Modal: bid lookup */}
       <Modal visible={showLookupModal} animationType="slide" transparent onRequestClose={() => setShowLookupModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.lookupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.lookupHeader}>
-              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>Instant Bid Deconstructor</Text>
+              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>Bid lookup</Text>
               <TouchButton
                 title="✕"
                 variant="ghost"
@@ -287,7 +278,7 @@ const MainAppContent: React.FC = () => {
               />
             </View>
             <Text style={[styles.lookupSub, { color: colors.textMuted }]}>
-              Enter any GeM Bid Number to instantly inspect specifications, EMD waiver, and BOQ items without downloading 50-page PDFs.
+              Search a bid number or title to inspect the locally available record before opening the official document.
             </Text>
 
             <TextInput
@@ -315,7 +306,7 @@ const MainAppContent: React.FC = () => {
             </View>
 
             <TouchButton
-              title="Deconstruct Tender Details ➔"
+              title="View bid details"
               variant="primary"
               size="medium"
               onPress={handleQuickLookup}
@@ -358,31 +349,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 11,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  nationalEmblemPill: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  nationalEmblemText: { color: '#0B3B60', fontSize: 11, fontWeight: '900' },
-  headerTitle: { color: '#FFFFFF', fontWeight: '900', letterSpacing: -0.2 },
-  headerSubtitle: { color: '#93C5FD', fontSize: 9.5, fontWeight: '600' },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusPill: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  iconBtn: {
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
+  brandMark: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandMarkText: { fontSize: 17, fontWeight: '900' },
+  headerTitle: { color: '#FFFFFF', fontWeight: '900', letterSpacing: -0.3 },
+  headerSubtitle: { color: '#B9D5EC', fontSize: 9.5, fontWeight: '600', marginTop: 1 },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
+  statusPill: {
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderRadius: 999,
+    minHeight: 30,
+    paddingHorizontal: 9,
+  },
+  iconBtn: {
+    minHeight: 30,
+    paddingHorizontal: 7,
+    borderRadius: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -391,23 +383,23 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    paddingTop: 6,
-    paddingBottom: 8,
-    paddingHorizontal: 8,
+    paddingTop: 7,
+    paddingBottom: 9,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'space-around',
   },
   navTabItem: {
     flex: 1,
-    paddingVertical: 5,
-    paddingHorizontal: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 3,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navTabIcon: { fontSize: 18, marginBottom: 2 },
+  navTabIcon: { fontSize: 18, lineHeight: 20, marginBottom: 2, fontWeight: '800' },
   navTabIconActive: { transform: [{ scale: 1.1 }] },
-  navTabText: { fontSize: 10, letterSpacing: -0.2 },
+  navTabText: { fontSize: 10, letterSpacing: -0.1 },
   navActiveDot: {
     width: 4,
     height: 4,

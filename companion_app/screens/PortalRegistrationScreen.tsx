@@ -19,6 +19,7 @@ import {
 import { PortalOnboardingService, MsmeTier, BusinessConstitution } from '../services/PortalOnboardingService';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
+import { DataNotice } from '../components/DataNotice';
 
 export const PortalRegistrationScreen: React.FC = () => {
   const { colors, fontMultiplier, isDark } = useTheme();
@@ -84,24 +85,25 @@ export const PortalRegistrationScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice>Onboarding guide · This companion validates form completeness; final registration happens on the official GeM portal.</DataNotice>
       {/* Top Segment: Buyer Portal | Seller Portal | Helpdesk */}
       <View style={[styles.topTabsRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchButton
-          title="🏛️ Buyer Registration"
+          title="Buyer registration"
           variant={activeTab === 'BUYER' ? 'primary' : 'secondary'}
           size="small"
           onPress={() => setActiveTab('BUYER')}
           style={{ flex: 1 }}
         />
         <TouchButton
-          title="🏢 Seller / MSE KYC"
+          title="Seller / MSE KYC"
           variant={activeTab === 'SELLER' ? 'primary' : 'secondary'}
           size="small"
           onPress={() => setActiveTab('SELLER')}
           style={{ flex: 1 }}
         />
         <TouchButton
-          title="📞 Helpdesk"
+          title="Helpdesk"
           variant={activeTab === 'HELPDESK' ? 'primary' : 'secondary'}
           size="small"
           onPress={() => setActiveTab('HELPDESK')}
@@ -116,7 +118,7 @@ export const PortalRegistrationScreen: React.FC = () => {
             {/* Official Notice matching user screenshot */}
             <View style={[styles.noticeCard, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
               <Text style={[styles.noticeTitle, { color: '#1E40AF' }]}>
-                ℹ️ Official GFR Rule on Buyer Registration
+                Buyer registration guidance
               </Text>
               <Text style={[styles.noticeBody, { color: '#334155' }]}>
                 If you want to register as the buyers/users involved in procurement process please contact Primary user (HOD) of your organisation.{'\n\n'}
@@ -129,7 +131,7 @@ export const PortalRegistrationScreen: React.FC = () => {
                 Buyer Eligibility Validator
               </Text>
               <Text style={[styles.cardSub, { color: colors.textMuted }]}>
-                Test your department or ministry credentials against GeM verification rules
+                Check whether the information needed for a buyer registration is present.
               </Text>
 
               <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Officer Full Legal Name</Text>
@@ -188,7 +190,7 @@ export const PortalRegistrationScreen: React.FC = () => {
 
               <View style={{ marginTop: 12 }}>
                 <TouchButton
-                  title="Validate Credentials"
+                  title="Check form details"
                   variant="saffron"
                   size="medium"
                   onPress={handleTestBuyer}
@@ -198,14 +200,14 @@ export const PortalRegistrationScreen: React.FC = () => {
               {buyerCheckResult ? (
                 <View style={[styles.resultCard, { backgroundColor: buyerCheckResult.isValid ? '#F0FDF4' : '#FEF2F2', borderColor: buyerCheckResult.isValid ? '#86EFAC' : '#FCA5A5' }]}>
                   <Text style={[styles.resultTitle, { color: buyerCheckResult.isValid ? '#15803D' : '#B91C1C' }]}>
-                    {buyerCheckResult.isValid ? '✓ Credentials Valid for GeM Registration' : '⚠️ Credentials Did Not Pass GeM Validation'}
+                    {buyerCheckResult.isValid ? 'Ready for official registration' : 'Review the highlighted requirements'}
                   </Text>
                   {buyerCheckResult.errors.map((err, i) => (
                     <Text key={i} style={[styles.resultError, { color: '#B91C1C' }]}>• {err}</Text>
                   ))}
                   {buyerCheckResult.isValid ? (
                     <Text style={{ color: '#166534', fontSize: 11, marginTop: 4 }}>
-                      Privileges: Custom Bids Authorized • CRAC 10-day approval enabled.
+                      Your final role and permissions are confirmed by GeM during registration.
                     </Text>
                   ) : null}
                 </View>

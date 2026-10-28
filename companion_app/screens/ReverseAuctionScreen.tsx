@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import type { AuctionItem } from '../types/index';
 import { formatInr } from '../utils/formatters';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ReverseAuctionScreenProps {
   onSelectBid?: (bidNumber: string) => void;
@@ -97,6 +98,7 @@ const REALISTIC_REVERSE_AUCTIONS: (AuctionItem & {
 ];
 
 export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSelectBid }) => {
+  const { colors, isDark } = useTheme();
   const [auctions] = useState(REALISTIC_REVERSE_AUCTIONS);
   const [costFloors, setCostFloors] = useState<Record<string, string>>({});
 
@@ -117,15 +119,15 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* GeM Portal Banner */}
-      <View style={styles.portalBanner}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+      {/* Official portal hand-off */}
+      <View style={[styles.portalBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.portalBadge}>
-          <Text style={styles.portalBadgeText}>OFFICIAL GeM LIVE REVERSE AUCTIONS</Text>
+          <Text style={styles.portalBadgeText}>REVERSE AUCTION RECORDS</Text>
         </View>
-        <Text style={styles.portalTitle}>Active RA Rooms on bidplus.gem.gov.in</Text>
-        <Text style={styles.portalSub}>
-          Real-time price decrements, L1 standings, and minimum step rules extracted daily from the portal.
+        <Text style={[styles.portalTitle, { color: colors.textPrimary }]}>Reverse auction discovery</Text>
+        <Text style={[styles.portalSub, { color: colors.textMuted }]}>
+          Review the available record, then open bidplus.gem.gov.in for authoritative status and bidding.
         </Text>
       </View>
 
@@ -134,7 +136,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
         const isL1 = ra.sellerRank === 1;
 
         return (
-          <View key={ra.id} style={styles.card}>
+          <View key={ra.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {/* Top row: RA Number & Status */}
             <View style={styles.cardTopRow}>
               <View style={styles.raPill}>
@@ -142,36 +144,36 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
               </View>
               <View style={[styles.rankBadge, isL1 ? styles.rankL1 : styles.rankOutbid]}>
                 <Text style={[styles.rankText, isL1 ? styles.rankL1Text : styles.rankOutbidText]}>
-                  {isL1 ? '★ YOU ARE L1' : `RANK L${ra.sellerRank}`}
+                  {isL1 ? 'CURRENT RANK L1' : `CURRENT RANK L${ra.sellerRank}`}
                 </Text>
               </View>
             </View>
 
             {/* Title */}
-            <Text style={styles.title}>{ra.title}</Text>
-            <Text style={styles.department}>
-              🏛 {ra.department} • {ra.buyerOrganization}
+            <Text style={[styles.title, { color: colors.textPrimary }]}>{ra.title}</Text>
+            <Text style={[styles.department, { color: colors.textMuted }]}>
+              {ra.department} • {ra.buyerOrganization}
             </Text>
 
             {/* Key RA Metrics Grid (Official GeM Portal Style) */}
-            <View style={styles.metricsGrid}>
+            <View style={[styles.metricsGrid, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Current Lowest (L1)</Text>
-                <Text style={styles.metricValue}>₹{formatInr(ra.currentLowestBid)}</Text>
+                <Text style={[styles.metricValue, { color: colors.textPrimary }]}>₹{formatInr(ra.currentLowestBid)}</Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Your Last Bid</Text>
-                <Text style={[styles.metricValue, isL1 && styles.textL1]}>
+                <Text style={[styles.metricValue, { color: colors.textPrimary }, isL1 && styles.textL1]}>
                   ₹{formatInr(ra.sellerCurrentBid || ra.currentLowestBid)}
                 </Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Min Decrement</Text>
-                <Text style={styles.metricValue}>₹{formatInr(ra.minimumDecrement)}</Text>
+                <Text style={[styles.metricValue, { color: colors.textPrimary }]}>₹{formatInr(ra.minimumDecrement)}</Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Closing Schedule</Text>
-                <Text style={styles.metricValueTime}>{ra.closingDateLabel}</Text>
+                <Text style={[styles.metricValueTime, { color: colors.primary }]}>{ra.closingDateLabel}</Text>
               </View>
             </View>
 
@@ -185,12 +187,12 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
             {/* Real GeM Concealed L1 Standings Banner */}
             <View style={styles.concealedStandingsBox}>
               <Text style={styles.concealedTitle}>
-                {isL1 ? '👑 You hold the L1 Leading Bid' : `⚠️ GeM Concealed Standings: You are Rank L${ra.sellerRank}`}
+                {isL1 ? 'Current rank in this record: L1' : `Current rank in this record: L${ra.sellerRank}`}
               </Text>
               <Text style={styles.concealedDesc}>
                 {isL1
-                  ? 'Competitors cannot see your unit breakdown. They must drop by at least ₹' + formatInr(ra.minimumDecrement) + ' to challenge your lead.'
-                  : `Competitor bid values are encrypted by GeM. Required decrement: Decrement at least ₹${formatInr(ra.minimumDecrement)} to take the L1 lead.`}
+                  ? 'Open the official auction room to confirm the live standing and applicable decrement.'
+                  : `Open the official auction room to confirm competitor bids and the required decrement of ₹${formatInr(ra.minimumDecrement)}.`}
               </Text>
             </View>
 

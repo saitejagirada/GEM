@@ -33,6 +33,7 @@ import { TouchButton } from '../components/TouchButton';
 import { BrowseMegaMenuModal } from '../components/BrowseMegaMenuModal';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInr } from '../utils/formatters';
+import { DataNotice } from '../components/DataNotice';
 
 export const MarketplaceScreen: React.FC = () => {
   const { colors, fontMultiplier, isDark } = useTheme();
@@ -91,18 +92,9 @@ export const MarketplaceScreen: React.FC = () => {
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              {item.isAvailableOnGeM ? (
-                <View style={[styles.outletBadge, { backgroundColor: '#DCFCE7' }]}>
-                  <Text style={[styles.outletBadgeText, { color: '#15803D' }]}>🟢 ACTIVE ON GeM</Text>
-                </View>
-              ) : (
-                <View style={[styles.outletBadge, { backgroundColor: '#FEE2E2' }]}>
-                  <Text style={[styles.outletBadgeText, { color: '#B91C1C' }]}>🚫 DELISTED</Text>
-                </View>
-              )}
               {item.outletStore ? (
                 <View style={styles.outletBadge}>
-                  <Text style={styles.outletBadgeText}>🏛️ {item.outletStore.toUpperCase()}</Text>
+                  <Text style={styles.outletBadgeText}>{item.outletStore.toUpperCase()}</Text>
                 </View>
               ) : null}
             </View>
@@ -124,14 +116,14 @@ export const MarketplaceScreen: React.FC = () => {
           {/* L1 Price & Rating Banner */}
           <View style={[styles.priceBox, { backgroundColor: isDark ? colors.surfaceSubtle : '#F0FDF4' }]}>
             <View>
-              <Text style={[styles.l1Label, { color: '#15803D' }]}>L1 BENCHMARK PRICE</Text>
+              <Text style={[styles.l1Label, { color: '#15803D' }]}>REFERENCE PRICE</Text>
               <Text style={[styles.l1Price, { color: colors.emerald, fontSize: 17 * fontMultiplier }]}>
                 ₹{formatInr(item.l1PriceInr)}
                 <Text style={[styles.priceUnit, { color: colors.textMuted }]}> {item.priceUnit}</Text>
               </Text>
             </View>
             <View style={styles.ordersBadge}>
-              <Text style={styles.ordersBadgeText}>★ {item.rating} ({formatInr(item.totalOrders)} orders)</Text>
+              <Text style={styles.ordersBadgeText}>{item.rating} rating · {formatInr(item.totalOrders)} orders</Text>
             </View>
           </View>
 
@@ -150,7 +142,7 @@ export const MarketplaceScreen: React.FC = () => {
           {/* Actions: View Specifications & Open on GeM */}
           <View style={styles.cardActions}>
             <TouchButton
-              title="Specifications"
+              title="View details"
               variant="outline"
               size="small"
               icon="📋"
@@ -158,7 +150,7 @@ export const MarketplaceScreen: React.FC = () => {
               style={{ flex: 1 }}
             />
             <TouchButton
-              title="View on GeM"
+              title="Open official portal"
               variant="primary"
               size="small"
               icon="🌐"
@@ -174,6 +166,7 @@ export const MarketplaceScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice />
       {/* Top Search & Filter Bar */}
       <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.searchRow}>
@@ -192,7 +185,7 @@ export const MarketplaceScreen: React.FC = () => {
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
               style={[styles.searchInput, { color: colors.textPrimary }]}
-              placeholder="Search 10,000+ GeM products, services..."
+              placeholder="Search products, services or categories..."
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -209,11 +202,9 @@ export const MarketplaceScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Zero-Login Public Discovery Ribbon */}
-        <View style={styles.publicNoticeBanner}>
-          <Text style={styles.publicNoticeText}>
-            🛡️ Public Discovery Mode: 10,917+ catalog items & benchmarks freely accessible
-          </Text>
+        <View style={styles.catalogIntro}>
+          <Text style={[styles.catalogIntroTitle, { color: colors.textPrimary }]}>Find what your department needs</Text>
+          <Text style={[styles.catalogIntroText, { color: colors.textMuted }]}>Browse products, services and initiative stores in one consistent catalogue.</Text>
         </View>
 
         {/* Type Segments: All | Products | Services */}
@@ -221,7 +212,7 @@ export const MarketplaceScreen: React.FC = () => {
           {(['ALL', 'PRODUCT', 'SERVICE'] as const).map((t) => (
             <TouchButton
               key={t}
-              title={t === 'ALL' ? 'All (10,917+)' : t === 'PRODUCT' ? '📦 Products' : '🛠️ Services'}
+              title={t === 'ALL' ? 'All records' : t === 'PRODUCT' ? 'Products' : 'Services'}
               variant={activeType === t ? 'primary' : 'secondary'}
               size="small"
               onPress={() => {
@@ -335,8 +326,8 @@ export const MarketplaceScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>
-              Showing {filteredItems.length} Verified GeM Catalog Items
+          <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>
+              {filteredItems.length} catalogue {filteredItems.length === 1 ? 'record' : 'records'}
             </Text>
           </View>
         }
@@ -354,7 +345,7 @@ export const MarketplaceScreen: React.FC = () => {
                 onPress={() => setSelectedItem(null)}
                 textStyle={{ color: '#FFFFFF', fontWeight: '800' }}
               />
-              <Text style={styles.modalTitle}>GeM Catalog Specification</Text>
+              <Text style={styles.modalTitle}>Catalogue record</Text>
               <View style={{ width: 40 }} />
             </View>
 
@@ -364,7 +355,7 @@ export const MarketplaceScreen: React.FC = () => {
 
               <View style={[styles.modalPriceCard, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.modalL1, { color: colors.emerald }]}>
-                  L1 Benchmark: ₹{formatInr(selectedItem.l1PriceInr)} {selectedItem.priceUnit}
+                  Reference price: ₹{formatInr(selectedItem.l1PriceInr)} {selectedItem.priceUnit}
                 </Text>
                 <Text style={[styles.modalMii, { color: colors.textSecondary }]}>
                   🇮🇳 Make In India Content: {selectedItem.makeInIndiaPercent}%
@@ -374,7 +365,7 @@ export const MarketplaceScreen: React.FC = () => {
                 </Text>
               </View>
 
-              <Text style={[styles.specHeader, { color: colors.textPrimary }]}>Technical Parameters (GeM Verified)</Text>
+              <Text style={[styles.specHeader, { color: colors.textPrimary }]}>Technical parameters</Text>
               {Object.entries(selectedItem.specSummary).map(([k, v]) => (
                 <View key={k} style={[styles.modalSpecRow, { borderBottomColor: colors.border }]}>
                   <Text style={[styles.modalSpecKey, { color: colors.textMuted }]}>{k}</Text>
@@ -415,12 +406,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   searchSection: {
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   browseBtn: { paddingHorizontal: 10, minHeight: 42 },
+  catalogIntro: {
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  catalogIntroTitle: { fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },
+  catalogIntroText: { fontSize: 11.5, lineHeight: 16, marginTop: 3 },
   publicNoticeBanner: {
     backgroundColor: 'rgba(11, 59, 96, 0.08)',
     borderRadius: 6,
@@ -481,15 +478,15 @@ const styles = StyleSheet.create({
   listHeader: { paddingVertical: 6 },
   listHeaderCount: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   categoryBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },

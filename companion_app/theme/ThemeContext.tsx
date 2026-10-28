@@ -1,6 +1,6 @@
 /**
- * GeM Official Portal Theme Engine
- * Provides authentic Government e-Marketplace visual styling:
+ * GeM companion design system
+ * Provides a restrained Government e-Marketplace-inspired visual language:
  * - Ashoka Navy (#0B3B60), National Saffron (#FF9933), Emerald (#138808)
  * - Dark Mode / Light Mode toggle (matching gem.gov.in top-nav)
  * - Accessible Font Sizing: A- (0.9x), A (1.0x), A+ (1.15x)
@@ -30,6 +30,14 @@ export interface ThemeColors {
   textInverse: string;
   cardShadow: string;
 }
+
+/** Shared layout tokens used by the app shell and screen-level surfaces. */
+export const DESIGN_TOKENS = {
+  spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+  radius: { sm: 8, md: 12, lg: 16, pill: 999 },
+  controlHeight: { small: 36, medium: 44, large: 52 },
+  font: { caption: 10, body: 13, bodyLarge: 15, title: 20, display: 28 },
+} as const;
 
 export const LIGHT_THEME: ThemeColors = {
   primary: '#0B3B60',       // Official GeM Ashoka Navy Blue

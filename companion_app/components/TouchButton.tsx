@@ -14,6 +14,7 @@ import {
   StyleProp,
   GestureResponderEvent,
 } from 'react-native';
+import { DESIGN_TOKENS, useTheme } from '../theme/ThemeContext';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'saffron' | 'emerald' | 'danger';
 export type ButtonSize = 'small' | 'medium' | 'large';
@@ -41,42 +42,44 @@ export const TouchButton: React.FC<TouchButtonProps> = ({
   textStyle,
   hitSlopPadding = 8,
 }) => {
+  const { colors } = useTheme();
+
   const getVariantStyle = (pressed: boolean): ViewStyle => {
     switch (variant) {
       case 'primary':
         return {
-          backgroundColor: pressed ? '#07243B' : '#0B3B60',
-          borderColor: '#0B3B60',
+          backgroundColor: pressed ? colors.primaryDark : colors.primary,
+          borderColor: colors.primary,
         };
       case 'saffron':
         return {
-          backgroundColor: pressed ? '#E08320' : '#FF9933',
-          borderColor: '#FF9933',
+          backgroundColor: pressed ? '#D97706' : colors.saffron,
+          borderColor: colors.saffron,
         };
       case 'emerald':
         return {
-          backgroundColor: pressed ? '#0E6806' : '#138808',
-          borderColor: '#138808',
+          backgroundColor: pressed ? '#0E6806' : colors.emerald,
+          borderColor: colors.emerald,
         };
       case 'danger':
         return {
-          backgroundColor: pressed ? '#B91C1C' : '#DC2626',
-          borderColor: '#DC2626',
+          backgroundColor: pressed ? '#B91C1C' : colors.crimson,
+          borderColor: colors.crimson,
         };
       case 'secondary':
         return {
-          backgroundColor: pressed ? '#E2E8F0' : '#F1F5F9',
-          borderColor: '#CBD5E1',
+          backgroundColor: pressed ? colors.border : colors.surfaceSubtle,
+          borderColor: colors.border,
         };
       case 'outline':
         return {
-          backgroundColor: pressed ? 'rgba(11, 59, 96, 0.08)' : 'transparent',
-          borderColor: '#0B3B60',
+          backgroundColor: pressed ? `${colors.primary}18` : 'transparent',
+          borderColor: colors.primary,
           borderWidth: 1.5,
         };
       case 'ghost':
         return {
-          backgroundColor: pressed ? 'rgba(0, 0, 0, 0.05)' : 'transparent',
+          backgroundColor: pressed ? `${colors.primary}12` : 'transparent',
           borderColor: 'transparent',
         };
     }
@@ -88,13 +91,13 @@ export const TouchButton: React.FC<TouchButtonProps> = ({
       case 'saffron':
       case 'emerald':
       case 'danger':
-        return '#FFFFFF';
+        return variant === 'primary' && colors.textInverse !== '#FFFFFF' ? colors.textInverse : '#FFFFFF';
       case 'secondary':
-        return '#0F172A';
+        return colors.textPrimary;
       case 'outline':
-        return '#0B3B60';
+        return colors.primary;
       case 'ghost':
-        return '#0B3B60';
+        return colors.primary;
     }
   };
 
@@ -102,18 +105,33 @@ export const TouchButton: React.FC<TouchButtonProps> = ({
     switch (size) {
       case 'small':
         return {
-          container: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+          container: {
+            minHeight: DESIGN_TOKENS.controlHeight.small,
+            paddingVertical: 7,
+            paddingHorizontal: 12,
+            borderRadius: DESIGN_TOKENS.radius.sm,
+          },
           text: { fontSize: 12, fontWeight: '700' },
         };
       case 'large':
         return {
-          container: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12 },
+          container: {
+            minHeight: DESIGN_TOKENS.controlHeight.large,
+            paddingVertical: 14,
+            paddingHorizontal: 20,
+            borderRadius: DESIGN_TOKENS.radius.md,
+          },
           text: { fontSize: 16, fontWeight: '800' },
         };
       case 'medium':
       default:
         return {
-          container: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
+          container: {
+            minHeight: DESIGN_TOKENS.controlHeight.medium,
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            borderRadius: DESIGN_TOKENS.radius.sm + 2,
+          },
           text: { fontSize: 14, fontWeight: '700' },
         };
     }

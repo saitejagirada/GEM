@@ -26,6 +26,7 @@ import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
 import { MOCK_ACCEPTED_ORDERS, MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
 import { formatInr } from '../utils/formatters';
+import { DataNotice } from '../components/DataNotice';
 
 export type PortalSection =
   | 'CONTRACTS'
@@ -203,20 +204,21 @@ export const PortalsDirectoryScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice>Portal directory · Links open external services; confirm the destination and current information before continuing.</DataNotice>
       {/* Ecosystem Header Banner */}
       <View style={[styles.ecosystemBanner, { backgroundColor: isDark ? colors.surface : colors.primary }]}>
         <View style={styles.bannerRow}>
           <Text style={styles.bannerEmblem}>🏛️</Text>
           <View style={{ flex: 1 }}>
             <Text style={[styles.bannerTitle, { fontSize: 15 * fontMultiplier }]}>GeM Ecosystem Directory</Text>
-            <Text style={styles.bannerSub}>All Official Sub-Domains, Contracts, Auctions & Services</Text>
+            <Text style={styles.bannerSub}>Related portals, contracts, auctions & services</Text>
           </View>
         </View>
 
         {/* Public Transparency Badge */}
         <View style={styles.publicBadge}>
           <Text style={styles.publicBadgeText}>
-            🌐 Public Transparency Portal • Zero-Login Access to Official Procurement Records
+            External links are provided for discovery; each portal remains the source of truth.
           </Text>
         </View>
       </View>

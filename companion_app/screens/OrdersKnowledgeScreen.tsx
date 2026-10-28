@@ -22,6 +22,7 @@ import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInr, formatLakhs } from '../utils/formatters';
 import type { AcceptedOrder } from '../types/index';
+import { DataNotice } from '../components/DataNotice';
 
 export const OrdersKnowledgeScreen: React.FC = () => {
   const { colors, fontMultiplier, isDark } = useTheme();
@@ -38,14 +39,15 @@ export const OrdersKnowledgeScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice>Contract discovery · Values and workflow details should be checked against the official contract record.</DataNotice>
       {/* Top Banner: Public Transparency */}
       <View style={[styles.topBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View>
           <Text style={[styles.topBannerTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-            GeM Verified Contracts &amp; Order Transparency
+            Contracts &amp; order records
           </Text>
           <Text style={[styles.topBannerSub, { color: colors.textMuted }]}>
-            CVC-compliant contract records, statutory CRAC timelines, and PFMS tracking
+            Review contract values, CRAC milestones and PFMS references in one place.
           </Text>
         </View>
 
@@ -60,29 +62,28 @@ export const OrdersKnowledgeScreen: React.FC = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Statutory CRAC 10-Day Deemed Acceptance Guide */}
+        {/* CRAC workflow reference */}
         <View style={[styles.cracCard, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
           <View style={styles.cracHeaderRow}>
             <Text style={styles.cracIcon}>⚖️</Text>
             <View style={{ flex: 1 }}>
               <Text style={[styles.cracTitle, { color: '#1E40AF' }]}>
-                Statutory CRAC 10-Day Deemed Acceptance Rule
+                CRAC 10-day workflow reference
               </Text>
               <Text style={[styles.cracSub, { color: '#3B82F6' }]}>
-                GFR 149 &amp; Ministry of Finance OM No. F.1/26/2018-PPD
+                Confirm the current policy and order terms on the official portal
               </Text>
             </View>
           </View>
           <Text style={styles.cracBody}>
-            Upon physical delivery of goods/services at the consignee depot, the buyer must issue the Consignee Receipt and Acceptance Certificate (CRAC) within <Text style={{ fontWeight: '800' }}>10 calendar days</Text>.{'\n\n'}
-            If no rejection or discrepancy is lodged within 10 days, the GeM portal <Text style={{ fontWeight: '800' }}>auto-triggers Deemed Acceptance</Text>, releases the PFMS treasury payment voucher, and imposes carting restrictions on the buyer department.
+            Use this card as a workflow reminder only. The applicable CRAC window, acceptance path and payment steps depend on the current order terms and official GeM guidance.
           </Text>
         </View>
 
         {/* 5 Verified Orders Showcase */}
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>
-            Verified Executed Contracts ({MOCK_ACCEPTED_ORDERS.length})
+            Executed contract records ({MOCK_ACCEPTED_ORDERS.length})
           </Text>
           <View style={[styles.volPill, { backgroundColor: '#DCFCE7' }]}>
             <Text style={styles.volPillText}>Total: {formatLakhs(totalAcceptedValueInr)}</Text>
@@ -96,7 +97,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
           >
             <View style={styles.orderTopRow}>
               <View style={[styles.orderStatusPill, { backgroundColor: '#DCFCE7' }]}>
-                <Text style={styles.orderStatusText}>✓ CRAC VERIFIED</Text>
+                <Text style={styles.orderStatusText}>CRAC {order.cracStatus}</Text>
               </View>
               <Text style={[styles.contractNum, { color: colors.textMuted }]}>{order.contractNumber}</Text>
             </View>
@@ -150,7 +151,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
         {/* Public Transparency Statement */}
         <View style={[styles.publicNotice, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
           <Text style={[styles.publicNoticeText, { color: colors.textMuted }]}>
-            GeM operates under complete public transparency. All procurement contracts, purchase order values, and vendor ratings are published under the open contracting standard.
+            This screen is a discovery and workflow companion. Use the linked official portal for the authoritative contract, payment and vendor record.
           </Text>
         </View>
       </ScrollView>
@@ -190,15 +191,15 @@ const styles = StyleSheet.create({
   volPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   volPillText: { color: '#15803D', fontSize: 10.5, fontWeight: '800' },
   orderCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   orderStatusPill: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 4 },

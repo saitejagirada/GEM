@@ -29,6 +29,7 @@ import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidCountdownBadge } from '../components/BidCountdownBadge';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
+import { DataNotice } from '../components/DataNotice';
 
 export type GeMStatusTab = 'ONGOING' | 'RA' | 'CLOSED' | 'CANCELLED' | 'ALL';
 
@@ -78,7 +79,7 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Card Header: Type Badge + Dynamic Lifecycle / Countdown + Bid Number */}
+      {/* Card Header: Type + lifecycle + bid number */}
       <View style={styles.cardTop}>
         <View style={styles.badgeRow}>
           <View
@@ -114,14 +115,14 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
               ]}
             >
               {isRa
-                ? '⚡ LIVE RA'
+                ? 'REVERSE AUCTION'
                 : isService
-                ? '🛠️ SERVICE'
+                ? 'SERVICE'
                 : bid.type === 'CUSTOM'
-                ? '📑 CUSTOM'
+                ? 'CUSTOM'
                 : bid.type === 'BOQ'
-                ? '📊 BOQ'
-                : '📦 GOODS'}
+                ? 'BOQ'
+                : 'GOODS'}
             </Text>
           </View>
           {isCancelled ? (
@@ -162,7 +163,7 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
         ]}
       >
         <Text style={[styles.matchBannerText, { color: isHighMatch ? '#166534' : '#B45309' }]}>
-          ★ {matchScore}% FIT SCORE • {verdictSummary}
+          {matchScore}% fit score · {verdictSummary}
         </Text>
       </View>
 
@@ -207,7 +208,7 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
       {/* Card Actions: Zero-PDF Inspect + 1-Tap GeM Doc PDF */}
       <View style={styles.cardActions}>
         <TouchButton
-          title="Inspect Zero-PDF"
+          title="Inspect record"
           variant="outline"
           size="small"
           icon="📋"
@@ -215,7 +216,7 @@ const MemoizedBidCard = React.memo<BidCardProps>(({
           style={{ flex: 1 }}
         />
         <TouchButton
-          title="GeM Doc 📄"
+          title="Open document"
           variant="primary"
           size="small"
           onPress={() => onOpenDoc(bid.bidNumber, bid.docUrl)}
@@ -349,13 +350,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice />
       {/* Sleek Top Search Bar with Inline Refresh & Clear */}
       <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search 45,399+ tenders by bid, item, ministry..."
+            placeholder="Search bid number, title or ministry..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -386,28 +388,28 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         <View style={styles.statusSegmentRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusSegmentScroll}>
             <TouchButton
-              title={`🟢 Ongoing (${statusCounts.ongoing})`}
+              title={`Ongoing (${statusCounts.ongoing})`}
               variant={statusTab === 'ONGOING' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('ONGOING')}
               style={styles.segmentedTabBtn}
             />
             <TouchButton
-              title={`⚡ Live RA (${statusCounts.ra})`}
+              title={`Reverse auction (${statusCounts.ra})`}
               variant={statusTab === 'RA' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('RA')}
               style={styles.segmentedTabBtn}
             />
             <TouchButton
-              title={`🔒 Closed (${statusCounts.closed})`}
+              title={`Closed (${statusCounts.closed})`}
               variant={statusTab === 'CLOSED' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('CLOSED')}
               style={styles.segmentedTabBtn}
             />
             <TouchButton
-              title={`🌐 All (${statusCounts.total})`}
+              title={`All (${statusCounts.total})`}
               variant={statusTab === 'ALL' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('ALL')}
@@ -415,7 +417,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             />
             {statusCounts.cancelled > 0 && (
               <TouchButton
-                title={`🚫 Cancelled (${statusCounts.cancelled})`}
+                title={`Cancelled (${statusCounts.cancelled})`}
                 variant={statusTab === 'CANCELLED' ? 'primary' : 'ghost'}
                 size="small"
                 onPress={() => setStatusTab('CANCELLED')}
@@ -429,7 +431,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowScroll}>
             <TouchButton
-              title="All Vehicles"
+              title="All types"
               variant={typeFilter === 'ALL' && scopeFilter === 'ALL' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => {
@@ -439,14 +441,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               style={styles.filterChip}
             />
             <TouchButton
-              title="⭐ Matched Only"
+              title="Matched only"
               variant={scopeFilter === 'MATCHED' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => setScopeFilter(scopeFilter === 'MATCHED' ? 'ALL' : 'MATCHED')}
               style={styles.filterChip}
             />
             <TouchButton
-              title={`📦 Products (${bids.filter((b) => b.type === 'PRODUCT').length})`}
+              title={`Products (${bids.filter((b) => b.type === 'PRODUCT').length})`}
               variant={typeFilter === 'PRODUCT' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => {
@@ -455,7 +457,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               style={styles.filterChip}
             />
             <TouchButton
-              title={`🛠️ Services (${bids.filter((b) => b.type === 'SERVICE').length})`}
+              title={`Services (${bids.filter((b) => b.type === 'SERVICE').length})`}
               variant={typeFilter === 'SERVICE' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => {
@@ -464,7 +466,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               style={styles.filterChip}
             />
             <TouchButton
-              title={`📊 BOQ (${bids.filter((b) => b.type === 'BOQ').length})`}
+              title={`BOQ (${bids.filter((b) => b.type === 'BOQ').length})`}
               variant={typeFilter === 'BOQ' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => {
@@ -473,7 +475,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               style={styles.filterChip}
             />
             <TouchButton
-              title={`📑 Custom (${bids.filter((b) => b.type === 'CUSTOM').length})`}
+              title={`Custom (${bids.filter((b) => b.type === 'CUSTOM').length})`}
               variant={typeFilter === 'CUSTOM' ? 'saffron' : 'secondary'}
               size="small"
               onPress={() => {
@@ -508,7 +510,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         ListHeaderComponent={
           <View style={styles.listHeader}>
             <Text style={[styles.listHeaderCount, { color: colors.textMuted }]}>
-              {filtered.length} {filtered.length === 1 ? 'Opportunity' : 'Opportunities'} Available
+              {filtered.length} {filtered.length === 1 ? 'public bid record' : 'public bid records'}
             </Text>
           </View>
         }
@@ -529,7 +531,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   searchSection: {
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
@@ -554,15 +556,15 @@ const styles = StyleSheet.create({
   listHeader: { paddingVertical: 4 },
   listHeaderCount: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

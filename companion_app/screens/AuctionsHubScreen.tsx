@@ -23,6 +23,7 @@ import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInr } from '../utils/formatters';
+import { DataNotice } from '../components/DataNotice';
 
 type AuctionMode = 'REVERSE' | 'FORWARD';
 
@@ -63,17 +64,18 @@ export const AuctionsHubScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DataNotice>Public auction discovery · Confirm lot status and place bids only on the official auction portal.</DataNotice>
       {/* Top Segmented Mode Selector */}
       <View style={[styles.segmentedBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchButton
-          title="⚡ Live Reverse Auctions"
+          title="Reverse auctions"
           variant={activeMode === 'REVERSE' ? 'primary' : 'secondary'}
           size="small"
           onPress={() => setActiveMode('REVERSE')}
           style={{ flex: 1 }}
         />
         <TouchButton
-          title="♻️ Forward e-Scrap Lots"
+          title="Forward lots"
           variant={activeMode === 'FORWARD' ? 'primary' : 'secondary'}
           size="small"
           onPress={() => setActiveMode('FORWARD')}
@@ -88,12 +90,12 @@ export const AuctionsHubScreen: React.FC = () => {
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
           {/* Forward Auction Info Banner */}
           <View style={[styles.forwardBanner, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
-            <Text style={[styles.bannerTag, { color: '#1E40AF' }]}>GOVERNMENT SURPLUS ASSETS &amp; E-SCRAP</Text>
+            <Text style={[styles.bannerTag, { color: '#1E40AF' }]}>FORWARD AUCTION DISCOVERY</Text>
             <Text style={[styles.bannerTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>
-              forwardauction.gem.gov.in Live Lots
+              forwardauction.gem.gov.in lot records
             </Text>
             <Text style={[styles.bannerSubtitle, { color: colors.textSecondary }]}>
-              Public bidding on decommissioned defense machinery, railway scrap &amp; central public sector vehicles.
+              Browse surplus and e-scrap lot records before opening the official auction room.
             </Text>
             <View style={{ marginTop: 8 }}>
               <TouchButton
@@ -120,7 +122,7 @@ export const AuctionsHubScreen: React.FC = () => {
                   <View style={[styles.catPill, { backgroundColor: isDark ? colors.surfaceSubtle : '#EDE9FE' }]}>
                     <Text style={[styles.catText, { color: '#6D28D9' }]}>{lot.category.replace('_', ' ')}</Text>
                   </View>
-                  <Text style={styles.lotTimeTag}>⏳ {hoursLeft}h left</Text>
+                  <Text style={styles.lotTimeTag}>{hoursLeft}h remaining in record</Text>
                 </View>
 
                 {/* Title & Lot ID */}
@@ -145,7 +147,7 @@ export const AuctionsHubScreen: React.FC = () => {
                     </Text>
                   </View>
                   <View style={[styles.priceCell, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
-                    <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Current Highest Bid</Text>
+                    <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Current bid in record</Text>
                     <Text style={[styles.highestVal, { color: colors.emerald }]}>
                       ₹{formatInr(lot.currentHighestBidInr)}
                     </Text>
@@ -172,7 +174,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   segmentedBar: {
     flexDirection: 'row',
-    padding: 8,
+    padding: 10,
     borderBottomWidth: 1,
     gap: 8,
   },
@@ -188,15 +190,15 @@ const styles = StyleSheet.create({
   bannerTitle: { fontWeight: '900', marginBottom: 2 },
   bannerSubtitle: { fontSize: 11.5, lineHeight: 16 },
   lotCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   lotHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   catPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
