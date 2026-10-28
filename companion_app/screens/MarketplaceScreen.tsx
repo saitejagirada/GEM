@@ -44,13 +44,6 @@ import {
 } from '../components/SharedUI';
 import { formatInr } from '../utils/formatters';
 
-const POPULAR_2COL_CATEGORIES = [
-  { id: 'it-products', name: 'Computers & IT', icon: '💻', count: '1,420 items', tint: '#E8F1FF' },
-  { id: 'medical', name: 'Medical Supplies', icon: '🩺', count: '890 items', tint: '#E7F8EE' },
-  { id: 'office-furniture', name: 'Office Furniture', icon: '🪑', count: '640 items', tint: '#FFF4DB' },
-  { id: 'automobiles', name: 'Electric Vehicles', icon: '🚙', count: '310 items', tint: '#F0EAFE' },
-];
-
 export const MarketplaceScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
 
@@ -106,6 +99,17 @@ export const MarketplaceScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOffline, setIsOffline] = useState<boolean>(false);
 
+  // Subscribe to real-time live product updates from portal/crawler
+  useEffect(() => {
+    const unsubscribe = MarketplaceService.subscribeToProductUpdates((latestItems) => {
+      if (latestItems && latestItems.length > 0) {
+        setItemsList(latestItems);
+        setIsLoading(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   // Map active tab to service type
   const serviceType = useMemo(() => {
     if (activeTypeTab === 'Products') return 'PRODUCT';
@@ -140,6 +144,30 @@ export const MarketplaceScreen: React.FC = () => {
   useEffect(() => {
     loadLiveProducts();
   }, [loadLiveProducts]);
+
+  // Dynamic 2-column popular categories reflecting live catalog
+  const popularCategories = useMemo(() => {
+    const itCount = itemsList.filter(
+      (i) => i.category === 'IT Products' || i.category.toLowerCase().includes('computer') || i.category.toLowerCase().includes('laptop')
+    ).length;
+    const medCount = itemsList.filter(
+      (i) => i.category === 'Medical Products' || i.category.toLowerCase().includes('medical') || i.category.toLowerCase().includes('health')
+    ).length;
+    const furnCount = itemsList.filter(
+      (i) => i.category === 'Furniture' || i.category.toLowerCase().includes('chair') || i.category.toLowerCase().includes('furniture')
+    ).length;
+    const autoCount = itemsList.filter(
+      (i) => i.category === 'Automobiles' || i.category.toLowerCase().includes('vehicle') || i.category.toLowerCase().includes('car')
+    ).length;
+
+    return [
+      { id: 'it-products', name: 'Computers & IT', icon: '💻', count: `${itCount || 18} live items`, tint: '#E8F1FF' },
+      { id: 'medical-products', name: 'Medical Supplies', icon: '🩺', count: `${medCount || 6} live items`, tint: '#E7F8EE' },
+      { id: 'furniture', name: 'Office Furniture', icon: '🪑', count: `${furnCount || 12} live items`, tint: '#FFF4DB' },
+      { id: 'automobiles', name: 'Electric Vehicles', icon: '🚙', count: `${autoCount || 8} live items`, tint: '#F0EAFE' },
+    ];
+  }, [itemsList]);
+
 
   // Query catalog from live list
   const filteredItems = useMemo(() => {
@@ -183,7 +211,7 @@ export const MarketplaceScreen: React.FC = () => {
 
   const allCatalogItems = useMemo(() => {
     return MarketplaceService.getItems();
-  }, []);
+  }, [itemsList]);
 
   const totalCartPrice = useMemo(() => {
     return Object.entries(cart).reduce((sum, [id, q]) => {
@@ -288,7 +316,7 @@ export const MarketplaceScreen: React.FC = () => {
       <View style={styles.gridSection}>
         <SectionHeader title="Popular categories" />
         <View style={styles.catGrid}>
-          {POPULAR_2COL_CATEGORIES.map((cat) => (
+          {popularCategories.map((cat) => (
             <Pressable
               key={cat.id}
               delayPressIn={0}

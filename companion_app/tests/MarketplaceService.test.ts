@@ -58,4 +58,46 @@ describe('MarketplaceService', () => {
     const liveItems = await MarketplaceService.fetchLiveProducts();
     assert.ok(Array.isArray(liveItems));
   });
+
+  it('subscribes to live product updates and dynamically ingests new seller products', () => {
+    let captured: any[] = [];
+    const unsubscribe = MarketplaceService.subscribeToProductUpdates((items) => {
+      captured = items;
+    });
+
+    assert.ok(captured.length >= 60, `Expected catalog >= 60 items, got ${captured.length}`);
+
+    // Ingest a freshly discovered live product
+    const newLiveProduct = {
+      id: 'gem-test-live-999',
+      title: 'GeM Live Drone Surveillance Unit 4K HDR',
+      category: 'Electronic Equipments',
+      type: 'PRODUCT' as const,
+      l1PriceInr: 125000,
+      mrpInr: 180000,
+      discountPercent: 30,
+      priceUnit: 'per Unit',
+      minOrderQty: 1,
+      oemBrand: 'Garuda Aerospace',
+      rating: 4.9,
+      totalOrders: 320,
+      specSummary: { 'Range': '15km', 'Battery': '5000mAh' },
+      procurementModes: ['DIRECT_PURCHASE' as const, 'L1_COMPARISON' as const],
+      msePreference: true,
+      makeInIndiaPercent: 85,
+      isAvailableOnGeM: true,
+      imageUrl: 'https://assets-mkpbg.gem.gov.in/img/othe/drone.jpg',
+      etaDelivery: '⚡ 48 Hours Express',
+      unitText: '1 Kit',
+      badge: 'GeM Verified',
+      inStock: true,
+      stockCount: 15,
+    };
+
+    const added = MarketplaceService.ingestLiveProducts([newLiveProduct]);
+    assert.strictEqual(added, 1);
+    assert.ok(captured.some((i) => i.id === 'gem-test-live-999'));
+
+    unsubscribe();
+  });
 });

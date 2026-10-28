@@ -495,58 +495,32 @@ class GemPortalService:
     @staticmethod
     def get_products(category: Optional[str] = None, query: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Dynamically queries live GeM marketplace catalog.
-        Attempts real-time fetch from GeM public search APIs.
-        If offline or blocked by GeM firewall, returns empty list without hardcoded fake items.
+        Dynamically queries live GeM marketplace catalog using GemProductIngestion.
+        Returns genuine crawled products with fallback to cached live items, applying category and query filters.
         """
-        import requests
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        items = []
-        try:
-            search_query = query or (category if category and category != 'ALL' else 'procurement')
-            resp = requests.get(
-                "https://mkp.gem.gov.in/api/v1/search",
-                params={"q": search_query},
-                headers=headers,
-                timeout=5
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                raw_items = data.get("response", {}).get("docs", [])
-                for idx, doc in enumerate(raw_items):
-                    items.append({
-                        "id": f"gem-live-{idx}",
-                        "title": doc.get("title", "GeM Catalog Item"),
-                        "category": doc.get("category", category or "General"),
-                        "type": "PRODUCT",
-                        "l1PriceInr": doc.get("min_price", 0),
-                        "mrpInr": doc.get("max_price", 0),
-                        "discountPercent": 15,
-                        "priceUnit": "per Unit",
-                        "unitText": "1 Standard Unit",
-                        "minOrderQty": 1,
-                        "oemBrand": doc.get("brand", "GeM Verified OEM"),
-                        "rating": 4.5,
-                        "totalOrders": 100,
-                        "imageUrl": doc.get("image", "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=500&auto=format&fit=crop&q=80"),
-                        "etaDelivery": "⚡ 3-5 Day GeM SLA",
-                        "badge": "GeM Verified",
-                        "inStock": True,
-                        "stockCount": 50,
-                        "specSummary": {},
-                        "procurementModes": ["DIRECT_PURCHASE", "L1_COMPARISON"],
-                        "msePreference": True,
-                        "makeInIndiaPercent": 80,
-                        "isAvailableOnGeM": True,
-                    })
-        except Exception:
-            pass
+        from .gem_product_ingestion import GemProductIngestion
+        items = GemProductIngestion._load_cached_products()
+        if not items:
+            items = GemProductIngestion.fetch_all_live_products()
 
-        return items
+        filtered = items
+        if category and category.upper() != "ALL":
+            cat_lower = category.lower()
+            filtered = [
+                i for i in filtered
+                if cat_lower in i.get("category", "").lower() or i.get("category", "").lower() in cat_lower
+            ]
+
+        if query and query.strip():
+            q_lower = query.lower().strip()
+            filtered = [
+                i for i in filtered
+                if q_lower in i.get("title", "").lower()
+                or q_lower in i.get("category", "").lower()
+                or q_lower in i.get("oemBrand", "").lower()
+            ]
+
+        return filtered
 
     @staticmethod
     def get_contracts() -> List[Dict[str, Any]]:

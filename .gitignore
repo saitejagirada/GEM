@@ -57,7 +57,7 @@ backend/logs/
 backend/uploads/
 
 # Docker 数据
-data/
+/data/
 
 # Android build and local properties
 .gradle/
@@ -65,3 +65,4 @@ data/
 **/android/local.properties
 **/android/app/build/
 **/android/build/
+*.apk

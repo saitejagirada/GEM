@@ -9,6 +9,7 @@
  */
 
 import { isNetworkOnline } from '../utils/network.ts';
+import { LIVE_PORTAL_PRODUCTS } from '../fixtures/livePortalProducts.ts';
 
 export interface MarketplaceCategory {
   id: string;
@@ -858,6 +859,53 @@ export class MarketplaceService {
     return OFFICIAL_OUTLET_STORES;
   }
 
+  // Dynamic in-memory store initialized with live crawled GeM portal products & baseline items
+  private static liveCatalog: MarketplaceItem[] = [
+    ...MOCK_MARKETPLACE_ITEMS,
+    ...LIVE_PORTAL_PRODUCTS.filter((p) => !MOCK_MARKETPLACE_ITEMS.some((m) => m.id === p.id)),
+  ];
+  private static listeners: Set<(items: MarketplaceItem[]) => void> = new Set();
+
+  /**
+   * Subscribes to real-time live product updates.
+   */
+  public static subscribeToProductUpdates(listener: (items: MarketplaceItem[]) => void): () => void {
+    this.listeners.add(listener);
+    listener([...this.liveCatalog]);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Dynamically ingests newly discovered live products from sellers,
+   * reconciling additions and updates.
+   */
+  public static ingestLiveProducts(newItems: MarketplaceItem[]): number {
+    if (!newItems || newItems.length === 0) return 0;
+    const existingMap = new Map<string, MarketplaceItem>();
+    for (const item of this.liveCatalog) {
+      existingMap.set(item.id, item);
+    }
+    let addedCount = 0;
+    for (const it of newItems) {
+      if (!existingMap.has(it.id)) {
+        addedCount++;
+      }
+      existingMap.set(it.id, it);
+    }
+    this.liveCatalog = Array.from(existingMap.values());
+    this.notifyProductListeners();
+    return addedCount;
+  }
+
+  private static notifyProductListeners(): void {
+    const copy = [...this.liveCatalog];
+    for (const listener of this.listeners) {
+      try {
+        listener(copy);
+      } catch {}
+    }
+  }
+
   /**
    * Filters marketplace catalog by type, category, outlet store, and keyword search.
    */
@@ -867,7 +915,7 @@ export class MarketplaceService {
     outletStore?: string;
     query?: string;
   }): MarketplaceItem[] {
-    let items = [...MOCK_MARKETPLACE_ITEMS];
+    let items = [...this.liveCatalog];
 
     if (filter?.type && filter.type !== 'ALL') {
       items = items.filter((i) => i.type === filter.type);
@@ -930,7 +978,8 @@ export class MarketplaceService {
       if (res.ok) {
         const json = await res.json();
         if (json?.success && Array.isArray(json?.data) && json.data.length > 0) {
-          return json.data;
+          MarketplaceService.ingestLiveProducts(json.data);
+          return MarketplaceService.getItems(filter);
         }
       }
     } catch {
