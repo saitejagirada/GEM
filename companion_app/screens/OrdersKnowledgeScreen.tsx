@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { MOCK_ACCEPTED_ORDERS, DYNAMIC_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
+import { isNetworkOnline } from '../utils/network.ts';
 import { SupabaseClient } from '../services/SupabaseClient';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
@@ -53,6 +54,12 @@ export const OrdersKnowledgeScreen: React.FC = () => {
   const loadContracts = useCallback(async () => {
     setIsRefreshing(true);
     try {
+      const online = await isNetworkOnline();
+      if (!online) {
+        setOrders([]);
+        setIsOffline(true);
+        return;
+      }
       const live = await PortalApiClient.getContracts();
       if (live && live.length > 0) {
         setOrders(live);

@@ -25,6 +25,7 @@ import type { ForwardAuctionLot, AuctionItem, DeconstructedBidDoc } from '../typ
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
+import { isNetworkOnline } from '../utils/network.ts';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
@@ -107,6 +108,14 @@ export const AuctionsHubScreen: React.FC = () => {
   const loadLiveAuctions = useCallback(async () => {
     setIsRefreshing(true);
     try {
+      const online = await isNetworkOnline();
+      if (!online) {
+        setReverseAuctions([]);
+        setForwardLots([]);
+        setIsOffline(true);
+        return;
+      }
+
       const liveDocs = GeMLiveSyncService.getReverseAuctions();
       if (liveDocs && liveDocs.length > 0) {
         setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));

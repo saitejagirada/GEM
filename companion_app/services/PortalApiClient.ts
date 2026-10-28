@@ -30,6 +30,35 @@ export class PortalApiClient {
     this.baseUrl = url;
   }
 
+  /**
+   * Probes genuine public internet connectivity (via DNS/HTTP 204).
+   * Accurately detects active 4G cellular data and Wi-Fi connections.
+   */
+  public static async isOnline(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('https://clients3.google.com/generate_204', {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return res.status === 204 || res.ok;
+    } catch {
+      try {
+        const controller2 = new AbortController();
+        const timer2 = setTimeout(() => controller2.abort(), 2000);
+        const res2 = await fetch('https://dns.google/resolve?name=gem.gov.in', {
+          signal: controller2.signal,
+        });
+        clearTimeout(timer2);
+        return res2.ok;
+      } catch {
+        return false;
+      }
+    }
+  }
+
   private static async safeFetch<T>(endpoint: string, fallback: T): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);

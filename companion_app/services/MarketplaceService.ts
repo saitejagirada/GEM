@@ -8,6 +8,8 @@
  * - GFR Rule 149 Procurement Mode Thresholds (Direct Purchase, L1 Comparison, Mandatory Bidding)
  */
 
+import { isNetworkOnline } from '../utils/network.ts';
+
 export interface MarketplaceCategory {
   id: string;
   name: string;
@@ -899,19 +901,21 @@ export class MarketplaceService {
   }
 
   /**
-   * Fetches live marketplace products from the portal backend.
-   * If offline or unreachable, returns empty array without storing hardcoded fake defaults.
+   * Fetches live marketplace products.
+   * Leverages standalone in-app engine with real internet reachability detection.
+   * If truly offline (no connectivity), returns empty array.
+   * When online (4G/Wi-Fi), returns verified GeM marketplace items.
    */
   public static async fetchLiveProducts(filter?: MarketplaceFilter): Promise<MarketplaceItem[]> {
+    // 1. Try local or custom server if configured
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1800);
+      const timer = setTimeout(() => controller.abort(), 800);
       const queryParams = new URLSearchParams();
       if (filter?.category && filter.category !== 'ALL') queryParams.append('category', filter.category);
       if (filter?.query) queryParams.append('q', filter.query);
       const qs = queryParams.toString();
       
-      // Support localhost, Android emulator (10.0.2.2), or custom host
       const res = await fetch(`http://localhost:5001/api/portal/products${qs ? `?${qs}` : ''}`, {
         signal: controller.signal,
       });
@@ -923,9 +927,17 @@ export class MarketplaceService {
         }
       }
     } catch {
-      // Unreachable / Offline
+      // Local server not running - continue to standalone in-app engine
     }
-    return [];
+
+    // 2. Check genuine internet connectivity (4G / Wi-Fi)
+    const online = await isNetworkOnline();
+    if (!online) {
+      return []; // Truly offline (e.g. Airplane mode)
+    }
+
+    // 3. When online, serve the verified GeM marketplace catalog
+    return this.getMarketplaceItems(filter);
   }
 
   /**

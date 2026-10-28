@@ -44,6 +44,7 @@ import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { ParticipatedPortfolioScreen } from './screens/ParticipatedPortfolioScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
+import { isNetworkOnline } from './utils/network.ts';
 import { PortalApiClient } from './services/PortalApiClient';
 import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
@@ -139,25 +140,35 @@ const MainAppContent: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const [liveBids, profile, pulse] = await Promise.all([
-        SupabaseClient.getTenders(),
-        SupabaseClient.getVendorProfile('usr-agent-001'),
-        SupabaseClient.getMarketPulse(),
-      ]);
+      // 1. Check genuine public internet connectivity (4G / Wi-Fi)
+      const online = await isNetworkOnline();
+      if (!online) {
+        setBids([]);
+        return;
+      }
 
+      // 2. Calibrate and retrieve live synchronized portal bids
       const serviceBids = GeMLiveSyncService.getLiveBids();
-      // Ensure calibrated live portal bids (85+ ongoing) are prioritized
-      const combined = serviceBids && serviceBids.length >= 50
-        ? serviceBids
-        : (liveBids && liveBids.length > 0 ? liveBids : serviceBids);
-
-      if (combined && combined.length > 0) {
-        setBids(combined);
+      if (serviceBids && serviceBids.length > 0) {
+        setBids(serviceBids);
       } else {
         setBids([]);
       }
-      if (profile) setUserProfile(profile);
-      if (pulse) setMarketPulse(pulse);
+
+      // 3. Gracefully fetch profile and market pulse without cascading failures
+      try {
+        const profile = await SupabaseClient.getVendorProfile('usr-agent-001');
+        if (profile) setUserProfile(profile);
+      } catch {
+        // Safe profile default preserved
+      }
+
+      try {
+        const pulse = await SupabaseClient.getMarketPulse();
+        if (pulse) setMarketPulse(pulse);
+      } catch {
+        // Safe pulse default preserved
+      }
     } catch {
       setBids([]);
     } finally {
