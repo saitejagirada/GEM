@@ -17,6 +17,7 @@ import {
   Alert,
   Linking,
   Pressable,
+  BackHandler,
 } from 'react-native';
 import type { ForwardAuctionLot, AuctionItem } from '../types/index';
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
@@ -106,6 +107,19 @@ export const AuctionsHubScreen: React.FC = () => {
       })
       .catch(() => {});
   }, []);
+
+  // BackHandler to exit reverse auction room back to catalog instead of closing app
+  useEffect(() => {
+    if (!selectedRa) return;
+
+    const onBackPress = () => {
+      setSelectedRa(null);
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [selectedRa]);
 
   const handleIncrementForwardBid = (lotId: string) => {
     setForwardLots((prev) =>

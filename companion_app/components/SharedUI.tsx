@@ -120,8 +120,13 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
           <Pressable
             key={option}
             onPress={() => onSelect(option)}
-            style={[
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
+            style={({ pressed }) => [
               styles.segmentTab,
+              pressed && { opacity: 0.8 },
               isSelected && [
                 styles.segmentTabActive,
                 {
@@ -174,8 +179,13 @@ export const CompactChip: React.FC<CompactChipProps> = ({
   return (
     <Pressable
       onPress={onPress}
-      style={[
+      delayPressIn={0}
+      unstable_pressDelay={0}
+      hitSlop={6}
+      android_ripple={{ color: 'rgba(0, 0, 0, 0.06)' }}
+      style={({ pressed }) => [
         styles.chip,
+        pressed && { opacity: 0.82, transform: [{ scale: 0.98 }] },
         {
           backgroundColor: selected ? colors.primaryTint : colors.surface,
           borderColor: selected ? colors.primary : colors.border,
@@ -275,11 +285,16 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      delayPressIn={0}
+      unstable_pressDelay={0}
+      hitSlop={8}
+      android_ripple={{ color: 'rgba(255, 255, 255, 0.25)' }}
       style={({ pressed }) => [
         styles.primaryBtn,
         {
           backgroundColor: disabled ? colors.border : colors.primary,
-          opacity: pressed && !disabled ? 0.9 : 1,
+          opacity: pressed && !disabled ? 0.88 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
         style,
       ]}
@@ -315,12 +330,17 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      delayPressIn={0}
+      unstable_pressDelay={0}
+      hitSlop={8}
+      android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
       style={({ pressed }) => [
         styles.secondaryBtn,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
           opacity: pressed && !disabled ? 0.85 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
         style,
       ]}

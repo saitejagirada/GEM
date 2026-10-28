@@ -125,6 +125,8 @@ export const TouchButton: React.FC<TouchButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      delayPressIn={0}
+      unstable_pressDelay={0}
       hitSlop={{
         top: hitSlopPadding,
         bottom: hitSlopPadding,

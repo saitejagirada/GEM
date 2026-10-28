@@ -9,7 +9,7 @@
  * - Full Bid Inspector modal integration
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   Linking,
   RefreshControl,
   Pressable,
+  BackHandler,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
@@ -70,6 +71,24 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
   const [filterMseOnly, setFilterMseOnly] = useState<boolean>(false);
   const [filterMinValLakhs, setFilterMinValLakhs] = useState<number>(0);
+
+  // Hardware BackHandler to close inspector modal or filter sheet
+  useEffect(() => {
+    const handleBack = () => {
+      if (inspectingBid) {
+        setInspectingBid(null);
+        return true;
+      }
+      if (showFilterModal) {
+        setShowFilterModal(false);
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [inspectingBid, showFilterModal]);
 
   // Status Tab Counts
   const counts = useMemo(() => {

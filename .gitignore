@@ -58,3 +58,10 @@ backend/uploads/
 
 # Docker 数据
 data/
+
+# Android build and local properties
+.gradle/
+**/android/.gradle/
+**/android/local.properties
+**/android/app/build/
+**/android/build/

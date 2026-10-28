@@ -141,6 +141,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <View style={styles.quickGrid}>
           <Pressable
             style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
             onPress={() => onNavigateTab('MARKET')}
           >
             <View style={[styles.quickIconCircle, { backgroundColor: colors.primaryTint }]}>
@@ -152,6 +155,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <Pressable
             style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
             onPress={() => onNavigateTab('BIDS')}
           >
             <View style={[styles.quickIconCircle, { backgroundColor: colors.successTint }]}>
@@ -163,6 +169,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <Pressable
             style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
             onPress={() => onNavigateTab('AUCTIONS')}
           >
             <View style={[styles.quickIconCircle, { backgroundColor: colors.warningTint }]}>
@@ -174,6 +183,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <Pressable
             style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
             onPress={() => onNavigateTab('ORDERS')}
           >
             <View style={[styles.quickIconCircle, { backgroundColor: colors.violetTint }]}>
@@ -196,6 +208,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {POPULAR_CATEGORIES.map((cat) => (
             <Pressable
               key={cat.id}
+              delayPressIn={0}
+              unstable_pressDelay={0}
+              hitSlop={6}
               style={[
                 styles.categoryRowItem,
                 {
@@ -231,6 +246,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {latestOpportunities.map((bid) => (
           <Pressable
             key={bid.bidNumber}
+            delayPressIn={0}
+            unstable_pressDelay={0}
+            hitSlop={6}
             style={[
               styles.opportunityCard,
               {

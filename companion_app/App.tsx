@@ -27,6 +27,8 @@ import {
   Alert,
   TextInput,
   Pressable,
+  BackHandler,
+  Platform,
 } from 'react-native';
 import { ThemeProvider, useTheme, DESIGN_TOKENS } from './theme/ThemeContext';
 import { HomeScreen } from './screens/HomeScreen';
@@ -71,6 +73,67 @@ const MainAppContent: React.FC = () => {
   const [lookupInput, setLookupInput] = useState<string>('');
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
 
+  // Hardware Back Button Navigation Stack Manager
+  useEffect(() => {
+    let lastBackPressTime = 0;
+
+    const onBackPress = () => {
+      // 1. If inspection bid modal is open, close it
+      if (selectedBid) {
+        setSelectedBid(null);
+        return true;
+      }
+      // 2. If quick bid lookup modal is open, close it
+      if (showLookupModal) {
+        setShowLookupModal(false);
+        return true;
+      }
+      // 3. If in a sub-screen, navigate back to previous screen
+      if (subScreen !== 'NONE') {
+        setSubScreen('NONE');
+        return true;
+      }
+      // 4. If on a tab other than HOME, navigate back to HOME
+      if (activeTab !== 'HOME') {
+        setActiveTab('HOME');
+        return true;
+      }
+      // 5. If on HOME root, double-press back to exit with confirmation
+      const now = Date.now();
+      if (now - lastBackPressTime < 2000) {
+        BackHandler.exitApp();
+        return true;
+      }
+      lastBackPressTime = now;
+      if (Platform.OS === 'android') {
+        Alert.alert(
+          'Exit GeM Mobile Companion',
+          'Are you sure you want to exit the application?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Exit', onPress: () => BackHandler.exitApp() },
+          ],
+          { cancelable: true }
+        );
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [selectedBid, showLookupModal, subScreen, activeTab]);
+
+  // Subscribe to real-time live synchronization updates
+  useEffect(() => {
+    const unsubscribe = GeMLiveSyncService.subscribe((updatedBids) => {
+      if (updatedBids && updatedBids.length > 0) {
+        setBids(updatedBids);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -81,7 +144,10 @@ const MainAppContent: React.FC = () => {
       ]);
 
       const serviceBids = GeMLiveSyncService.getLiveBids();
-      const combined = liveBids && liveBids.length > 0 ? liveBids : serviceBids;
+      // Ensure calibrated live portal bids (85+ ongoing) are prioritized
+      const combined = serviceBids && serviceBids.length >= 50
+        ? serviceBids
+        : (liveBids && liveBids.length > 0 ? liveBids : serviceBids);
 
       if (combined && combined.length > 0) {
         setBids(combined);
@@ -186,6 +252,9 @@ const MainAppContent: React.FC = () => {
         {/* Left: GeM Brand */}
         <Pressable
           style={styles.brandRow}
+          delayPressIn={0}
+          unstable_pressDelay={0}
+          hitSlop={8}
           onPress={() => {
             setActiveTab('HOME');
             setSubScreen('NONE');
@@ -209,6 +278,8 @@ const MainAppContent: React.FC = () => {
         <View style={styles.headerRightActions}>
           <Pressable
             style={styles.headerIconBtn}
+            delayPressIn={0}
+            unstable_pressDelay={0}
             onPress={() => setShowLookupModal(true)}
             hitSlop={8}
             accessibilityLabel="Instant bid lookup"
@@ -218,6 +289,8 @@ const MainAppContent: React.FC = () => {
 
           <Pressable
             style={styles.headerIconBtn}
+            delayPressIn={0}
+            unstable_pressDelay={0}
             onPress={() => Alert.alert('Notifications', 'All your bids and contracts are up to date.')}
             hitSlop={8}
             accessibilityLabel="Notifications"
@@ -227,6 +300,8 @@ const MainAppContent: React.FC = () => {
 
           <Pressable
             style={[styles.profileAvatar, { backgroundColor: colors.primary }]}
+            delayPressIn={0}
+            unstable_pressDelay={0}
             onPress={() => {
               setActiveTab('MORE');
               setSubScreen('NONE');
@@ -251,7 +326,13 @@ const MainAppContent: React.FC = () => {
         {subScreen === 'CONTRACTS' && (
           <View style={{ flex: 1 }}>
             <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-              <Pressable onPress={() => setSubScreen('NONE')} hitSlop={10} style={styles.backBtn}>
+              <Pressable
+                onPress={() => setSubScreen('NONE')}
+                delayPressIn={0}
+                unstable_pressDelay={0}
+                hitSlop={10}
+                style={styles.backBtn}
+              >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
               <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Executed Contracts</Text>
@@ -318,6 +399,8 @@ const MainAppContent: React.FC = () => {
           return (
             <Pressable
               key={item.id}
+              delayPressIn={0}
+              unstable_pressDelay={0}
               onPress={() => {
                 setActiveTab(item.id);
                 setSubScreen('NONE');

@@ -16,6 +16,7 @@ import {
   MOCK_FORWARD_AUCTIONS,
   MOCK_PARTICIPATED_BIDS,
 } from '../fixtures/mockData.ts';
+import { GeMLiveSyncService } from './GeMLiveSyncService.ts';
 
 export class PortalApiClient {
   private static baseUrl = 'http://localhost:5001/api/portal';
@@ -56,7 +57,8 @@ export class PortalApiClient {
   }
 
   public static async getLiveBids(pages: number = 3): Promise<DeconstructedBidDoc[]> {
-    return this.safeFetch<DeconstructedBidDoc[]>(`/live-bids?pages=${pages}`, MOCK_DAILY_BIDS);
+    const fallback = GeMLiveSyncService.getLiveBids();
+    return this.safeFetch<DeconstructedBidDoc[]>(`/live-bids?pages=${pages}`, fallback);
   }
 
   public static async getFeed(params?: { category?: string; state?: string; minScore?: number }): Promise<DeconstructedBidDoc[]> {
@@ -67,11 +69,12 @@ export class PortalApiClient {
 
     const qs = query.toString();
     const endpoint = `/feed${qs ? `?${qs}` : ''}`;
-    return this.safeFetch<DeconstructedBidDoc[]>(endpoint, MOCK_DAILY_BIDS);
+    const fallback = GeMLiveSyncService.getLiveBids();
+    return this.safeFetch<DeconstructedBidDoc[]>(endpoint, fallback);
   }
 
   public static async getBidFundamentals(bidNumber: string): Promise<DeconstructedBidDoc | null> {
-    const fallback = MOCK_DAILY_BIDS.find((b) => b.bidNumber === bidNumber) || null;
+    const fallback = GeMLiveSyncService.getBidById(bidNumber) || MOCK_DAILY_BIDS.find((b) => b.bidNumber === bidNumber) || null;
     return this.safeFetch<DeconstructedBidDoc | null>(`/bid/${encodeURIComponent(bidNumber)}/fundamentals`, fallback);
   }
 
