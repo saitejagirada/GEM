@@ -182,10 +182,10 @@ export const CompactChip: React.FC<CompactChipProps> = ({
       delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={6}
-      android_ripple={{ color: 'rgba(0, 0, 0, 0.06)' }}
+      android_ripple={{ color: 'rgba(0, 0, 0, 0.06)', borderless: false }}
       style={({ pressed }) => [
         styles.chip,
-        pressed && { opacity: 0.82, transform: [{ scale: 0.98 }] },
+        pressed && { opacity: 0.8 },
         {
           backgroundColor: selected ? colors.primaryTint : colors.surface,
           borderColor: selected ? colors.primary : colors.border,
@@ -288,13 +288,12 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
       delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={8}
-      android_ripple={{ color: 'rgba(255, 255, 255, 0.25)' }}
+      android_ripple={{ color: 'rgba(255, 255, 255, 0.25)', borderless: false }}
       style={({ pressed }) => [
         styles.primaryBtn,
         {
           backgroundColor: disabled ? colors.border : colors.primary,
-          opacity: pressed && !disabled ? 0.88 : 1,
-          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
+          opacity: pressed && !disabled ? 0.85 : 1,
         },
         style,
       ]}
@@ -333,14 +332,13 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
       delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={8}
-      android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
+      android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
       style={({ pressed }) => [
         styles.secondaryBtn,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
           opacity: pressed && !disabled ? 0.85 : 1,
-          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
         style,
       ]}

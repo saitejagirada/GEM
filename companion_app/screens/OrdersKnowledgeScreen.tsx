@@ -9,7 +9,7 @@
  * - Contract Detail modal
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   Linking,
   Pressable,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { MOCK_ACCEPTED_ORDERS, DYNAMIC_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
@@ -40,8 +41,10 @@ import type { AcceptedOrder } from '../types/index';
 export const OrdersKnowledgeScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
 
-  const [orders, setOrders] = useState<AcceptedOrder[]>(DYNAMIC_ACCEPTED_ORDERS);
+  const [orders, setOrders] = useState<AcceptedOrder[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'CRAC' | 'DEFENCE' | 'RAILWAYS' | 'HEALTH' | 'SPACE'>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<AcceptedOrder | null>(null);
@@ -53,14 +56,17 @@ export const OrdersKnowledgeScreen: React.FC = () => {
       const live = await PortalApiClient.getContracts();
       if (live && live.length > 0) {
         setOrders(live);
+        setIsOffline(false);
       } else {
-        const local = await SupabaseClient.getAcceptedOrders();
-        if (local && local.length > 0) setOrders(local);
+        setOrders([]);
+        setIsOffline(true);
       }
     } catch {
-      // offline fallback
+      setOrders([]);
+      setIsOffline(true);
     } finally {
       setIsRefreshing(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -256,13 +262,38 @@ export const OrdersKnowledgeScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📑</Text>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No contracts found</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Try clearing search terms or selecting &quot;All Contracts&quot;.
-            </Text>
-          </View>
+          isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
+                Connecting to GeM Portal...
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Fetching executed contracts and CRAC disbursements.
+              </Text>
+            </View>
+          ) : isOffline ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Contracts Available (Offline)</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Unable to load executed contracts from GeM portal. Please check your internet connection and try again.
+              </Text>
+              <PrimaryButton
+                label="Retry Connection"
+                onPress={loadContracts}
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📑</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No contracts found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Try clearing search terms or selecting &quot;All Contracts&quot;.
+              </Text>
+            </View>
+          )
         }
       />
 

@@ -27,6 +27,7 @@ import {
   PrimaryButton,
   SecondaryButton,
   MetricBox,
+  CompactChip,
 } from '../components/SharedUI';
 import { formatInr } from '../utils/formatters';
 

@@ -32,6 +32,13 @@ export class PortalDocService {
   }
 
   /**
+   * Resolves the official GeM PDF document URL (alias for resolvePdfUrl).
+   */
+  public static getOfficialDocUrl(bidNumber?: string, docUrl?: string): string {
+    return this.resolvePdfUrl(bidNumber, docUrl);
+  }
+
+  /**
    * Whitelist validation: strictly ensures document URL is from an official verified GeM domain.
    */
   public static isSafeGemUrl(url: string): boolean {

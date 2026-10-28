@@ -19,6 +19,7 @@ import {
   Pressable,
   BackHandler,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import type { ForwardAuctionLot, AuctionItem, DeconstructedBidDoc } from '../types/index';
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
@@ -96,25 +97,37 @@ export const AuctionsHubScreen: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>(MOCK_FORWARD_AUCTIONS);
-  const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>(() => {
-    const liveDocs = GeMLiveSyncService.getReverseAuctions();
-    return liveDocs.map(mapBidDocToReverseAuction);
-  });
+  const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>([]);
+  const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>([]);
   const [selectedRa, setSelectedRa] = useState<ReverseAuctionDetailItem | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
 
   const loadLiveAuctions = useCallback(async () => {
     setIsRefreshing(true);
     try {
       const liveDocs = GeMLiveSyncService.getReverseAuctions();
-      setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
+      if (liveDocs && liveDocs.length > 0) {
+        setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
+        setIsOffline(false);
+      } else {
+        setReverseAuctions([]);
+        setIsOffline(true);
+      }
       const lots = await PortalApiClient.getForwardAuctions();
-      if (lots && lots.length > 0) setForwardLots(lots);
+      if (lots && lots.length > 0) {
+        setForwardLots(lots);
+      } else {
+        setForwardLots([]);
+      }
     } catch {
-      // offline fallback
+      setReverseAuctions([]);
+      setForwardLots([]);
+      setIsOffline(true);
     } finally {
       setIsRefreshing(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -220,62 +233,95 @@ export const AuctionsHubScreen: React.FC = () => {
         }
       >
         {activeTab === 'Live Reverse' && (
-          <View>
-            {filteredReverseAuctions.map((ra) => (
-              <View
-                key={ra.id}
-                style={[
-                  styles.auctionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.cardHeaderRow}>
-                  <StatusBadge label="LIVE RA" tone="success" dot />
-                  <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>
-                    {ra.contractNumber}
-                  </Text>
-                  <Text style={[styles.closingText, { color: colors.warning }]}>
-                    {ra.closingDateLabel}
-                  </Text>
-                </View>
-
-                <Text
-                  style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-                  numberOfLines={2}
+          isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
+                Connecting to GeM Portal...
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Fetching live reverse auctions and L1 price floors.
+              </Text>
+            </View>
+          ) : isOffline ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Live Auctions Available (Offline)</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Unable to connect to GeM reverse auctions. Please check your internet connection and try again.
+              </Text>
+              <PrimaryButton
+                label="Retry Connection"
+                onPress={loadLiveAuctions}
+                style={{ marginTop: 14 }}
+              />
+            </View>
+          ) : filteredReverseAuctions.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>⚡</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No active reverse auctions found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Try adjusting your search query or check back during active trading hours.
+              </Text>
+            </View>
+          ) : (
+            <View>
+              {filteredReverseAuctions.map((ra) => (
+                <View
+                  key={ra.id}
+                  style={[
+                    styles.auctionCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
                 >
-                  {ra.title}
-                </Text>
-
-                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {ra.department}
-                </Text>
-
-                <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-                  <View style={styles.metaCol}>
-                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CURRENT LOWEST (L1)</Text>
-                    <Text style={[styles.metaValue, { color: colors.primary }]}>
-                      {formatInr(ra.currentLowestBid)}
+                  <View style={styles.cardHeaderRow}>
+                    <StatusBadge label="LIVE RA" tone="success" dot />
+                    <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>
+                      {ra.contractNumber}
+                    </Text>
+                    <Text style={[styles.closingText, { color: colors.warning }]}>
+                      {ra.closingDateLabel}
                     </Text>
                   </View>
-                  <View style={styles.metaCol}>
-                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MIN DECREMENT</Text>
-                    <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
-                      ₹{formatInr(ra.minimumDecrement)}
-                    </Text>
+
+                  <Text
+                    style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
+                    numberOfLines={2}
+                  >
+                    {ra.title}
+                  </Text>
+
+                  <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {ra.department}
+                  </Text>
+
+                  <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+                    <View style={styles.metaCol}>
+                      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CURRENT LOWEST (L1)</Text>
+                      <Text style={[styles.metaValue, { color: colors.primary }]}>
+                        {formatInr(ra.currentLowestBid)}
+                      </Text>
+                    </View>
+                    <View style={styles.metaCol}>
+                      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MIN DECREMENT</Text>
+                      <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+                        ₹{formatInr(ra.minimumDecrement)}
+                      </Text>
+                    </View>
                   </View>
+
+                  <PrimaryButton
+                    label="Enter Decrement Room"
+                    onPress={() => setSelectedRa(ra)}
+                    style={{ marginTop: 10 }}
+                  />
                 </View>
-
-                <PrimaryButton
-                  label="Enter Decrement Room"
-                  onPress={() => setSelectedRa(ra)}
-                  style={{ marginTop: 10 }}
-                />
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )
         )}
 
         {activeTab === 'Forward e-Scrap' && (

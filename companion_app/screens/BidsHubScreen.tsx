@@ -21,6 +21,7 @@ import {
   RefreshControl,
   Pressable,
   BackHandler,
+  ActivityIndicator,
 } from 'react-native';
 import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
@@ -348,23 +349,50 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           ) : undefined
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No opportunities found</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Try adjusting your search criteria or switching to a different status tab.
-            </Text>
-            <SecondaryButton
-              label="Reset Filters"
-              onPress={() => {
-                setSearchQuery('');
-                setActiveTypeChip('All');
-                setFilterMseOnly(false);
-                setFilterMinValLakhs(0);
-              }}
-              style={{ marginTop: 14 }}
-            />
-          </View>
+          isSyncing ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
+                Connecting to GeM Portal...
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Synchronizing live published tenders and opportunities.
+              </Text>
+            </View>
+          ) : bids.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Tenders Available (Offline)</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Unable to load live tenders from GeM portal. Please check your internet connection and tap Retry.
+              </Text>
+              {onSyncLive && (
+                <PrimaryButton
+                  label="Retry Live Sync"
+                  onPress={onSyncLive}
+                  style={{ marginTop: 14 }}
+                />
+              )}
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📋</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No opportunities found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Try adjusting your search criteria or switching to a different status tab.
+              </Text>
+              <SecondaryButton
+                label="Reset Filters"
+                onPress={() => {
+                  setSearchQuery('');
+                  setActiveTypeChip('All');
+                  setFilterMseOnly(false);
+                  setFilterMinValLakhs(0);
+                }}
+                style={{ marginTop: 14 }}
+              />
+            </View>
+          )
         }
       />
 

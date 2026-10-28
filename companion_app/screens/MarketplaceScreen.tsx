@@ -24,6 +24,7 @@ import {
   Image,
   BackHandler,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import {
   MarketplaceService,
@@ -99,9 +100,11 @@ export const MarketplaceScreen: React.FC = () => {
     return () => sub.remove();
   }, [orderPlacedRef, showCartModal, selectedItem, showFilterModal]);
 
-  // Dynamic live products state
-  const [itemsList, setItemsList] = useState<MarketplaceItem[]>(MarketplaceService.getItems());
+  // Dynamic live products state - starts empty and waits for internet loading
+  const [itemsList, setItemsList] = useState<MarketplaceItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
 
   // Map active tab to service type
   const serviceType = useMemo(() => {
@@ -120,11 +123,17 @@ export const MarketplaceScreen: React.FC = () => {
       });
       if (live && live.length > 0) {
         setItemsList(live);
+        setIsOffline(false);
+      } else {
+        setItemsList([]);
+        setIsOffline(true);
       }
     } catch {
-      // offline fallback retained
+      setItemsList([]);
+      setIsOffline(true);
     } finally {
       setIsRefreshing(false);
+      setIsLoading(false);
     }
   }, [serviceType, selectedCategory, searchQuery]);
 
@@ -574,22 +583,47 @@ export const MarketplaceScreen: React.FC = () => {
         ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>🔍</Text>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Try clearing search terms or selecting &quot;All Categories&quot;.
-            </Text>
-            <SecondaryButton
-              label="Reset Filters"
-              onPress={() => {
-                setSearchQuery('');
-                setSelectedCategory('All Categories');
-                setFilterBrand('ALL');
-              }}
-              style={{ marginTop: 16 }}
-            />
-          </View>
+          isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
+                Connecting to GeM Portal...
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Fetching live products from marketplace.
+              </Text>
+            </View>
+          ) : isOffline ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Products Available (Offline)</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Unable to connect to GeM live marketplace. Please check your internet connection and try again.
+              </Text>
+              <PrimaryButton
+                label="Retry Connection"
+                onPress={loadLiveProducts}
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>🔍</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                Try clearing search terms or selecting &quot;All Categories&quot;.
+              </Text>
+              <SecondaryButton
+                label="Reset Filters"
+                onPress={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('All Categories');
+                  setFilterBrand('ALL');
+                }}
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          )
         }
       />
 

@@ -65,10 +65,10 @@ const MainAppContent: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
   const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
-  const [bids, setBids] = useState<DeconstructedBidDoc[]>(GeMLiveSyncService.getLiveBids());
+  const [bids, setBids] = useState<DeconstructedBidDoc[]>([]);
   const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
   const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(true);
 
   // Quick lookup modal
   const [showLookupModal, setShowLookupModal] = useState<boolean>(false);
@@ -153,11 +153,13 @@ const MainAppContent: React.FC = () => {
 
       if (combined && combined.length > 0) {
         setBids(combined);
+      } else {
+        setBids([]);
       }
       if (profile) setUserProfile(profile);
       if (pulse) setMarketPulse(pulse);
     } catch {
-      setBids(GeMLiveSyncService.getLiveBids());
+      setBids([]);
     } finally {
       setIsSyncing(false);
     }
@@ -425,6 +427,7 @@ const MainAppContent: React.FC = () => {
               key={item.id}
               delayPressIn={0}
               unstable_pressDelay={0}
+              android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
               onPress={() => {
                 setActiveTab(item.id);
                 setSubScreen('NONE');

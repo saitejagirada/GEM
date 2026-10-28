@@ -899,16 +899,19 @@ export class MarketplaceService {
   }
 
   /**
-   * Fetches live marketplace products from the portal backend with resilient offline fallback.
+   * Fetches live marketplace products from the portal backend.
+   * If offline or unreachable, returns empty array without storing hardcoded fake defaults.
    */
   public static async fetchLiveProducts(filter?: MarketplaceFilter): Promise<MarketplaceItem[]> {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1200);
+      const timer = setTimeout(() => controller.abort(), 1800);
       const queryParams = new URLSearchParams();
       if (filter?.category && filter.category !== 'ALL') queryParams.append('category', filter.category);
       if (filter?.query) queryParams.append('q', filter.query);
       const qs = queryParams.toString();
+      
+      // Support localhost, Android emulator (10.0.2.2), or custom host
       const res = await fetch(`http://localhost:5001/api/portal/products${qs ? `?${qs}` : ''}`, {
         signal: controller.signal,
       });
@@ -920,9 +923,9 @@ export class MarketplaceService {
         }
       }
     } catch {
-      // Offline fallback
+      // Unreachable / Offline
     }
-    return this.getMarketplaceItems(filter);
+    return [];
   }
 
   /**
