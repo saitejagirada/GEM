@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { MarketplaceService, OFFICIAL_PRODUCT_CATEGORIES, OFFICIAL_SERVICE_CATEGORIES, OFFICIAL_OUTLET_STORES } from '../services/MarketplaceService.ts';
+import { MarketplaceService } from '../services/MarketplaceService.ts';
 
 describe('MarketplaceService', () => {
   it('retrieves official 9 product categories and verified service categories', () => {

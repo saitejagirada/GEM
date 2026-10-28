@@ -10,6 +10,7 @@ import {
 import type { ParticipatedBid, ParticipatedBidStage } from '../types/index';
 import { MOCK_PARTICIPATED_BIDS, MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
+import { formatInr } from '../utils/formatters';
 
 interface ParticipatedPortfolioScreenProps {
   onOpenCrac?: () => void;
@@ -213,11 +214,11 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
                 <View style={styles.pricingRow}>
                   <View style={styles.priceCol}>
                     <Text style={styles.priceColLabel}>Your Quoted Price</Text>
-                    <Text style={styles.priceColVal}>₹{b.quotedPriceInr.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.priceColVal}>₹{formatInr(b.quotedPriceInr)}</Text>
                   </View>
                   <View style={styles.priceCol}>
                     <Text style={styles.priceColLabel}>Target L1 Benchmark</Text>
-                    <Text style={styles.priceColVal}>₹{b.expectedL1BenchmarkInr.toLocaleString('en-IN')}</Text>
+                    <Text style={styles.priceColVal}>₹{formatInr(b.expectedL1BenchmarkInr)}</Text>
                   </View>
                   <View style={styles.diffCol}>
                     <Text style={styles.priceColLabel}>Variance</Text>

@@ -11,10 +11,9 @@ Report Agent服务
 
 import os
 import json
-import time
 import re
 from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -22,13 +21,7 @@ from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, get_locale, t
-from .zep_tools import (
-    ZepToolsService, 
-    SearchResult, 
-    InsightForgeResult, 
-    PanoramaResult,
-    InterviewResult
-)
+from .zep_tools import ZepToolsService
 
 logger = get_logger('mirofish.report_agent')
 
@@ -2524,7 +2517,6 @@ class ReportManager:
             heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
             
             if heading_match:
-                level = len(heading_match.group(1))
                 title_text = heading_match.group(2).strip()
                 
                 # 检查是否是与章节标题重复的标题（跳过前5行内的重复）
@@ -2638,8 +2630,6 @@ class ReportManager:
         
         从已保存的章节文件组装完整报告，并进行标题清理
         """
-        folder = cls._get_report_folder(report_id)
-        
         # 构建报告头部
         md_content = f"# {outline.title}\n\n"
         md_content += f"> {outline.summary}\n\n"

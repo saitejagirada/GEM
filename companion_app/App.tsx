@@ -22,6 +22,7 @@ import {
   Modal,
   Alert,
   TextInput,
+  Pressable,
 } from 'react-native';
 import { ThemeProvider, useTheme } from './theme/ThemeContext';
 import { TouchButton } from './components/TouchButton';
@@ -38,6 +39,14 @@ import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
 
 export type ProductionTab = 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL';
+
+const PRODUCTION_TABS: { id: ProductionTab; label: string; icon: string }[] = [
+  { id: 'MARKET', label: 'Market', icon: '🛒' },
+  { id: 'BIDS', label: 'Bids', icon: '📦' },
+  { id: 'AUCTIONS', label: 'Auctions', icon: '⚡' },
+  { id: 'ORDERS', label: 'Contracts', icon: '📑' },
+  { id: 'PORTAL', label: 'GeM Portal', icon: '🏛️' },
+];
 
 const MainAppContent: React.FC = () => {
   const { colors, toggleColorMode, isDark, fontScale, setFontScale, fontMultiplier } = useTheme();
@@ -225,51 +234,43 @@ const MainAppContent: React.FC = () => {
 
       {/* 5 Production Bottom Navigation Tabs */}
       <View style={[styles.bottomNav, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        <TouchButton
-          title="Market"
-          icon="🛒"
-          variant={activeTab === 'MARKET' ? 'primary' : 'ghost'}
-          size="small"
-          onPress={() => setActiveTab('MARKET')}
-          style={styles.navTab}
-          textStyle={[styles.navText, { color: activeTab === 'MARKET' ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted }]}
-        />
-        <TouchButton
-          title="Bids"
-          icon="📦"
-          variant={activeTab === 'BIDS' ? 'primary' : 'ghost'}
-          size="small"
-          onPress={() => setActiveTab('BIDS')}
-          style={styles.navTab}
-          textStyle={[styles.navText, { color: activeTab === 'BIDS' ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted }]}
-        />
-        <TouchButton
-          title="Auctions"
-          icon="⚡"
-          variant={activeTab === 'AUCTIONS' ? 'primary' : 'ghost'}
-          size="small"
-          onPress={() => setActiveTab('AUCTIONS')}
-          style={styles.navTab}
-          textStyle={[styles.navText, { color: activeTab === 'AUCTIONS' ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted }]}
-        />
-        <TouchButton
-          title="Contracts"
-          icon="📑"
-          variant={activeTab === 'ORDERS' ? 'primary' : 'ghost'}
-          size="small"
-          onPress={() => setActiveTab('ORDERS')}
-          style={styles.navTab}
-          textStyle={[styles.navText, { color: activeTab === 'ORDERS' ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted }]}
-        />
-        <TouchButton
-          title="GeM Portal"
-          icon="🏛️"
-          variant={activeTab === 'PORTAL' ? 'primary' : 'ghost'}
-          size="small"
-          onPress={() => setActiveTab('PORTAL')}
-          style={styles.navTab}
-          textStyle={[styles.navText, { color: activeTab === 'PORTAL' ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted }]}
-        />
+        {PRODUCTION_TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <Pressable
+              key={tab.id}
+              onPress={() => setActiveTab(tab.id)}
+              style={[
+                styles.navTabItem,
+                isActive && {
+                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.12)' : 'rgba(11, 59, 96, 0.08)',
+                },
+              ]}
+              hitSlop={6}
+            >
+              <Text style={[styles.navTabIcon, isActive && styles.navTabIconActive]}>{tab.icon}</Text>
+              <Text
+                style={[
+                  styles.navTabText,
+                  {
+                    color: isActive ? (isDark ? '#38BDF8' : '#0B3B60') : colors.textMuted,
+                    fontWeight: isActive ? '800' : '600',
+                  },
+                ]}
+              >
+                {tab.label}
+              </Text>
+              {isActive && (
+                <View
+                  style={[
+                    styles.navActiveDot,
+                    { backgroundColor: isDark ? '#38BDF8' : '#0B3B60' },
+                  ]}
+                />
+              )}
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* MODAL: Instant Zero-PDF Bid Number Lookup */}
@@ -390,13 +391,29 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    paddingTop: 4,
+    paddingTop: 6,
     paddingBottom: 8,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'space-around',
   },
-  navTab: { flex: 1, paddingVertical: 4 },
-  navText: { fontSize: 10, fontWeight: '700', marginTop: 1 },
+  navTabItem: {
+    flex: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTabIcon: { fontSize: 18, marginBottom: 2 },
+  navTabIconActive: { transform: [{ scale: 1.1 }] },
+  navTabText: { fontSize: 10, letterSpacing: -0.2 },
+  navActiveDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 2,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',

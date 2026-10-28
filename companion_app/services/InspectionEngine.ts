@@ -3,7 +3,7 @@
  * Handles offline photo watermarking, barcode matching, and CRAC sign-off validation.
  */
 
-import type { InspectionItem, InspectionEvidencePhoto, GeoCoordinate, CRACStatus } from '../types/index.ts';
+import type { InspectionItem, GeoCoordinate } from '../types/index.ts';
 
 export class InspectionEngine {
   /**

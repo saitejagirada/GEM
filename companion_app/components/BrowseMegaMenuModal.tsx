@@ -26,6 +26,7 @@ import {
   OFFICIAL_SERVICE_CATEGORIES,
   OFFICIAL_OUTLET_STORES,
 } from '../services/MarketplaceService';
+import { formatInr } from '../utils/formatters';
 
 export interface BrowseMegaMenuModalProps {
   visible: boolean;
@@ -196,7 +197,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
                         <Text style={styles.catIcon}>{cat.icon}</Text>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.catName, { color: colors.textPrimary }]}>{cat.name}</Text>
-                          <Text style={[styles.catCount, { color: colors.textMuted }]}>{cat.itemCount.toLocaleString('en-IN')} Products Listed</Text>
+                          <Text style={[styles.catCount, { color: colors.textMuted }]}>{formatInr(cat.itemCount)} Products Listed</Text>
                         </View>
                         <TouchButton
                           title="Explore"

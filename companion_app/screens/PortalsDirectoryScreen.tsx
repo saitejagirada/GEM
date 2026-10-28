@@ -25,6 +25,7 @@ import {
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
 import { MOCK_ACCEPTED_ORDERS, MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
+import { formatInr } from '../utils/formatters';
 
 export type PortalSection =
   | 'CONTRACTS'
@@ -333,7 +334,7 @@ export const PortalsDirectoryScreen: React.FC = () => {
                   <View>
                     <Text style={[styles.valLabel, { color: '#15803D' }]}>AWARDED ORDER VALUE</Text>
                     <Text style={[styles.valAmount, { color: colors.emerald }]}>
-                      ₹{c.orderValueInr.toLocaleString('en-IN')}
+                      ₹{formatInr(c.orderValueInr)}
                     </Text>
                   </View>
                   <View style={styles.cracBadge}>
@@ -398,7 +399,7 @@ export const PortalsDirectoryScreen: React.FC = () => {
                   <View>
                     <Text style={[styles.valLabel, { color: '#B45309' }]}>CURRENT HIGHEST BID (H1)</Text>
                     <Text style={[styles.valAmount, { color: '#B45309' }]}>
-                      ₹{fa.currentH1BidInr.toLocaleString('en-IN')}
+                      ₹{formatInr(fa.currentH1BidInr)}
                     </Text>
                   </View>
                   <View style={styles.cracBadge}>
@@ -753,10 +754,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   contractCard: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   contractTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   contractPill: {

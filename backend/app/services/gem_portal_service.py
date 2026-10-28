@@ -186,6 +186,52 @@ class GemPortalService:
                 "matchScore": 42,
                 "verdictTag": "DISQUALIFIED",
                 "verdictSummary": "Turnover threshold (₹80L) and 5-year experience requirement exceed your current profile. EMD is mandatory."
+            },
+            {
+                "bidNumber": "GEM/2026/B/892200",
+                "title": "Annual Facility Maintenance & Security Guard Services",
+                "department": "Central Public Works Department (CPWD)",
+                "ministry": "Ministry of Housing and Urban Affairs",
+                "type": "SERVICE",
+                "bid_type": "SERVICE",
+                "categoryDomain": "Services",
+                "estimatedBidValueInr": 1800000,
+                "emdAmountInr": 36000,
+                "isEmdExemptForMse": True,
+                "epbgPercentage": 3.0,
+                "minAnnualTurnoverInr": 1200000,
+                "yearsExperienceRequired": 2,
+                "pastPerformancePercentage": 25,
+                "deliveryPeriodDays": 365,
+                "splittingRatio": "100% to L1",
+                "makeInIndiaClass": "CLASS_1",
+                "boqItems": [
+                    {
+                        "itemTitle": "Security Personnel Round-the-Clock Deployment",
+                        "quantity": 12,
+                        "unit": "Manpower",
+                        "specsSummary": "Trained security personnel with 24x7 rotation and statutory compliance"
+                    }
+                ],
+                "consignees": [
+                    {
+                        "location": "Nirman Bhawan",
+                        "state": "Delhi",
+                        "pincode": "110011",
+                        "quantity": 12,
+                        "reportingOfficer": "Executive Engineer (Civil)"
+                    }
+                ],
+                "requiredDocuments": [
+                    "PSARA License",
+                    "EPF and ESIC Registration Certificates",
+                    "GST Registration Certificate"
+                ],
+                "closingTimeUtc": (now + timedelta(days=6)).isoformat(),
+                "docUrl": "https://bidplus.gem.gov.in/showbidDocument/892200.pdf",
+                "matchScore": 85,
+                "verdictTag": "HIGH_MATCH",
+                "verdictSummary": "Good match for service contracts. EMD waived for verified MSEs."
             }
         ]
         return (live_bids + baseline) if live_bids else baseline

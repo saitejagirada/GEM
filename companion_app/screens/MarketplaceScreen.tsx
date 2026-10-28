@@ -20,6 +20,7 @@ import {
   SafeAreaView,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
 import {
   MarketplaceService,
@@ -31,6 +32,7 @@ import {
 import { TouchButton } from '../components/TouchButton';
 import { BrowseMegaMenuModal } from '../components/BrowseMegaMenuModal';
 import { useTheme } from '../theme/ThemeContext';
+import { formatInr } from '../utils/formatters';
 
 export const MarketplaceScreen: React.FC = () => {
   const { colors, fontMultiplier, isDark } = useTheme();
@@ -43,6 +45,7 @@ export const MarketplaceScreen: React.FC = () => {
   const [showMegaMenu, setShowMegaMenu] = useState<boolean>(false);
 
   // GFR 149 Mode Calculator state
+  const [isGfrExpanded, setIsGfrExpanded] = useState<boolean>(false);
   const [gfrCalculatorValue, setGfrCalculatorValue] = useState<string>('');
   const [gfrResult, setGfrResult] = useState<ReturnType<typeof MarketplaceService.evaluateGfrProcurementMode> | null>(null);
 
@@ -123,12 +126,12 @@ export const MarketplaceScreen: React.FC = () => {
             <View>
               <Text style={[styles.l1Label, { color: '#15803D' }]}>L1 BENCHMARK PRICE</Text>
               <Text style={[styles.l1Price, { color: colors.emerald, fontSize: 17 * fontMultiplier }]}>
-                ₹{item.l1PriceInr.toLocaleString('en-IN')}
+                ₹{formatInr(item.l1PriceInr)}
                 <Text style={[styles.priceUnit, { color: colors.textMuted }]}> {item.priceUnit}</Text>
               </Text>
             </View>
             <View style={styles.ordersBadge}>
-              <Text style={styles.ordersBadgeText}>★ {item.rating} ({item.totalOrders.toLocaleString('en-IN')} orders)</Text>
+              <Text style={styles.ordersBadgeText}>★ {item.rating} ({formatInr(item.totalOrders)} orders)</Text>
             </View>
           </View>
 
@@ -277,34 +280,47 @@ export const MarketplaceScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* GFR 149 Rule Fast Calculator Banner */}
+      {/* Collapsible GFR 149 Rule Fast Calculator */}
       <View style={[styles.gfrBanner, { backgroundColor: isDark ? colors.surfaceSubtle : '#EFF6FF', borderColor: '#BFDBFE' }]}>
-        <View style={styles.gfrHeaderRow}>
-          <Text style={[styles.gfrTitle, { color: '#1E40AF' }]}>⚖️ GFR 149 Procurement Rule Checker</Text>
-          <Text style={styles.gfrSub}>Check if Direct Purchase or Bidding applies</Text>
-        </View>
-        <View style={styles.gfrInputRow}>
-          <TextInput
-            style={[styles.gfrInput, { backgroundColor: colors.surface, color: colors.textPrimary, borderColor: colors.border }]}
-            placeholder="Order Value ₹ (e.g. 75000)"
-            placeholderTextColor={colors.textMuted}
-            value={gfrCalculatorValue}
-            onChangeText={setGfrCalculatorValue}
-            keyboardType="numeric"
-          />
-          <TouchButton
-            title="Check GFR Mode"
-            variant="primary"
-            size="small"
-            onPress={handleCalculateGfr}
-          />
-        </View>
-        {gfrResult ? (
-          <View style={styles.gfrResultCard}>
-            <Text style={styles.gfrResultMode}>Mode: {gfrResult.description}</Text>
-            <Text style={styles.gfrResultReq}>{gfrResult.mandatoryRequirement}</Text>
+        <Pressable
+          style={styles.gfrHeaderRow}
+          onPress={() => setIsGfrExpanded(!isGfrExpanded)}
+          hitSlop={8}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.gfrTitle, { color: '#1E40AF' }]}>⚖️ GFR 149 Procurement Rule Checker {isGfrExpanded ? '▴' : '▾'}</Text>
+            <Text style={styles.gfrSub}>Check if Direct Purchase or Bidding applies</Text>
           </View>
-        ) : null}
+          <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563EB' }}>
+            {isGfrExpanded ? 'Hide' : 'Calculate'}
+          </Text>
+        </Pressable>
+        {isGfrExpanded && (
+          <>
+            <View style={styles.gfrInputRow}>
+              <TextInput
+                style={[styles.gfrInput, { backgroundColor: colors.surface, color: colors.textPrimary, borderColor: colors.border }]}
+                placeholder="Order Value ₹ (e.g. 75000)"
+                placeholderTextColor={colors.textMuted}
+                value={gfrCalculatorValue}
+                onChangeText={setGfrCalculatorValue}
+                keyboardType="numeric"
+              />
+              <TouchButton
+                title="Check GFR Mode"
+                variant="primary"
+                size="small"
+                onPress={handleCalculateGfr}
+              />
+            </View>
+            {gfrResult ? (
+              <View style={styles.gfrResultCard}>
+                <Text style={styles.gfrResultMode}>Mode: {gfrResult.description}</Text>
+                <Text style={styles.gfrResultReq}>{gfrResult.mandatoryRequirement}</Text>
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
 
       {/* Virtualized Products & Services FlatList */}
@@ -348,7 +364,7 @@ export const MarketplaceScreen: React.FC = () => {
 
               <View style={[styles.modalPriceCard, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.modalL1, { color: colors.emerald }]}>
-                  L1 Benchmark: ₹{selectedItem.l1PriceInr.toLocaleString('en-IN')} {selectedItem.priceUnit}
+                  L1 Benchmark: ₹{formatInr(selectedItem.l1PriceInr)} {selectedItem.priceUnit}
                 </Text>
                 <Text style={[styles.modalMii, { color: colors.textSecondary }]}>
                   🇮🇳 Make In India Content: {selectedItem.makeInIndiaPercent}%
@@ -438,10 +454,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
   },
-  gfrHeaderRow: { marginBottom: 6 },
+  gfrHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 },
   gfrTitle: { fontSize: 12, fontWeight: '800' },
   gfrSub: { fontSize: 10, color: '#3B82F6', marginTop: 1 },
-  gfrInputRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  gfrInputRow: { flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: 8 },
   gfrInput: {
     flex: 1,
     borderWidth: 1,
@@ -465,15 +481,15 @@ const styles = StyleSheet.create({
   listHeader: { paddingVertical: 6 },
   listHeaderCount: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   card: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   categoryBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },

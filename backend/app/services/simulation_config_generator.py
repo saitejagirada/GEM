@@ -22,7 +22,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, t
 from ..utils.openai_chat_compat import create_chat_completion, extract_chat_completion_text
-from .zep_entity_reader import EntityNode, ZepEntityReader
+from .zep_entity_reader import EntityNode
 
 logger = get_logger('mirofish.simulation_config')
 
@@ -434,8 +434,6 @@ class SimulationConfigGenerator:
     
     def _call_llm_with_retry(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
         """带重试的LLM调用，包含JSON修复逻辑"""
-        import re
-        
         max_attempts = 3
         last_error = None
         
@@ -652,11 +650,6 @@ class SimulationConfigGenerator:
         entities: List[EntityNode]
     ) -> Dict[str, Any]:
         """生成事件配置"""
-        
-        # 获取可用的实体类型列表，供 LLM 参考
-        entity_types_available = list(set(
-            e.get_entity_type() or "Unknown" for e in entities
-        ))
         
         # 为每种类型列出代表性实体名称
         type_examples = {}

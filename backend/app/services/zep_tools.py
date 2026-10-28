@@ -8,7 +8,6 @@ Zep检索工具服务
 3. QuickSearch（简单搜索）- 快速检索
 """
 
-import time
 import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -559,110 +558,6 @@ class ZepToolsService:
             # transient failures must remain visible to the report workflow.
             logger.error(t("console.zepSearchApiFallback", error=str(e)))
             raise
-    
-    def _local_search(
-        self, 
-        graph_id: str, 
-        query: str, 
-        limit: int = 10,
-        scope: str = "edges"
-    ) -> SearchResult:
-        """
-        本地关键词匹配搜索（作为Zep Search API的降级方案）
-        
-        获取所有边/节点，然后在本地进行关键词匹配
-        
-        Args:
-            graph_id: 图谱ID
-            query: 搜索查询
-            limit: 返回结果数量
-            scope: 搜索范围
-            
-        Returns:
-            SearchResult: 搜索结果
-        """
-        logger.info(t("console.usingLocalSearch", query=query[:30]))
-        
-        facts = []
-        edges_result = []
-        nodes_result = []
-        
-        # 提取查询关键词（简单分词）
-        query_lower = query.lower()
-        keywords = [w.strip() for w in query_lower.replace(',', ' ').replace('，', ' ').split() if len(w.strip()) > 1]
-        
-        def match_score(text: str) -> int:
-            """计算文本与查询的匹配分数"""
-            if not text:
-                return 0
-            text_lower = text.lower()
-            # 完全匹配查询
-            if query_lower in text_lower:
-                return 100
-            # 关键词匹配
-            score = 0
-            for keyword in keywords:
-                if keyword in text_lower:
-                    score += 10
-            return score
-        
-        try:
-            if scope in ["edges", "both"]:
-                # 获取所有边并匹配
-                all_edges = self.get_all_edges(graph_id)
-                scored_edges = []
-                for edge in all_edges:
-                    score = match_score(edge.fact) + match_score(edge.name)
-                    if score > 0:
-                        scored_edges.append((score, edge))
-                
-                # 按分数排序
-                scored_edges.sort(key=lambda x: x[0], reverse=True)
-                
-                for score, edge in scored_edges[:limit]:
-                    if edge.fact:
-                        facts.append(edge.fact)
-                    edges_result.append({
-                        "uuid": edge.uuid,
-                        "name": edge.name,
-                        "fact": edge.fact,
-                        "source_node_uuid": edge.source_node_uuid,
-                        "target_node_uuid": edge.target_node_uuid,
-                    })
-            
-            if scope in ["nodes", "both"]:
-                # 获取所有节点并匹配
-                all_nodes = self.get_all_nodes(graph_id)
-                scored_nodes = []
-                for node in all_nodes:
-                    score = match_score(node.name) + match_score(node.summary)
-                    if score > 0:
-                        scored_nodes.append((score, node))
-                
-                scored_nodes.sort(key=lambda x: x[0], reverse=True)
-                
-                for score, node in scored_nodes[:limit]:
-                    nodes_result.append({
-                        "uuid": node.uuid,
-                        "name": node.name,
-                        "labels": node.labels,
-                        "summary": node.summary,
-                    })
-                    if node.summary:
-                        facts.append(f"[{node.name}]: {node.summary}")
-            
-            logger.info(t("console.localSearchComplete", count=len(facts)))
-            
-        except Exception as e:
-            logger.error(t("console.localSearchFailed", error=str(e)))
-        
-        return SearchResult(
-            facts=facts,
-            edges=edges_result,
-            nodes=nodes_result,
-            query=query,
-            total_count=len(facts)
-        )
     
     def get_all_nodes(self, graph_id: str) -> List[NodeInfo]:
         """
@@ -1220,7 +1115,6 @@ Return JSON format list of sub-queries."""
         
         # 获取所有节点
         all_nodes = self.get_all_nodes(graph_id)
-        node_map = {n.uuid: n for n in all_nodes}
         result.all_nodes = all_nodes
         result.total_nodes = len(all_nodes)
         
@@ -1236,10 +1130,6 @@ Return JSON format list of sub-queries."""
         for edge in all_edges:
             if not edge.fact:
                 continue
-            
-            # 为事实添加实体名称
-            source_name = node_map.get(edge.source_node_uuid, NodeInfo('', '', [], '', {})).name or edge.source_node_uuid[:8]
-            target_name = node_map.get(edge.target_node_uuid, NodeInfo('', '', [], '', {})).name or edge.target_node_uuid[:8]
             
             # 判断是否过期/失效
             is_historical = edge.is_expired or edge.is_invalid
@@ -1838,10 +1728,11 @@ Format constraints:
 - {quote_instruction}
 - You may use **bold** for key concepts"""
 
+            interview_content = "\n\n".join(interview_texts)
             user_prompt = f"""Interview Topic: {interview_requirement}
 
 Interview Content:
-{"\n\n".join(interview_texts)}
+{interview_content}
 
 Please generate the interview summary."""
         else:

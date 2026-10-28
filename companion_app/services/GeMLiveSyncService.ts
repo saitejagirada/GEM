@@ -13,7 +13,6 @@
 import type {
   DeconstructedBidDoc,
   BidLifecycleStatus,
-  GeMEvaluationStage,
 } from '../types/index.ts';
 import { LIVE_PORTAL_BIDS } from '../fixtures/livePortalBids.ts';
 

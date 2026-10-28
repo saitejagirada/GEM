@@ -781,11 +781,3 @@ class ZepGraphMemoryManager:
             )
             raise RuntimeError(f"部分图谱更新器未完整停止: {details}")
         logger.info("已停止所有图谱记忆更新器")
-    
-    @classmethod
-    def get_all_stats(cls) -> Dict[str, Dict[str, Any]]:
-        """获取所有更新器的统计信息"""
-        return {
-            sim_id: updater.get_stats() 
-            for sim_id, updater in cls._updaters.items()
-        }

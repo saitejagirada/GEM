@@ -32,5 +32,10 @@ export function expect(actual: any) {
     toBeDefined() {
       assert.ok(actual !== undefined, 'Expected value to be defined');
     },
+    not: {
+      toBe(expected: any) {
+        assert.notStrictEqual(actual, expected);
+      },
+    },
   };
 }

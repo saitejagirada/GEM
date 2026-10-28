@@ -32,7 +32,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 export type GeMStatusTab = 'ONGOING' | 'RA' | 'CLOSED' | 'CANCELLED' | 'ALL';
 
-export interface BidsHubScreenProps {
+interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
   userProfile: UserAgentProfile;
   initialFilter?: string;
@@ -349,13 +349,13 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Top Search & Filter Bar */}
+      {/* Sleek Top Search Bar with Inline Refresh & Clear */}
       <View style={[styles.searchSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={[styles.searchInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search by Bid number, item, department or ministry..."
+            placeholder="Search 45,399+ tenders by bid, item, ministry..."
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -369,145 +369,120 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               hitSlopPadding={4}
             />
           )}
-        </View>
-
-        {/* Real-time National Sync Banner */}
-        <View style={styles.syncBanner}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.syncBannerText}>
-              🟢 45,399+ Live Ongoing Bids on Official GeM Portal • {bids.length} Active
-            </Text>
-            <Text style={{ fontSize: 10, color: '#166534', marginTop: 2 }}>
-              Public read stream • bidplus.gem.gov.in • Zero login barrier
-            </Text>
-          </View>
           {onSyncLive && (
             <TouchButton
-              title={isSyncing ? "⟳ Syncing..." : "⟳ Refresh"}
-              variant="primary"
+              title={isSyncing ? "⟳ Syncing..." : "⟳"}
+              variant="ghost"
               size="small"
               onPress={onSyncLive}
-              style={{ marginLeft: 8 }}
+              style={styles.inlineRefreshBtn}
+              textStyle={{ fontSize: 16, color: colors.primary, fontWeight: '900' }}
+              hitSlopPadding={4}
             />
           )}
         </View>
 
-        {/* Tier 1: Official GeM Status Selector (bidStatusTypeFilter) */}
-        <View style={styles.statusTabsRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusTabsScroll}>
+        {/* Row 1: Segmented GeM Status Bar (Ongoing, Live RA, Closed, All) */}
+        <View style={styles.statusSegmentRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusSegmentScroll}>
             <TouchButton
-              title={`🟢 Ongoing Bids (${statusCounts.ongoing})`}
+              title={`🟢 Ongoing (${statusCounts.ongoing})`}
               variant={statusTab === 'ONGOING' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('ONGOING')}
-              style={styles.statusTabBtn}
+              style={styles.segmentedTabBtn}
             />
             <TouchButton
               title={`⚡ Live RA (${statusCounts.ra})`}
               variant={statusTab === 'RA' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('RA')}
-              style={styles.statusTabBtn}
+              style={styles.segmentedTabBtn}
             />
             <TouchButton
-              title={`🔒 Closed & Evaluating (${statusCounts.closed})`}
+              title={`🔒 Closed (${statusCounts.closed})`}
               variant={statusTab === 'CLOSED' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('CLOSED')}
-              style={styles.statusTabBtn}
+              style={styles.segmentedTabBtn}
             />
             <TouchButton
-              title={`🚫 Cancelled (${statusCounts.cancelled})`}
-              variant={statusTab === 'CANCELLED' ? 'primary' : 'ghost'}
-              size="small"
-              onPress={() => setStatusTab('CANCELLED')}
-              style={styles.statusTabBtn}
-            />
-            <TouchButton
-              title={`🌐 All Bids (${statusCounts.total})`}
+              title={`🌐 All (${statusCounts.total})`}
               variant={statusTab === 'ALL' ? 'primary' : 'ghost'}
               size="small"
               onPress={() => setStatusTab('ALL')}
-              style={styles.statusTabBtn}
+              style={styles.segmentedTabBtn}
             />
+            {statusCounts.cancelled > 0 && (
+              <TouchButton
+                title={`🚫 Cancelled (${statusCounts.cancelled})`}
+                variant={statusTab === 'CANCELLED' ? 'primary' : 'ghost'}
+                size="small"
+                onPress={() => setStatusTab('CANCELLED')}
+                style={styles.segmentedTabBtn}
+              />
+            )}
           </ScrollView>
         </View>
 
-        {/* Scope Toggle: All in Current Status vs AI Matched Only */}
-        <View style={styles.scopeRow}>
-          <TouchButton
-            title={
-              statusTab === 'ONGOING'
-                ? `🟢 All Ongoing (${statusCounts.ongoing})`
-                : statusTab === 'CLOSED'
-                ? `🔒 All Closed (${statusCounts.closed})`
-                : statusTab === 'RA'
-                ? `⚡ All Live RA (${statusCounts.ra})`
-                : statusTab === 'CANCELLED'
-                ? `🚫 All Cancelled (${statusCounts.cancelled})`
-                : `🌐 All (${bids.length})`
-            }
-            variant={scopeFilter === 'ALL' ? 'primary' : 'secondary'}
-            size="small"
-            onPress={() => setScopeFilter('ALL')}
-            style={{ flex: 1 }}
-          />
-          <TouchButton
-            title="⭐ Relevant / Matched Only"
-            variant={scopeFilter === 'MATCHED' ? 'primary' : 'secondary'}
-            size="small"
-            onPress={() => setScopeFilter('MATCHED')}
-            style={{ flex: 1 }}
-          />
+        {/* Row 2: Consolidated Filter Chips (Vehicles + Matched Scope) */}
+        <View style={styles.chipRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowScroll}>
+            <TouchButton
+              title="All Vehicles"
+              variant={typeFilter === 'ALL' && scopeFilter === 'ALL' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => {
+                setTypeFilter('ALL');
+                setScopeFilter('ALL');
+              }}
+              style={styles.filterChip}
+            />
+            <TouchButton
+              title="⭐ Matched Only"
+              variant={scopeFilter === 'MATCHED' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => setScopeFilter(scopeFilter === 'MATCHED' ? 'ALL' : 'MATCHED')}
+              style={styles.filterChip}
+            />
+            <TouchButton
+              title={`📦 Products (${bids.filter((b) => b.type === 'PRODUCT').length})`}
+              variant={typeFilter === 'PRODUCT' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => {
+                setTypeFilter(typeFilter === 'PRODUCT' ? 'ALL' : 'PRODUCT');
+              }}
+              style={styles.filterChip}
+            />
+            <TouchButton
+              title={`🛠️ Services (${bids.filter((b) => b.type === 'SERVICE').length})`}
+              variant={typeFilter === 'SERVICE' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => {
+                setTypeFilter(typeFilter === 'SERVICE' ? 'ALL' : 'SERVICE');
+              }}
+              style={styles.filterChip}
+            />
+            <TouchButton
+              title={`📊 BOQ (${bids.filter((b) => b.type === 'BOQ').length})`}
+              variant={typeFilter === 'BOQ' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => {
+                setTypeFilter(typeFilter === 'BOQ' ? 'ALL' : 'BOQ');
+              }}
+              style={styles.filterChip}
+            />
+            <TouchButton
+              title={`📑 Custom (${bids.filter((b) => b.type === 'CUSTOM').length})`}
+              variant={typeFilter === 'CUSTOM' ? 'saffron' : 'secondary'}
+              size="small"
+              onPress={() => {
+                setTypeFilter(typeFilter === 'CUSTOM' ? 'ALL' : 'CUSTOM');
+              }}
+              style={styles.filterChip}
+            />
+          </ScrollView>
         </View>
-      </View>
-
-      {/* Tier 2: Procurement Vehicle Type Pills (byType) */}
-      <View style={styles.filterPillsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillScroll}>
-          <TouchButton
-            title="All Vehicles"
-            variant={typeFilter === 'ALL' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('ALL')}
-            style={styles.typePill}
-          />
-          <TouchButton
-            title={`📦 Products (${bids.filter((b) => b.type === 'PRODUCT').length})`}
-            variant={typeFilter === 'PRODUCT' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('PRODUCT')}
-            style={styles.typePill}
-          />
-          <TouchButton
-            title={`🛠️ Services (${bids.filter((b) => b.type === 'SERVICE').length})`}
-            variant={typeFilter === 'SERVICE' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('SERVICE')}
-            style={styles.typePill}
-          />
-          <TouchButton
-            title={`📑 Custom (${bids.filter((b) => b.type === 'CUSTOM').length})`}
-            variant={typeFilter === 'CUSTOM' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('CUSTOM')}
-            style={styles.typePill}
-          />
-          <TouchButton
-            title={`📊 BOQ (${bids.filter((b) => b.type === 'BOQ').length})`}
-            variant={typeFilter === 'BOQ' ? 'saffron' : 'secondary'}
-            size="small"
-            onPress={() => setTypeFilter('BOQ')}
-            style={styles.typePill}
-          />
-        </ScrollView>
-      </View>
-
-      {/* Public Citizen / Vendor Info Banner */}
-      <View style={[styles.infoBanner, { backgroundColor: isDark ? colors.surfaceSubtle : '#F0FDF4', borderColor: '#BBF7D0' }]}>
-        <Text style={[styles.infoBannerText, { color: '#166534' }]}>
-          ℹ️ <Text style={{ fontWeight: '800' }}>Public Discovery Access:</Text> All bidding documents, BOQ specs, and EMD criteria are publicly accessible without an account. Tap &quot;GeM Doc 📄&quot; to download the official tender specification.
-        </Text>
       </View>
 
       {/* Virtualized FlatList with Pull-To-Refresh */}
@@ -567,43 +542,27 @@ const styles = StyleSheet.create({
   },
   searchIcon: { fontSize: 16, marginRight: 6 },
   searchInput: { flex: 1, fontSize: 13, fontWeight: '600', paddingVertical: 4 },
-  syncBanner: {
-    backgroundColor: 'rgba(21, 128, 61, 0.08)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 6,
-  },
-  syncBannerText: { color: '#15803D', fontSize: 10, fontWeight: '700', textAlign: 'center' },
-  statusTabsRow: { marginTop: 6, paddingBottom: 4 },
-  statusTabsScroll: { gap: 6 },
-  statusTabBtn: { marginRight: 6 },
+  inlineRefreshBtn: { paddingHorizontal: 6, minHeight: 36, justifyContent: 'center' },
+  statusSegmentRow: { marginTop: 8 },
+  statusSegmentScroll: { gap: 6 },
+  segmentedTabBtn: { marginRight: 6 },
   statusBadge: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6 },
-  scopeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  filterPillsRow: { paddingVertical: 6 },
-  filterPillScroll: { paddingHorizontal: 12, gap: 6 },
-  typePill: { marginRight: 6 },
-  infoBanner: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  infoBannerText: { fontSize: 10.5, lineHeight: 15 },
+  chipRow: { marginTop: 6 },
+  chipRowScroll: { gap: 6 },
+  filterChip: { marginRight: 6 },
   listContent: { paddingHorizontal: 12, paddingBottom: 40 },
   listHeader: { paddingVertical: 4 },
   listHeaderCount: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   card: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

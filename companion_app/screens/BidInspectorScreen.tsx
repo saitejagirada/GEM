@@ -14,6 +14,7 @@ import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
 import { UserAgentService } from '../services/UserAgentService';
 import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
+import { formatDateSafe } from '../utils/formatters';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -52,7 +53,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `GeM Bid Summary: ${bid.bidNumber}\n${bid.title}\nEst Value: ${fundamentals.estimatedValueLabel}\nEMD: ${fundamentals.emdLabel}\nClosing: ${new Date(bid.closingTimeUtc).toLocaleString('en-IN')}`,
+        message: `GeM Bid Summary: ${bid.bidNumber}\n${bid.title}\nEst Value: ${fundamentals.estimatedValueLabel}\nEMD: ${fundamentals.emdLabel}\nClosing: ${formatDateSafe(bid.closingTimeUtc)}`,
       });
     } catch {
       Alert.alert('Share', `Sharing summary for ${bid.bidNumber}`);

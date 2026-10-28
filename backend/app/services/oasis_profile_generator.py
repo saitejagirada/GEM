@@ -11,7 +11,6 @@ OASIS Agent Profile生成器
 import os
 import json
 import random
-import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,7 +26,7 @@ from ..utils.zep import (
     is_retryable_zep_error,
     normalize_zep_search_query,
 )
-from .zep_entity_reader import EntityNode, ZepEntityReader
+from .zep_entity_reader import EntityNode
 
 logger = get_logger('mirofish.oasis_profile')
 
@@ -530,10 +529,6 @@ class OasisProfileGenerator:
         """判断是否是个人类型实体"""
         return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
     
-    def _is_group_entity(self, entity_type: str) -> bool:
-        """判断是否是群体/机构类型实体"""
-        return entity_type.lower() in self.GROUP_ENTITY_TYPES
-    
     def _generate_profile_with_llm(
         self,
         entity_name: str,
@@ -623,8 +618,6 @@ class OasisProfileGenerator:
     
     def _fix_truncated_json(self, content: str) -> str:
         """修复被截断的JSON（输出被max_tokens限制截断）"""
-        import re
-        
         # 如果JSON被截断，尝试闭合它
         content = content.strip()
         
@@ -674,7 +667,7 @@ class OasisProfileGenerator:
                 result = json.loads(json_str)
                 result["_fixed"] = True
                 return result
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 # 5. 如果还是失败，尝试更激进的修复
                 try:
                     # 移除所有控制字符
@@ -959,10 +952,6 @@ IMPORTANT:
                 "profession": entity_type,
                 "interested_topics": ["General", "Social Issues"],
             }
-    
-    def set_graph_id(self, graph_id: str):
-        """设置图谱ID用于Zep检索"""
-        self.graph_id = graph_id
     
     def generate_profiles_from_entities(
         self,
@@ -1366,14 +1355,3 @@ IMPORTANT:
             json.dump(data, f, ensure_ascii=False, indent=2)
         
         logger.info(f"已保存 {len(profiles)} 个Reddit Profile到 {file_path} (JSON格式，包含user_id字段)")
-    
-    # 保留旧方法名作为别名，保持向后兼容
-    def save_profiles_to_json(
-        self,
-        profiles: List[OasisAgentProfile],
-        file_path: str,
-        platform: str = "reddit"
-    ):
-        """[已废弃] 请使用 save_profiles() 方法"""
-        logger.warning("save_profiles_to_json已废弃，请使用save_profiles方法")
-        self.save_profiles(profiles, file_path, platform)

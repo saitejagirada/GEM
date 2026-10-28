@@ -6,17 +6,15 @@ OASIS模拟管理器
 
 import os
 import json
-import shutil
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from ..config import Config
 from ..utils.logger import get_logger
-from .zep_entity_reader import ZepEntityReader, FilteredEntities
-from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
-from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
+from .zep_entity_reader import ZepEntityReader
+from .oasis_profile_generator import OasisProfileGenerator
+from .simulation_config_generator import SimulationConfigGenerator
 from ..utils.locale import t
 
 logger = get_logger('mirofish.simulation')
@@ -33,12 +31,6 @@ class SimulationStatus(str, Enum):
     STOPPED = "stopped"      # 模拟被手动停止
     COMPLETED = "completed"  # 模拟自然完成
     FAILED = "failed"
-
-
-class PlatformType(str, Enum):
-    """平台类型"""
-    TWITTER = "twitter"
-    REDDIT = "reddit"
 
 
 @dataclass

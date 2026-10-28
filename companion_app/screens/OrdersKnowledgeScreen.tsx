@@ -20,6 +20,7 @@ import {
 import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
+import { formatInr, formatLakhs } from '../utils/formatters';
 import type { AcceptedOrder } from '../types/index';
 
 export const OrdersKnowledgeScreen: React.FC = () => {
@@ -84,7 +85,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
             Verified Executed Contracts ({MOCK_ACCEPTED_ORDERS.length})
           </Text>
           <View style={[styles.volPill, { backgroundColor: '#DCFCE7' }]}>
-            <Text style={styles.volPillText}>Total: ₹{(totalAcceptedValueInr / 100000).toFixed(2)} Lakhs</Text>
+            <Text style={styles.volPillText}>Total: {formatLakhs(totalAcceptedValueInr)}</Text>
           </View>
         </View>
 
@@ -112,7 +113,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
               <View style={styles.metaCell}>
                 <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CONTRACT VALUE</Text>
                 <Text style={[styles.metaValue, { color: colors.emerald }]}>
-                  ₹{(order.orderValueInr / 100000).toFixed(2)} Lakhs
+                  {formatLakhs(order.orderValueInr)}
                 </Text>
               </View>
               <View style={styles.metaCell}>
@@ -138,7 +139,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
                 onPress={() =>
                   Alert.alert(
                     `Contract: ${order.contractNumber}`,
-                    `Title: ${order.title}\nBuyer: ${order.buyerDepartment}\nMinistry: ${order.ministry}\nOrder Value: ₹${(order.orderValueInr / 100000).toFixed(2)} Lakhs\nOrder Date: ${order.orderDate}\nCRAC Acceptance: ${order.cracStatus} (${order.cracDate || 'Verified'})\nInvoice: ${order.invoiceNumber}\nPFMS UTR: ${order.pfmsUtrNumber || 'Disbursed via RBI e-Kuber'}`
+                    `Title: ${order.title}\nBuyer: ${order.buyerDepartment}\nMinistry: ${order.ministry}\nOrder Value: ${formatLakhs(order.orderValueInr)}\nOrder Date: ${order.orderDate}\nCRAC Acceptance: ${order.cracStatus} (${order.cracDate || 'Verified'})\nInvoice: ${order.invoiceNumber}\nPFMS UTR: ${order.pfmsUtrNumber || 'Disbursed via RBI e-Kuber'}`
                   )
                 }
               />
@@ -189,15 +190,15 @@ const styles = StyleSheet.create({
   volPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   volPillText: { color: '#15803D', fontSize: 10.5, fontWeight: '800' },
   orderCard: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   orderStatusPill: { paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 4 },

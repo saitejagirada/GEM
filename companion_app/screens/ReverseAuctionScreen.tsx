@@ -10,6 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import type { AuctionItem } from '../types/index';
+import { formatInr } from '../utils/formatters';
 
 interface ReverseAuctionScreenProps {
   onSelectBid?: (bidNumber: string) => void;
@@ -156,17 +157,17 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
             <View style={styles.metricsGrid}>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Current Lowest (L1)</Text>
-                <Text style={styles.metricValue}>₹{ra.currentLowestBid.toLocaleString('en-IN')}</Text>
+                <Text style={styles.metricValue}>₹{formatInr(ra.currentLowestBid)}</Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Your Last Bid</Text>
                 <Text style={[styles.metricValue, isL1 && styles.textL1]}>
-                  ₹{(ra.sellerCurrentBid || ra.currentLowestBid).toLocaleString('en-IN')}
+                  ₹{formatInr(ra.sellerCurrentBid || ra.currentLowestBid)}
                 </Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Min Decrement</Text>
-                <Text style={styles.metricValue}>₹{ra.minimumDecrement.toLocaleString('en-IN')}</Text>
+                <Text style={styles.metricValue}>₹{formatInr(ra.minimumDecrement)}</Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>Closing Schedule</Text>
@@ -188,8 +189,8 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
               </Text>
               <Text style={styles.concealedDesc}>
                 {isL1
-                  ? 'Competitors cannot see your unit breakdown. They must drop by at least ₹' + ra.minimumDecrement.toLocaleString('en-IN') + ' to challenge your lead.'
-                  : `Competitor bid values are encrypted by GeM. Required decrement: Decrement at least ₹${ra.minimumDecrement.toLocaleString('en-IN')} to take the L1 lead.`}
+                  ? 'Competitors cannot see your unit breakdown. They must drop by at least ₹' + formatInr(ra.minimumDecrement) + ' to challenge your lead.'
+                  : `Competitor bid values are encrypted by GeM. Required decrement: Decrement at least ₹${formatInr(ra.minimumDecrement)} to take the L1 lead.`}
               </Text>
             </View>
 
@@ -210,7 +211,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ onSe
               {Boolean(costFloors[ra.id]) && Number(costFloors[ra.id]) > (ra.currentLowestBid - ra.minimumDecrement) && (
                 <View style={styles.suicideAlert}>
                   <Text style={styles.suicideAlertText}>
-                    🛑 DANGER: Next decrement (₹{(ra.currentLowestBid - ra.minimumDecrement).toLocaleString('en-IN')}) drops below your break-even floor of ₹{Number(costFloors[ra.id]).toLocaleString('en-IN')}! Bidding lower causes negative profit.
+                    🛑 DANGER: Next decrement (₹{formatInr(ra.currentLowestBid - ra.minimumDecrement)}) drops below your break-even floor of ₹{formatInr(Number(costFloors[ra.id]))}! Bidding lower causes negative profit.
                   </Text>
                 </View>
               )}
@@ -257,16 +258,16 @@ const styles = StyleSheet.create({
   portalSub: { color: '#64748B', fontSize: 11, marginTop: 4, lineHeight: 16 },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cardTopRow: {
     flexDirection: 'row',

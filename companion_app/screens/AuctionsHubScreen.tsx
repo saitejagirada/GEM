@@ -22,6 +22,7 @@ import { PortalApiClient } from '../services/PortalApiClient';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { TouchButton } from '../components/TouchButton';
 import { useTheme } from '../theme/ThemeContext';
+import { formatInr } from '../utils/formatters';
 
 type AuctionMode = 'REVERSE' | 'FORWARD';
 
@@ -45,7 +46,7 @@ export const AuctionsHubScreen: React.FC = () => {
           const nextBid = lot.currentHighestBidInr + lot.minimumIncrementInr;
           Alert.alert(
             'Forward Bid Placed',
-            `Submitted bid of ₹${nextBid.toLocaleString('en-IN')} on ${lot.auctionNumber}. You are the highest bidder.`
+            `Submitted bid of ₹${formatInr(nextBid)} on ${lot.auctionNumber}. You are the highest bidder.`
           );
           return { ...lot, currentHighestBidInr: nextBid };
         }
@@ -140,20 +141,20 @@ export const AuctionsHubScreen: React.FC = () => {
                   <View style={[styles.priceCell, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
                     <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Reserve Price</Text>
                     <Text style={[styles.reserveVal, { color: colors.textSecondary }]}>
-                      ₹{lot.reservePriceInr.toLocaleString('en-IN')}
+                      ₹{formatInr(lot.reservePriceInr)}
                     </Text>
                   </View>
                   <View style={[styles.priceCell, { backgroundColor: isDark ? colors.surfaceSubtle : '#F8FAFC', borderColor: colors.border }]}>
                     <Text style={[styles.priceLabel, { color: colors.textMuted }]}>Current Highest Bid</Text>
                     <Text style={[styles.highestVal, { color: colors.emerald }]}>
-                      ₹{lot.currentHighestBidInr.toLocaleString('en-IN')}
+                      ₹{formatInr(lot.currentHighestBidInr)}
                     </Text>
                   </View>
                 </View>
 
                 {/* Quick 1-Tap Bid Button */}
                 <TouchButton
-                  title={`Raise Bid (+₹${lot.minimumIncrementInr.toLocaleString('en-IN')}) → Next: ₹${(lot.currentHighestBidInr + lot.minimumIncrementInr).toLocaleString('en-IN')}`}
+                  title={`Raise Bid (+₹${formatInr(lot.minimumIncrementInr)}) → Next: ₹${formatInr(lot.currentHighestBidInr + lot.minimumIncrementInr)}`}
                   variant="primary"
                   size="medium"
                   onPress={() => handleIncrementForwardBid(lot.id)}
@@ -187,15 +188,15 @@ const styles = StyleSheet.create({
   bannerTitle: { fontWeight: '900', marginBottom: 2 },
   bannerSubtitle: { fontSize: 11.5, lineHeight: 16 },
   lotCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
   },
   lotHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   catPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },

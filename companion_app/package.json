@@ -8,7 +8,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "test": "node --test --experimental-strip-types tests/AuctionRoom.test.ts tests/InspectionEngine.test.ts tests/OfflineQueue.test.ts tests/PfmsTracker.test.ts tests/UserAgentService.test.ts tests/BidDocService.test.ts tests/PortalApiClient.test.ts tests/SupabaseClient.test.ts tests/CountdownService.test.ts tests/PortalDocService.test.ts tests/MarketplaceService.test.ts tests/PortalOnboardingService.test.ts tests/BrowseMegaMenu.test.ts tests/PortalsDirectory.test.ts tests/GeMLiveSyncService.test.ts tests/BidLifecycleSync.test.ts",
+    "test": "node --test --experimental-strip-types tests/AuctionRoom.test.ts tests/InspectionEngine.test.ts tests/OfflineQueue.test.ts tests/PfmsTracker.test.ts tests/UserAgentService.test.ts tests/BidDocService.test.ts tests/PortalApiClient.test.ts tests/SupabaseClient.test.ts tests/CountdownService.test.ts tests/PortalDocService.test.ts tests/MarketplaceService.test.ts tests/PortalOnboardingService.test.ts tests/BrowseMegaMenu.test.ts tests/PortalsDirectory.test.ts tests/GeMLiveSyncService.test.ts tests/BidLifecycleSync.test.ts tests/Formatters.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

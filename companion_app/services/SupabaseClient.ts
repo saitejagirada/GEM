@@ -11,7 +11,6 @@
 import type {
   DeconstructedBidDoc,
   BidDocType,
-  AuctionItem,
   ParticipatedBid,
   UserAgentProfile,
   AcceptedOrder,
@@ -27,27 +26,6 @@ import {
 // -----------------------------------------------------------------------------
 // Database Model Types
 // -----------------------------------------------------------------------------
-
-export interface SupabaseTender {
-  bid_number: string;
-  title: string;
-  ministry: string;
-  department: string;
-  bid_type: string;
-  category_domain?: string;
-  estimated_value: number | null;
-  emd_amount: number;
-  emd_exemption_mse: boolean;
-  closing_datetime: string;
-  opening_datetime?: string | null;
-  boq_summary?: string | null;
-  consignee_states: string[];
-  splitting_ratio?: string;
-  make_in_india_class?: string;
-  doc_url?: string;
-  created_at?: string;
-  updated_at?: string;
-}
 
 export interface SupabaseTenderFundamentals {
   id?: string;

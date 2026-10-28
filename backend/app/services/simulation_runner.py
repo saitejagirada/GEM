@@ -7,18 +7,16 @@ import os
 import sys
 import json
 import time
-import asyncio
 import threading
 import subprocess
 import signal
 import atexit
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from queue import Queue
 
-from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.locale import get_locale, set_locale
 from ..utils.zep import (
@@ -26,7 +24,7 @@ from ..utils.zep import (
     ZEP_INGESTION_WAIT_TIMEOUT_SECONDS,
 )
 from .zep_graph_memory_updater import ZepGraphMemoryManager
-from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
+from .simulation_ipc import SimulationIPCClient
 
 logger = get_logger('mirofish.simulation_runner')
 
@@ -1384,8 +1382,6 @@ class SimulationRunner:
         Returns:
             清理结果信息
         """
-        import shutil
-        
         sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
         
         if not os.path.exists(sim_dir):
@@ -1622,17 +1618,6 @@ class SimulationRunner:
             logger.warning("无法注册信号处理器（不在主线程），仅使用 atexit")
         
         _cleanup_registered = True
-    
-    @classmethod
-    def get_running_simulations(cls) -> List[str]:
-        """
-        获取所有正在运行的模拟ID列表
-        """
-        running = []
-        for sim_id, process in cls._processes.items():
-            if process.poll() is None:
-                running.append(sim_id)
-        return running
     
     # ============== Interview 功能 ==============
     

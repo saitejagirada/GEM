@@ -4,7 +4,6 @@ Unit tests for GeM Portal Intelligence API Blueprint and Services
 
 import pytest
 from app import create_app
-from app.services.gem_portal_service import GemPortalService
 
 
 @pytest.fixture

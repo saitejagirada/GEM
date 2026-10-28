@@ -342,7 +342,6 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         if status in prepared_statuses and config_generated:
             # 获取文件统计信息
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
-            config_file = os.path.join(simulation_dir, "simulation_config.json")
             
             profiles_count = 0
             if os.path.exists(profiles_file):
@@ -428,9 +427,7 @@ def prepare_simulation():
         }
     """
     import threading
-    import os
     from ..models.task import TaskManager, TaskStatus
-    from ..config import Config
     
     try:
         data = request.get_json() or {}
@@ -863,7 +860,6 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
         report_id 或 None
     """
     import json
-    from datetime import datetime
     
     # reports 目录路径：backend/uploads/reports
     # __file__ 是 app/api/simulation.py，需要向上两级到 backend/

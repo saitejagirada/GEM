@@ -638,7 +638,6 @@ import {
   prepareSimulation,
   getPrepareStatus,
   getSimulationProfilesRealtime,
-  getSimulationConfig,
   getSimulationConfigRealtime
 } from '../api/simulation'
 

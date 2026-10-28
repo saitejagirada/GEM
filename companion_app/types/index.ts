@@ -5,16 +5,6 @@
 
 export type UserRole = 'buyer' | 'seller_msme' | 'consignee_inspector' | 'startup' | 'helpdesk';
 
-export interface UserProfile {
-  id: string;
-  name: string;
-  role: UserRole;
-  organization: string;
-  department?: string;
-  verified: boolean;
-  biometricAuthEnabled: boolean;
-}
-
 // -------------------------------------------------------------------------
 // Module 1: Live Reverse Auction (RA) Models
 // -------------------------------------------------------------------------

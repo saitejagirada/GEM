@@ -1,5 +1,5 @@
 import { describe, it, expect } from './test-utils.ts';
-import { PfmsTracker, ORDERED_STAGES } from '../services/PfmsTracker.ts';
+import { PfmsTracker } from '../services/PfmsTracker.ts';
 import type { InvoiceContractTracker } from '../types/index.ts';
 
 describe('PfmsTracker', () => {

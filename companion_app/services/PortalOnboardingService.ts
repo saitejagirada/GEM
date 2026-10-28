@@ -5,7 +5,6 @@
  * Manages official government buyer verification and seller KYC workflows.
  */
 
-export type UserRoleType = 'BUYER_PRIMARY_HOD' | 'BUYER_SECONDARY' | 'SELLER_ENTERPRISE' | 'SERVICE_PROVIDER';
 export type BusinessConstitution = 'PROPRIETORSHIP' | 'PARTNERSHIP' | 'PRIVATE_LIMITED' | 'PUBLIC_LIMITED' | 'SOCIETY_TRUST' | 'PSU';
 export type MsmeTier = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE';
 
