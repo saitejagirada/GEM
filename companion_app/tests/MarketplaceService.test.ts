@@ -49,4 +49,13 @@ describe('MarketplaceService', () => {
     const bid = MarketplaceService.evaluateGfrProcurementMode(1800000);
     assert.strictEqual(bid.mode, 'MANDATORY_BID_OR_RA');
   });
+
+  it('supports getMarketplaceItems alias and fetchLiveProducts gracefully', async () => {
+    const aliasItems = MarketplaceService.getMarketplaceItems({ category: 'IT Products' });
+    assert.ok(aliasItems.length >= 2);
+
+    // fetchLiveProducts returns products when network is accessible or empty when offline
+    const liveItems = await MarketplaceService.fetchLiveProducts();
+    assert.ok(Array.isArray(liveItems));
+  });
 });

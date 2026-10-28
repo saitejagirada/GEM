@@ -901,6 +901,13 @@ export class MarketplaceService {
   }
 
   /**
+   * Alias for getItems to ensure backwards and cross-service compatibility.
+   */
+  public static getMarketplaceItems(filter?: MarketplaceFilter): MarketplaceItem[] {
+    return MarketplaceService.getItems(filter);
+  }
+
+  /**
    * Fetches live marketplace products.
    * Leverages standalone in-app engine with real internet reachability detection.
    * If truly offline (no connectivity), returns empty array.
@@ -937,7 +944,7 @@ export class MarketplaceService {
     }
 
     // 3. When online, serve the verified GeM marketplace catalog
-    return this.getMarketplaceItems(filter);
+    return MarketplaceService.getItems(filter);
   }
 
   /**
