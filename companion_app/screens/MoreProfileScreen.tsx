@@ -91,14 +91,17 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Pressable
           style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => onNavigateTab('BIDS')}
+          onPress={() => {
+            if (onOpenPortfolio) onOpenPortfolio();
+            else onNavigateTab('PORTAL');
+          }}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
-            <Text style={styles.menuIconEmoji}>📄</Text>
+            <Text style={styles.menuIconEmoji}>📊</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Bids &amp; Participation</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Track active quotes &amp; evaluation status</Text>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Bids &amp; Purchases Portfolio</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Track quotes, awarded orders &amp; CVC credentials</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
         </Pressable>

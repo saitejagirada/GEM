@@ -40,8 +40,9 @@ export class BidDocService {
     const experience =
       bid.yearsExperienceRequired === 0 ? 'No Exp Required' : `${bid.yearsExperienceRequired} Years`;
 
-    const delivery = `${bid.deliveryPeriodDays} Days`;
-    const consignees = `${bid.consignees.length} Destination${bid.consignees.length > 1 ? 's' : ''}`;
+    const delivery = `${bid?.deliveryPeriodDays || 30} Days`;
+    const consigneesArr = Array.isArray(bid?.consignees) ? bid.consignees : [];
+    const consignees = `${consigneesArr.length} Destination${consigneesArr.length === 1 ? '' : 's'}`;
 
     return {
       estimatedValueLabel: estValue,
@@ -58,24 +59,25 @@ export class BidDocService {
    */
   public static assessTenderRisks(bid: DeconstructedBidDoc): BidRiskAssessment {
     const flags: string[] = [];
+    const consigneesArr = Array.isArray(bid?.consignees) ? bid.consignees : [];
 
     // Risk 1: Tight delivery deadline
-    if (bid.deliveryPeriodDays <= 15) {
+    if (bid?.deliveryPeriodDays && bid.deliveryPeriodDays <= 15) {
       flags.push(`High urgency delivery: Only ${bid.deliveryPeriodDays} days allowed.`);
     }
 
     // Risk 2: Elevated ePBG requirement
-    if (bid.epbgPercentage > 5) {
+    if (bid?.epbgPercentage && bid.epbgPercentage > 5) {
       flags.push(`High Performance Guarantee: ${bid.epbgPercentage}% of order value.`);
     }
 
     // Risk 3: Dispersed multiple consignees
-    if (bid.consignees.length >= 4) {
-      flags.push(`Multi-location logistics: ${bid.consignees.length} distinct delivery hubs.`);
+    if (consigneesArr.length >= 4) {
+      flags.push(`Multi-location logistics: ${consigneesArr.length} distinct delivery hubs.`);
     }
 
     // Risk 4: Heavy past performance threshold
-    if (bid.pastPerformancePercentage >= 50) {
+    if (bid?.pastPerformancePercentage && bid.pastPerformancePercentage >= 50) {
       flags.push(`Strict qualification: Must have delivered ${bid.pastPerformancePercentage}% volume previously.`);
     }
 
@@ -95,8 +97,9 @@ export class BidDocService {
     bid: DeconstructedBidDoc,
     uploadedDocNames: string[]
   ): { completed: boolean; missingDocs: string[] } {
-    const normalizedUploaded = uploadedDocNames.map((d) => d.toLowerCase().trim());
-    const missing = bid.requiredDocuments.filter((req) => {
+    const normalizedUploaded = (uploadedDocNames || []).map((d) => d.toLowerCase().trim());
+    const requiredDocs = Array.isArray(bid?.requiredDocuments) ? bid.requiredDocuments : [];
+    const missing = requiredDocs.filter((req) => {
       const reqLower = req.toLowerCase();
       return !normalizedUploaded.some((up) => up.includes(reqLower) || reqLower.includes(up));
     });

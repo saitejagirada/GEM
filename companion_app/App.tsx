@@ -41,14 +41,16 @@ import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
+import { ParticipatedPortfolioScreen } from './screens/ParticipatedPortfolioScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
+import { PortalApiClient } from './services/PortalApiClient';
 import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
 import type { MarketplaceCategory } from './services/MarketplaceService';
 
 export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
-export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
+export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'PORTFOLIO' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
 
 const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: string }[] = [
   { id: 'HOME', label: 'Home', icon: '🏠' },
@@ -206,6 +208,8 @@ const MainAppContent: React.FC = () => {
       setSubScreen('NONE');
     } else if (target === 'ORDERS') {
       setSubScreen('CONTRACTS');
+    } else if (target === 'PORTFOLIO' || target === 'PORTAL') {
+      setSubScreen('PORTFOLIO');
     } else if (target === 'CATEGORIES') {
       setSubScreen('CATEGORIES');
     } else if (target === 'HELP') {
@@ -340,6 +344,23 @@ const MainAppContent: React.FC = () => {
             <OrdersKnowledgeScreen />
           </View>
         )}
+        {subScreen === 'PORTFOLIO' && (
+          <View style={{ flex: 1 }}>
+            <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+              <Pressable
+                onPress={() => setSubScreen('NONE')}
+                delayPressIn={0}
+                unstable_pressDelay={0}
+                hitSlop={10}
+                style={styles.backBtn}
+              >
+                <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
+              </Pressable>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>My Bids &amp; Purchases Portfolio</Text>
+            </View>
+            <ParticipatedPortfolioScreen />
+          </View>
+        )}
         {subScreen === 'REG_BUYER' && (
           <PortalRegistrationScreen
             initialMode="BUYER"
@@ -378,7 +399,10 @@ const MainAppContent: React.FC = () => {
             )}
             {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
             {activeTab === 'MORE' && (
-              <MoreProfileScreen onNavigateTab={handleHomeNavigate} />
+              <MoreProfileScreen
+                onNavigateTab={handleHomeNavigate}
+                onOpenPortfolio={() => setSubScreen('PORTFOLIO')}
+              />
             )}
           </>
         )}
@@ -496,6 +520,20 @@ const MainAppContent: React.FC = () => {
           userProfile={userProfile}
           visible={true}
           onClose={() => setSelectedBid(null)}
+          onAddToParticipated={(bid) => {
+            PortalApiClient.addToPortfolio(bid);
+            SupabaseClient.addToPortfolio({
+              bidNumber: bid.bidNumber,
+              itemTitle: bid.title,
+              department: bid.department,
+              quotedPriceInr: bid.estimatedBidValueInr || 2500000,
+              expectedL1BenchmarkInr: Math.round((bid.estimatedBidValueInr || 2500000) * 0.88),
+              submittedAtUtc: new Date().toISOString(),
+              stage: 'TECHNICAL_EVALUATION',
+              currentRank: 1,
+              corrigendumCount: 0,
+            });
+          }}
         />
       )}
     </SafeAreaView>

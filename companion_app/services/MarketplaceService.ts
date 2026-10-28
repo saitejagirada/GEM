@@ -899,6 +899,33 @@ export class MarketplaceService {
   }
 
   /**
+   * Fetches live marketplace products from the portal backend with resilient offline fallback.
+   */
+  public static async fetchLiveProducts(filter?: MarketplaceFilter): Promise<MarketplaceItem[]> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1200);
+      const queryParams = new URLSearchParams();
+      if (filter?.category && filter.category !== 'ALL') queryParams.append('category', filter.category);
+      if (filter?.query) queryParams.append('q', filter.query);
+      const qs = queryParams.toString();
+      const res = await fetch(`http://localhost:5001/api/portal/products${qs ? `?${qs}` : ''}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && Array.isArray(json?.data) && json.data.length > 0) {
+          return json.data;
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+    return this.getMarketplaceItems(filter);
+  }
+
+  /**
    * Evaluates the legal GFR 149 public procurement mode based on order value.
    * GFR 149 Mandates:
    * - Up to ₹25,000: Direct Purchase from any GeM seller

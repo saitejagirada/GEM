@@ -20,8 +20,11 @@ import {
   Alert,
   Linking,
   Pressable,
+  RefreshControl,
 } from 'react-native';
-import { MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
+import { MOCK_ACCEPTED_ORDERS, DYNAMIC_ACCEPTED_ORDERS } from '../fixtures/mockData';
+import { PortalApiClient } from '../services/PortalApiClient';
+import { SupabaseClient } from '../services/SupabaseClient';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
@@ -37,13 +40,36 @@ import type { AcceptedOrder } from '../types/index';
 export const OrdersKnowledgeScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
 
+  const [orders, setOrders] = useState<AcceptedOrder[]>(DYNAMIC_ACCEPTED_ORDERS);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'CRAC' | 'DEFENCE' | 'RAILWAYS'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'CRAC' | 'DEFENCE' | 'RAILWAYS' | 'HEALTH' | 'SPACE'>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<AcceptedOrder | null>(null);
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
 
+  const loadContracts = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const live = await PortalApiClient.getContracts();
+      if (live && live.length > 0) {
+        setOrders(live);
+      } else {
+        const local = await SupabaseClient.getAcceptedOrders();
+        if (local && local.length > 0) setOrders(local);
+      }
+    } catch {
+      // offline fallback
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadContracts();
+  }, [loadContracts]);
+
   const filteredOrders = useMemo(() => {
-    return MOCK_ACCEPTED_ORDERS.filter((order) => {
+    return orders.filter((order) => {
       if (activeFilter === 'CRAC' && order.cracStatus !== 'CRAC_ACCEPTED' && order.cracStatus !== 'PAYMENT_DISBURSED') {
         return false;
       }
@@ -53,18 +79,25 @@ export const OrdersKnowledgeScreen: React.FC = () => {
       if (activeFilter === 'RAILWAYS' && !order.ministry.toLowerCase().includes('railway')) {
         return false;
       }
+      if (activeFilter === 'HEALTH' && !order.ministry.toLowerCase().includes('health')) {
+        return false;
+      }
+      if (activeFilter === 'SPACE' && !order.ministry.toLowerCase().includes('space')) {
+        return false;
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesContract = order.contractNumber.toLowerCase().includes(q);
         const matchesTitle = order.title.toLowerCase().includes(q);
         const matchesDept = order.buyerDepartment.toLowerCase().includes(q);
-        if (!matchesContract && !matchesTitle && !matchesDept) return false;
+        const matchesUtr = (order.pfmsUtrNumber || '').toLowerCase().includes(q);
+        if (!matchesContract && !matchesTitle && !matchesDept && !matchesUtr) return false;
       }
 
       return true;
     });
-  }, [activeFilter, searchQuery]);
+  }, [orders, activeFilter, searchQuery]);
 
   const openContractsPortal = useCallback(() => {
     Linking.openURL('https://gem.gov.in/view_contracts').catch(() => {
@@ -194,6 +227,16 @@ export const OrdersKnowledgeScreen: React.FC = () => {
             selected={activeFilter === 'RAILWAYS'}
             onPress={() => setActiveFilter('RAILWAYS')}
           />
+          <CompactChip
+            label="Healthcare"
+            selected={activeFilter === 'HEALTH'}
+            onPress={() => setActiveFilter('HEALTH')}
+          />
+          <CompactChip
+            label="Space / ISRO"
+            selected={activeFilter === 'SPACE'}
+            onPress={() => setActiveFilter('SPACE')}
+          />
         </ScrollView>
       </View>
 
@@ -202,6 +245,14 @@ export const OrdersKnowledgeScreen: React.FC = () => {
         data={filteredOrders}
         keyExtractor={(item) => item.contractNumber}
         renderItem={renderContractCard}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={loadContracts}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

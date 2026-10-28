@@ -98,3 +98,20 @@ def manage_portfolio():
 
     portfolio = GemPortalService.get_portfolio(user_id=user_id)
     return jsonify({"success": True, "count": len(portfolio), "data": portfolio})
+
+
+@portal_bp.route('/products', methods=['GET'])
+def get_products():
+    """Returns verified GeM catalog products with live pricing and specs."""
+    category = request.args.get('category')
+    query = request.args.get('q')
+    products = GemPortalService.get_products(category=category, query=query)
+    return jsonify({"success": True, "count": len(products), "data": products})
+
+
+@portal_bp.route('/contracts', methods=['GET'])
+def get_contracts():
+    """Returns executed contracts with CRAC and PFMS disbursements."""
+    contracts = GemPortalService.get_contracts()
+    return jsonify({"success": True, "count": len(contracts), "data": contracts})
+

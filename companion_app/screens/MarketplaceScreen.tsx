@@ -23,6 +23,7 @@ import {
   Pressable,
   Image,
   BackHandler,
+  RefreshControl,
 } from 'react-native';
 import {
   MarketplaceService,
@@ -98,6 +99,10 @@ export const MarketplaceScreen: React.FC = () => {
     return () => sub.remove();
   }, [orderPlacedRef, showCartModal, selectedItem, showFilterModal]);
 
+  // Dynamic live products state
+  const [itemsList, setItemsList] = useState<MarketplaceItem[]>(MarketplaceService.getItems());
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
   // Map active tab to service type
   const serviceType = useMemo(() => {
     if (activeTypeTab === 'Products') return 'PRODUCT';
@@ -105,18 +110,49 @@ export const MarketplaceScreen: React.FC = () => {
     return 'ALL';
   }, [activeTypeTab]);
 
-  // Query catalog
+  const loadLiveProducts = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const live = await MarketplaceService.fetchLiveProducts({
+        type: serviceType,
+        category: selectedCategory,
+        query: searchQuery,
+      });
+      if (live && live.length > 0) {
+        setItemsList(live);
+      }
+    } catch {
+      // offline fallback retained
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [serviceType, selectedCategory, searchQuery]);
+
+  useEffect(() => {
+    loadLiveProducts();
+  }, [loadLiveProducts]);
+
+  // Query catalog from live list
   const filteredItems = useMemo(() => {
-    let items = MarketplaceService.getItems({
-      type: serviceType,
-      category: selectedCategory,
-      query: searchQuery,
+    let items = itemsList.filter((item) => {
+      if (serviceType !== 'ALL' && item.type !== serviceType) return false;
+      if (selectedCategory !== 'All Categories' && item.category !== selectedCategory) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesTitle = item.title.toLowerCase().includes(q);
+        const matchesCat = item.category.toLowerCase().includes(q);
+        const matchesBrand = item.oemBrand.toLowerCase().includes(q);
+        const matchesSpecs = Object.values(item.specSummary || {}).some((v) => v.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesCat && !matchesBrand && !matchesSpecs) return false;
+      }
+      return true;
     });
+
     if (filterBrand !== 'ALL') {
       items = items.filter((it) => it.oemBrand.toLowerCase().includes(filterBrand.toLowerCase()));
     }
     return items;
-  }, [serviceType, selectedCategory, searchQuery, filterBrand]);
+  }, [itemsList, serviceType, selectedCategory, searchQuery, filterBrand]);
 
   const updateCartQty = useCallback((id: string, delta: number) => {
     setCart((prev) => {
@@ -524,6 +560,14 @@ export const MarketplaceScreen: React.FC = () => {
         keyExtractor={(item) => item.id}
         renderItem={renderProductCard}
         ListHeaderComponent={renderListHeader}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={loadLiveProducts}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
         contentContainerStyle={[
           styles.listContent,
           totalCartCount > 0 && { paddingBottom: 100 },

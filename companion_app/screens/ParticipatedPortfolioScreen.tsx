@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import type { ParticipatedBid, ParticipatedBidStage } from '../types/index';
 import { MOCK_PARTICIPATED_BIDS, MOCK_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
-import { formatInr } from '../utils/formatters';
+import { SupabaseClient } from '../services/SupabaseClient';
+import { formatInr, formatDateSafe } from '../utils/formatters';
 
 interface ParticipatedPortfolioScreenProps {
   onOpenCrac?: () => void;
@@ -23,20 +25,34 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
 }) => {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'AWARDED' | 'CREDENTIAL_BANK'>('ACTIVE');
   const [bids, setBids] = useState<ParticipatedBid[]>(MOCK_PARTICIPATED_BIDS);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const loadPortfolio = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const items = await PortalApiClient.getPortfolio();
+      if (items && items.length > 0) {
+        setBids(items);
+      } else {
+        const local = await SupabaseClient.getPortfolio();
+        if (local && local.length > 0) setBids(local);
+      }
+    } catch {
+      // offline fallback retained
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    PortalApiClient.getPortfolio()
-      .then((items) => {
-        if (items && items.length > 0) setBids(items);
-      })
-      .catch(() => {});
-  }, []);
+    loadPortfolio();
+  }, [loadPortfolio]);
 
   const activeBids = bids.filter((b) => b.stage !== 'AWARDED_L1' && b.stage !== 'DISQUALIFIED');
   const awardedBids = bids.filter((b) => b.stage === 'AWARDED_L1');
 
   const displayedBids = activeTab === 'ACTIVE' ? activeBids : awardedBids;
-  const totalQuotedActive = activeBids.reduce((sum, b) => sum + b.quotedPriceInr, 0);
+  const totalQuotedActive = activeBids.reduce((sum, b) => sum + (b.quotedPriceInr || 0), 0);
 
   const getStageBadge = (stage: ParticipatedBidStage, rank?: number) => {
     switch (stage) {
@@ -51,12 +67,23 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
       case 'DISQUALIFIED':
         return { label: 'DISQUALIFIED', bg: '#FEE2E2', text: '#DC2626' };
       default:
-        return { label: stage, bg: '#F3F4F6', text: '#6B7280' };
+        return { label: stage || 'UNDER EVALUATION', bg: '#F3F4F6', text: '#6B7280' };
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={loadPortfolio}
+          colors={['#0B3B60']}
+          tintColor="#0B3B60"
+        />
+      }
+    >
       {/* Title */}
       <Text style={styles.screenTitle}>History &amp; Submissions</Text>
 
@@ -180,8 +207,10 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
       ) : (
         displayedBids.map((b) => {
           const badge = getStageBadge(b.stage, b.currentRank);
-          const priceDiff = b.quotedPriceInr - b.expectedL1BenchmarkInr;
-          const diffPercent = ((priceDiff / b.expectedL1BenchmarkInr) * 100).toFixed(1);
+          const quoted = b.quotedPriceInr || 100000;
+          const benchmark = b.expectedL1BenchmarkInr || quoted || 100000;
+          const priceDiff = quoted - benchmark;
+          const diffPercent = ((priceDiff / Math.max(1, benchmark)) * 100).toFixed(1);
 
           return (
             <View key={b.bidNumber} style={styles.bidCard}>
@@ -257,7 +286,7 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
                 <>
                   <TouchableOpacity
                     style={styles.actionBtnSecondary}
-                    onPress={() => Alert.alert('Bid Details', `Submitted: ${new Date(b.submittedAtUtc).toLocaleDateString()}`)}
+                    onPress={() => Alert.alert('Bid Details', `Submitted: ${formatDateSafe(b.submittedAtUtc)}`)}
                   >
                     <Text style={styles.actionBtnSecondaryText}>View Bid Submission</Text>
                   </TouchableOpacity>

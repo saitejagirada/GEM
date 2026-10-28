@@ -7,7 +7,7 @@
  * - Seamless detail transition into ReverseAuctionScreen
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,10 +18,12 @@ import {
   Linking,
   Pressable,
   BackHandler,
+  RefreshControl,
 } from 'react-native';
-import type { ForwardAuctionLot, AuctionItem } from '../types/index';
+import type { ForwardAuctionLot, AuctionItem, DeconstructedBidDoc } from '../types/index';
 import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
+import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
@@ -35,62 +37,59 @@ import { formatInr } from '../utils/formatters';
 
 type TabMode = 'Live Reverse' | 'Forward e-Scrap' | 'Closed';
 
-const SAMPLE_REVERSE_AUCTIONS = [
-  {
-    id: 'ra-45102',
-    contractNumber: 'GEM/2026/RA/45102',
-    originalBidNumber: 'GEM/2026/B/890456',
-    title: 'Supply of High-End Desktop Computers and Workstations',
-    category: 'IT & Telecommunications',
-    department: 'Department of Revenue',
-    buyerOrganization: 'Ministry of Finance, New Delhi',
-    totalQuantity: 120,
-    closingTimeUtc: '2026-10-28T14:30:00Z',
-    closingDateLabel: '14:30 IST (Ends in 3h 12m)',
-    currentLowestBid: 3850000,
-    sellerRank: 2,
-    sellerCurrentBid: 3920000,
-    minimumDecrement: 10000,
+export type ReverseAuctionDetailItem = AuctionItem & {
+  originalBidNumber?: string;
+  department?: string;
+  totalQuantity?: number;
+  closingDateLabel?: string;
+};
+
+const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc, index: number): ReverseAuctionDetailItem => {
+  const estValue = bid.estimatedBidValueInr || 3500000;
+  const l1DiscountRatio = 0.84 + ((index * 3) % 10) * 0.01;
+  const currentLowestBid = Math.round(estValue * l1DiscountRatio);
+
+  let minimumDecrement = 10000;
+  if (estValue >= 5000000) minimumDecrement = 50000;
+  else if (estValue >= 2000000) minimumDecrement = 25000;
+  else if (estValue >= 1000000) minimumDecrement = 15000;
+
+  const sellerRank = (index % 3) + 1;
+  const sellerCurrentBid = sellerRank === 1
+    ? currentLowestBid
+    : currentLowestBid + minimumDecrement * (sellerRank - 1);
+
+  const closingDate = bid.closingTimeUtc ? new Date(bid.closingTimeUtc) : new Date(Date.now() + 4 * 3600000);
+  const diffMs = Math.max(0, closingDate.getTime() - Date.now());
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffMins = Math.floor((diffMs % 3600000) / 60000);
+  const closingDateLabel = diffHours > 0
+    ? `Ends in ${diffHours}h ${diffMins}m`
+    : `⚡ Critical: ${diffMins}m remaining`;
+
+  const totalQuantity = (bid.boqItems && bid.boqItems.length > 0 && bid.boqItems[0].quantity)
+    ? bid.boqItems[0].quantity
+    : 100;
+
+  return {
+    id: `ra-${bid.b_id || (45100 + index)}`,
+    contractNumber: `GEM/2026/RA/${bid.b_id || (45100 + index)}`,
+    originalBidNumber: bid.bidNumber,
+    title: bid.title,
+    category: bid.categoryDomain || 'Goods & Services',
+    department: bid.department,
+    buyerOrganization: bid.ministry || 'Government of India',
+    totalQuantity,
+    closingTimeUtc: bid.closingTimeUtc,
+    closingDateLabel,
+    currentLowestBid,
+    sellerRank,
+    sellerCurrentBid,
+    minimumDecrement,
     autoExtensionMinutes: 10,
-    isExtended: false,
-  },
-  {
-    id: 'ra-99202',
-    contractNumber: 'GEM/2026/RA/99202',
-    originalBidNumber: 'GEM/2026/B/890123',
-    title: 'Supply and Commissioning of 40W Solar LED Street Lighting Systems',
-    category: 'Solar & Renewable Energy',
-    department: 'Department of Rural Development',
-    buyerOrganization: 'Ministry of Rural Development',
-    totalQuantity: 250,
-    closingTimeUtc: '2026-10-28T17:00:00Z',
-    closingDateLabel: '17:00 IST (Ends in 5h 42m)',
-    currentLowestBid: 2650000,
-    sellerRank: 1,
-    sellerCurrentBid: 2650000,
-    minimumDecrement: 20000,
-    autoExtensionMinutes: 10,
-    isExtended: false,
-  },
-  {
-    id: 'ra-99203',
-    contractNumber: 'GEM/2026/RA/99203',
-    originalBidNumber: 'GEM/2026/B/890789',
-    title: 'High-Tensile Structural Hex Bolts and Fasteners (M24 Grade 8.8)',
-    category: 'Heavy Engineering & Fasteners',
-    department: 'Bharat Dynamics Limited',
-    buyerOrganization: 'Ministry of Defence',
-    totalQuantity: 50000,
-    closingTimeUtc: '2026-10-29T14:30:00Z',
-    closingDateLabel: 'Tomorrow, 14:30 IST',
-    currentLowestBid: 1420000,
-    sellerRank: 3,
-    sellerCurrentBid: 1480000,
-    minimumDecrement: 10000,
-    autoExtensionMinutes: 10,
-    isExtended: false,
-  },
-];
+    isExtended: index % 4 === 0,
+  };
+};
 
 export const AuctionsHubScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
@@ -98,15 +97,30 @@ export const AuctionsHubScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>(MOCK_FORWARD_AUCTIONS);
-  const [selectedRa, setSelectedRa] = useState<typeof SAMPLE_REVERSE_AUCTIONS[0] | null>(null);
+  const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>(() => {
+    const liveDocs = GeMLiveSyncService.getReverseAuctions();
+    return liveDocs.map(mapBidDocToReverseAuction);
+  });
+  const [selectedRa, setSelectedRa] = useState<ReverseAuctionDetailItem | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const loadLiveAuctions = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const liveDocs = GeMLiveSyncService.getReverseAuctions();
+      setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
+      const lots = await PortalApiClient.getForwardAuctions();
+      if (lots && lots.length > 0) setForwardLots(lots);
+    } catch {
+      // offline fallback
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    PortalApiClient.getForwardAuctions()
-      .then((lots) => {
-        if (lots && lots.length > 0) setForwardLots(lots);
-      })
-      .catch(() => {});
-  }, []);
+    loadLiveAuctions();
+  }, [loadLiveAuctions]);
 
   // BackHandler to exit reverse auction room back to catalog instead of closing app
   useEffect(() => {
@@ -137,6 +151,29 @@ export const AuctionsHubScreen: React.FC = () => {
     );
   };
 
+  const filteredReverseAuctions = useMemo(() => {
+    if (!searchQuery.trim()) return reverseAuctions;
+    const q = searchQuery.toLowerCase().trim();
+    return reverseAuctions.filter(
+      (ra) =>
+        ra.contractNumber.toLowerCase().includes(q) ||
+        (ra.originalBidNumber && ra.originalBidNumber.toLowerCase().includes(q)) ||
+        ra.title.toLowerCase().includes(q) ||
+        (ra.department && ra.department.toLowerCase().includes(q))
+    );
+  }, [reverseAuctions, searchQuery]);
+
+  const filteredForwardLots = useMemo(() => {
+    if (!searchQuery.trim()) return forwardLots;
+    const q = searchQuery.toLowerCase().trim();
+    return forwardLots.filter(
+      (lot) =>
+        lot.auctionNumber.toLowerCase().includes(q) ||
+        lot.title.toLowerCase().includes(q) ||
+        lot.department.toLowerCase().includes(q)
+    );
+  }, [forwardLots, searchQuery]);
+
   // If user selected a specific reverse auction, render the full Screen 4 detail
   if (selectedRa) {
     return (
@@ -155,7 +192,11 @@ export const AuctionsHubScreen: React.FC = () => {
           options={['Live Reverse', 'Forward e-Scrap', 'Closed']}
           selected={activeTab}
           onSelect={(tab) => setActiveTab(tab as TabMode)}
-          counts={{ 'Live Reverse': SAMPLE_REVERSE_AUCTIONS.length, 'Forward e-Scrap': forwardLots.length, Closed: 18 }}
+          counts={{
+            'Live Reverse': reverseAuctions.length,
+            'Forward e-Scrap': forwardLots.length,
+            Closed: 18,
+          }}
           style={{ marginBottom: 12 }}
         />
 
@@ -169,10 +210,18 @@ export const AuctionsHubScreen: React.FC = () => {
       <ScrollView
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={loadLiveAuctions}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
       >
         {activeTab === 'Live Reverse' && (
           <View>
-            {SAMPLE_REVERSE_AUCTIONS.map((ra) => (
+            {filteredReverseAuctions.map((ra) => (
               <View
                 key={ra.id}
                 style={[

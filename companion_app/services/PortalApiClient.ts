@@ -9,14 +9,18 @@ import type {
   DeconstructedBidDoc,
   ForwardAuctionLot,
   ParticipatedBid,
+  AcceptedOrder,
 } from '../types/index.ts';
 import {
   MOCK_MARKET_PULSE,
   MOCK_DAILY_BIDS,
   MOCK_FORWARD_AUCTIONS,
   MOCK_PARTICIPATED_BIDS,
+  MOCK_ACCEPTED_ORDERS,
+  DYNAMIC_ACCEPTED_ORDERS,
 } from '../fixtures/mockData.ts';
 import { GeMLiveSyncService } from './GeMLiveSyncService.ts';
+import { MOCK_MARKETPLACE_ITEMS, type MarketplaceItem } from './MarketplaceService.ts';
 
 export class PortalApiClient {
   private static baseUrl = 'http://localhost:5001/api/portal';
@@ -84,6 +88,19 @@ export class PortalApiClient {
 
   public static async getPortfolio(): Promise<ParticipatedBid[]> {
     return this.safeFetch<ParticipatedBid[]>('/portfolio', MOCK_PARTICIPATED_BIDS);
+  }
+
+  public static async getProducts(params?: { category?: string; q?: string }): Promise<MarketplaceItem[]> {
+    const query = new URLSearchParams();
+    if (params?.category) query.append('category', params.category);
+    if (params?.q) query.append('q', params.q);
+    const qs = query.toString();
+    const endpoint = `/products${qs ? `?${qs}` : ''}`;
+    return this.safeFetch<MarketplaceItem[]>(endpoint, MOCK_MARKETPLACE_ITEMS);
+  }
+
+  public static async getContracts(): Promise<AcceptedOrder[]> {
+    return this.safeFetch<AcceptedOrder[]>('/contracts', DYNAMIC_ACCEPTED_ORDERS);
   }
 
   public static async addToPortfolio(bid: DeconstructedBidDoc): Promise<boolean> {

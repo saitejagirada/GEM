@@ -97,6 +97,16 @@ export class GeMLiveSyncService {
         bid.yearsExperienceRequired = 2;
       }
 
+      // Ensure required compliance documents exist
+      if (!bid.requiredDocuments || bid.requiredDocuments.length === 0) {
+        bid.requiredDocuments = [
+          'Udyam Registration Certificate (MSE)',
+          'CA Audited Turnover Certificate (3 FY)',
+          'OEM Authorization Form (MAF)',
+          'Technical Compliance Sheet',
+        ];
+      }
+
       // Deterministic classification:
       // ~10% Closed & Under Evaluation
       // ~12% Live Reverse Auction (RA)

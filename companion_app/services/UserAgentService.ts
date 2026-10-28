@@ -18,13 +18,34 @@ export class UserAgentService {
     profile: UserAgentProfile,
     bid: DeconstructedBidDoc
   ): BidMatchEvaluation {
-    const turnoverEligible = profile.annualTurnoverInr >= bid.minAnnualTurnoverInr;
-    const experienceEligible = profile.yearsExperience >= bid.yearsExperienceRequired;
+    const safeProfile: UserAgentProfile = profile || {
+      id: 'default-profile',
+      organizationName: 'Verified Enterprise',
+      msmeCategory: 'MICRO',
+      annualTurnoverInr: 5000000,
+      yearsExperience: 3,
+      productCategories: ['Solar', 'LED', 'IT', 'Computer', 'Furniture'],
+      targetStates: ['Delhi', 'Uttar Pradesh', 'Maharashtra'],
+      isOem: false,
+      hasUdyamCertificate: true,
+      acceptedOrders: [],
+    };
+
+    const minTurnover = bid?.minAnnualTurnoverInr ?? 0;
+    const reqExp = bid?.yearsExperienceRequired ?? 0;
+    const turnoverEligible = safeProfile.annualTurnoverInr >= minTurnover;
+    const experienceEligible = safeProfile.yearsExperience >= reqExp;
+
+    const categories = Array.isArray(safeProfile.productCategories) ? safeProfile.productCategories : [];
+    const boqItems = Array.isArray(bid?.boqItems) ? bid.boqItems : [];
+    const consignees = Array.isArray(bid?.consignees) ? bid.consignees : [];
+    const targetStates = Array.isArray(safeProfile.targetStates) ? safeProfile.targetStates : [];
+    const bidTitle = bid?.title || '';
 
     // 1. Category Score (0 - 35 points)
-    const categoryMatch = profile.productCategories.some((cat) =>
-      bid.title.toLowerCase().includes(cat.toLowerCase()) ||
-      bid.boqItems.some((item) => item.itemTitle.toLowerCase().includes(cat.toLowerCase()))
+    const categoryMatch = categories.some((cat) =>
+      bidTitle.toLowerCase().includes(cat.toLowerCase()) ||
+      boqItems.some((item) => (item?.itemTitle || '').toLowerCase().includes(cat.toLowerCase()))
     );
     const categoryScore = categoryMatch ? 35 : 5;
 
@@ -34,7 +55,7 @@ export class UserAgentService {
       turnoverScore = 25;
     } else {
       // Partial credit if close (e.g. >= 70% of requirement)
-      const ratio = profile.annualTurnoverInr / Math.max(1, bid.minAnnualTurnoverInr);
+      const ratio = safeProfile.annualTurnoverInr / Math.max(1, minTurnover);
       turnoverScore = Math.floor(Math.min(20, ratio * 20));
     }
 
@@ -43,19 +64,19 @@ export class UserAgentService {
     if (experienceEligible) {
       experienceScore = 20;
     } else {
-      const expRatio = profile.yearsExperience / Math.max(1, bid.yearsExperienceRequired);
+      const expRatio = safeProfile.yearsExperience / Math.max(1, reqExp);
       experienceScore = Math.floor(Math.min(15, expRatio * 15));
     }
 
     // 4. Target State / Delivery Geography Score (0 - 10 points)
-    const stateMatch = bid.consignees.some((c) =>
-      profile.targetStates.some((st) => c.state.toLowerCase() === st.toLowerCase())
+    const stateMatch = consignees.some((c) =>
+      targetStates.some((st) => (c?.state || '').toLowerCase() === st.toLowerCase())
     );
     const stateScore = stateMatch ? 10 : 2;
 
     // 5. EMD Exemption Benefit Score (0 - 10 points)
     const isEmdExempt =
-      bid.isEmdExemptForMse && (profile.hasUdyamCertificate || profile.msmeCategory !== 'LARGE');
+      !!bid?.isEmdExemptForMse && (safeProfile.hasUdyamCertificate || safeProfile.msmeCategory !== 'LARGE');
     const emdScore = isEmdExempt ? 10 : 4;
 
     const rawScore = categoryScore + turnoverScore + experienceScore + stateScore + emdScore;
@@ -63,7 +84,7 @@ export class UserAgentService {
 
     const isEligible = turnoverEligible && experienceEligible;
     const emdStatus: 'EXEMPT' | 'PAYABLE' | 'NOT_APPLICABLE' =
-      bid.emdAmountInr === 0 ? 'NOT_APPLICABLE' : isEmdExempt ? 'EXEMPT' : 'PAYABLE';
+      (bid?.emdAmountInr ?? 0) === 0 ? 'NOT_APPLICABLE' : isEmdExempt ? 'EXEMPT' : 'PAYABLE';
 
     let verdictTag: 'HIGH_MATCH' | 'MODERATE_MATCH' | 'DISQUALIFIED' = 'DISQUALIFIED';
     let verdictSummary = '';
@@ -85,11 +106,11 @@ export class UserAgentService {
       verdictSummary = warnings.length > 0 ? warnings.join('. ') : 'Good category match with delivery in target region.';
     } else {
       verdictTag = 'DISQUALIFIED';
-      verdictSummary = `Disqualified: Organization turnover (₹${(profile.annualTurnoverInr / 100000).toFixed(1)}L) is below mandatory threshold of ₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L.`;
+      verdictSummary = `Disqualified: Organization turnover (₹${(safeProfile.annualTurnoverInr / 100000).toFixed(1)}L) is below mandatory threshold of ₹${((bid?.minAnnualTurnoverInr || 0) / 100000).toFixed(1)}L.`;
     }
 
     // Expected Winning Bid Range (typically 82% to 94% of estimated bid value)
-    const baseValue = bid.estimatedBidValueInr || bid.emdAmountInr * 50; // Fallback heuristic if estimated value unstated
+    const baseValue = bid?.estimatedBidValueInr || (bid?.emdAmountInr || 50000) * 50; // Fallback heuristic if estimated value unstated
     const expectedWinningBidRange = {
       minInr: Math.round(baseValue * 0.82),
       maxInr: Math.round(baseValue * 0.94),
@@ -97,15 +118,15 @@ export class UserAgentService {
 
     // Past Performance & Experience Analysis based on Completed GeM Orders
     let pastExperienceMatch: BidMatchEvaluation['pastExperienceMatch'] = undefined;
-    if (profile.acceptedOrders && profile.acceptedOrders.length > 0) {
-      const estimatedValue = bid.estimatedBidValueInr || bid.emdAmountInr * 50;
+    if (safeProfile.acceptedOrders && safeProfile.acceptedOrders.length > 0) {
+      const estimatedValue = bid?.estimatedBidValueInr || (bid?.emdAmountInr || 50000) * 50;
       const threshold80 = estimatedValue * 0.8;
       const threshold50 = estimatedValue * 0.5;
       const threshold40 = estimatedValue * 0.4;
 
-      const single80 = profile.acceptedOrders.find((o) => o.orderValueInr >= threshold80);
-      const orders50 = profile.acceptedOrders.filter((o) => o.orderValueInr >= threshold50);
-      const orders40 = profile.acceptedOrders.filter((o) => o.orderValueInr >= threshold40);
+      const single80 = safeProfile.acceptedOrders.find((o) => o.orderValueInr >= threshold80);
+      const orders50 = safeProfile.acceptedOrders.filter((o) => o.orderValueInr >= threshold50);
+      const orders40 = safeProfile.acceptedOrders.filter((o) => o.orderValueInr >= threshold40);
 
       if (single80) {
         pastExperienceMatch = {
@@ -127,7 +148,7 @@ export class UserAgentService {
           ruleDescription: `Satisfies 3-Order 40% Rule with 3 executed GeM contracts`,
         };
       } else {
-        const highestOrder = Math.max(...profile.acceptedOrders.map((o) => o.orderValueInr));
+        const highestOrder = Math.max(...safeProfile.acceptedOrders.map((o) => o.orderValueInr));
         pastExperienceMatch = {
           qualifiesCriteria: false,
           ruleDescription: `Highest past order ₹${(highestOrder / 100000).toFixed(1)}L is below single-order 80% threshold (₹${(threshold80 / 100000).toFixed(1)}L)`,
@@ -136,7 +157,7 @@ export class UserAgentService {
     }
 
     return {
-      bidNumber: bid.bidNumber,
+      bidNumber: bid?.bidNumber || 'GEM/2026/BID',
       matchScore,
       isEligible,
       turnoverEligible,
@@ -147,6 +168,22 @@ export class UserAgentService {
       expectedWinningBidRange,
       pastExperienceMatch,
     };
+  }
+
+  /**
+   * Universal evaluator overload supporting both (bid, profile) and (profile, bid) signatures.
+   * Prevents runtime exceptions in UI cards.
+   */
+  public static evaluateBidMatch(
+    arg1: any,
+    arg2: any
+  ): BidMatchEvaluation {
+    if (arg1 && typeof arg1 === 'object' && 'bidNumber' in arg1) {
+      // arg1 is bid, arg2 is profile
+      return this.evaluateBid(arg2, arg1);
+    }
+    // arg1 is profile, arg2 is bid
+    return this.evaluateBid(arg1, arg2);
   }
 
   /**
