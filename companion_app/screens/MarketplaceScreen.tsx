@@ -31,6 +31,7 @@ import {
   MarketplaceItem,
   OFFICIAL_PRODUCT_CATEGORIES,
 } from '../services/MarketplaceService';
+import { OFFICIAL_GEM_SUBCATEGORIES } from '../services/GeMClientCrawler';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
@@ -99,6 +100,14 @@ export const MarketplaceScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOffline, setIsOffline] = useState<boolean>(false);
 
+  // Subcategory and real-time pagination state
+  const [selectedSubcategorySlug, setSelectedSubcategorySlug] = useState<string>(
+    'computers-entry-level-computer-cpu/search'
+  );
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [hasMorePages, setHasMorePages] = useState<boolean>(true);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+
   // Subscribe to real-time live product updates from portal/crawler
   useEffect(() => {
     const unsubscribe = MarketplaceService.subscribeToProductUpdates((latestItems) => {
@@ -117,29 +126,80 @@ export const MarketplaceScreen: React.FC = () => {
     return 'ALL';
   }, [activeTypeTab]);
 
+  // Dynamic available subcategories based on selected category
+  const availableSubcategories = useMemo(() => {
+    if (selectedCategory === 'All Categories') {
+      return OFFICIAL_GEM_SUBCATEGORIES.slice(0, 8);
+    }
+    const filtered = OFFICIAL_GEM_SUBCATEGORIES.filter(
+      (s) =>
+        s.category.toLowerCase() === selectedCategory.toLowerCase() ||
+        selectedCategory.toLowerCase().includes(s.category.toLowerCase()) ||
+        s.name.toLowerCase().includes(selectedCategory.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : OFFICIAL_GEM_SUBCATEGORIES.slice(0, 6);
+  }, [selectedCategory]);
+
   const loadLiveProducts = useCallback(async () => {
     setIsRefreshing(true);
+    setCurrentPage(1);
     try {
-      const live = await MarketplaceService.fetchLiveProducts({
+      const stream = await MarketplaceService.fetchLiveCategoryStream({
         type: serviceType,
         category: selectedCategory,
+        subcategorySlug: selectedSubcategorySlug,
         query: searchQuery,
+        page: 1,
       });
-      if (live && live.length > 0) {
-        setItemsList(live);
+      if (stream.items && stream.items.length > 0) {
+        setItemsList(stream.items);
+        setHasMorePages(stream.hasMore);
         setIsOffline(false);
       } else {
         setItemsList([]);
+        setHasMorePages(false);
         setIsOffline(true);
       }
     } catch {
       setItemsList([]);
+      setHasMorePages(false);
       setIsOffline(true);
     } finally {
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, [serviceType, selectedCategory, searchQuery]);
+  }, [serviceType, selectedCategory, selectedSubcategorySlug, searchQuery]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMorePages || isOffline) return;
+    setIsLoadingMore(true);
+    const nextPage = currentPage + 1;
+    try {
+      const stream = await MarketplaceService.fetchLiveCategoryStream({
+        type: serviceType,
+        category: selectedCategory,
+        subcategorySlug: selectedSubcategorySlug,
+        query: searchQuery,
+        page: nextPage,
+      });
+      if (stream.items && stream.items.length > 0) {
+        setItemsList((prev) => {
+          const map = new Map<string, MarketplaceItem>();
+          for (const item of prev) map.set(item.id, item);
+          for (const item of stream.items) map.set(item.id, item);
+          return Array.from(map.values());
+        });
+        setCurrentPage(nextPage);
+        setHasMorePages(stream.hasMore);
+      } else {
+        setHasMorePages(false);
+      }
+    } catch {
+      setHasMorePages(false);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMorePages, isOffline, currentPage, serviceType, selectedCategory, selectedSubcategorySlug, searchQuery]);
 
   useEffect(() => {
     loadLiveProducts();
@@ -331,7 +391,18 @@ export const MarketplaceScreen: React.FC = () => {
               ]}
               onPress={() => {
                 const target = OFFICIAL_PRODUCT_CATEGORIES.find((c) => c.id === cat.id);
-                setSelectedCategory(target ? target.name : cat.name);
+                const catName = target ? target.name : cat.name;
+                setSelectedCategory(catName);
+                if (cat.id === 'it-products') {
+                  setSelectedSubcategorySlug('computers-entry-level-computer-cpu/search');
+                } else if (cat.id === 'furniture') {
+                  setSelectedSubcategorySlug('furniture-and-furnishings-accommodation-furniture-furniture-revolving-chair-v5-/search');
+                } else if (cat.id === 'stationery') {
+                  setSelectedSubcategorySlug('maplitho-paper/search');
+                } else if (cat.id === 'automobiles') {
+                  setSelectedSubcategorySlug('25101500-cars-version-2-/search');
+                }
+                setCurrentPage(1);
               }}
             >
               <View style={[styles.catIconSquare, { backgroundColor: cat.tint }]}>
@@ -345,6 +416,27 @@ export const MarketplaceScreen: React.FC = () => {
               </View>
             </Pressable>
           ))}
+        </View>
+
+        {/* GeM Subcategory Pills Carousel */}
+        <View style={{ marginTop: 12, marginBottom: 4 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {availableSubcategories.map((sub) => (
+              <CompactChip
+                key={sub.id}
+                label={sub.name}
+                selected={selectedSubcategorySlug === sub.slug}
+                onPress={() => {
+                  setSelectedSubcategorySlug(sub.slug);
+                  setCurrentPage(1);
+                }}
+              />
+            ))}
+          </ScrollView>
         </View>
       </View>
 
@@ -404,7 +496,7 @@ export const MarketplaceScreen: React.FC = () => {
 
       {/* Results Title Row */}
       <SectionHeader
-        title={`Fast-Moving Catalog (${filteredItems.length})`}
+        title={`${selectedCategory === 'All Categories' ? 'Live GeM Marketplace' : selectedCategory} (${filteredItems.length}${hasMorePages ? '+' : ''})`}
         style={{ marginTop: 8 }}
       />
     </View>
@@ -465,10 +557,10 @@ export const MarketplaceScreen: React.FC = () => {
 
         {/* Product Details Section */}
         <View style={styles.productContentBox}>
-          {/* Brand & Rating */}
+          {/* Brand, Seller & Rating */}
           <View style={styles.metaRow}>
-            <Text style={[styles.brandText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.oemBrand}
+            <Text style={[styles.brandText, { color: colors.primary, fontWeight: '700' }]} numberOfLines={1}>
+              Brand: {item.oemBrand}
             </Text>
             <View style={styles.ratingBadge}>
               <Text style={styles.starIcon}>★</Text>
@@ -484,10 +576,15 @@ export const MarketplaceScreen: React.FC = () => {
             {item.title}
           </Text>
 
-          {/* Unit / Pack Size */}
-          <Text style={[styles.unitText, { color: colors.textMuted }]} numberOfLines={1}>
-            {item.unitText || `Per ${item.priceUnit}`}
-          </Text>
+          {/* Seller Type & Consignee MOQ */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, marginBottom: 4 }}>
+            <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '500' }}>
+              {item.specSummary?.['Seller Type'] ? `Seller: ${item.specSummary['Seller Type']}` : 'Seller: Resellers'}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted }}>
+              Min. Qty: {item.minOrderQty || 1}
+            </Text>
+          </View>
 
           {/* Price & Stepper Row */}
           <View style={styles.priceActionRow}>
@@ -610,6 +707,18 @@ export const MarketplaceScreen: React.FC = () => {
           totalCartCount > 0 && { paddingBottom: 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ marginTop: 6, fontSize: 13, color: colors.textSecondary }}>
+                Loading more live GeM seller products (Page {currentPage + 1})...
+              </Text>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.emptyContainer}>

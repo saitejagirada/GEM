@@ -10,6 +10,7 @@
 
 import { isNetworkOnline } from '../utils/network.ts';
 import { LIVE_PORTAL_PRODUCTS } from '../fixtures/livePortalProducts.ts';
+import { GeMClientCrawler, OFFICIAL_GEM_SUBCATEGORIES, type GeMSubcategoryConfig } from './GeMClientCrawler.ts';
 
 export interface MarketplaceCategory {
   id: string;
@@ -227,615 +228,9 @@ export const OFFICIAL_OUTLET_STORES: GeMOutletStore[] = [
   },
 ];
 
-export const MOCK_MARKETPLACE_ITEMS: MarketplaceItem[] = [
-  // IT Products
-  {
-    id: 'itm-001',
-    title: 'Mid Level Desktop Computer Core i7 16GB 512GB SSD',
-    category: 'IT Products',
-    type: 'PRODUCT',
-    l1PriceInr: 58500,
-    mrpInr: 72000,
-    discountPercent: 19,
-    priceUnit: 'per Unit',
-    unitText: '1 Desktop Set (Monitor + CPU + K/B)',
-    minOrderQty: 1,
-    oemBrand: 'HP / Dell / Lenovo OEM Verified',
-    rating: 4.8,
-    totalOrders: 18400,
-    imageUrl: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 3-5 Day GeM Express',
-    badge: 'L1 Lowest',
-    inStock: true,
-    stockCount: 450,
-    specSummary: {
-      Processor: 'Intel Core i7 13th Gen (16 Cores)',
-      RAM: '16 GB DDR5 Expandable to 64GB',
-      Storage: '512 GB M.2 NVMe SSD',
-      OperatingSystem: 'Windows 11 Pro Genuine',
-      Display: '23.8 Inch IPS FHD Borderless Monitor',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 65,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-002',
-    title: 'Business Laptop Notebook 14 Inch FHD Lightweight',
-    category: 'IT Products',
-    type: 'PRODUCT',
-    l1PriceInr: 54900,
-    mrpInr: 68000,
-    discountPercent: 19,
-    priceUnit: 'per Unit',
-    unitText: '1 Laptop Unit with Backpack',
-    minOrderQty: 1,
-    oemBrand: 'Acer / ASUS OEM',
-    rating: 4.7,
-    totalOrders: 14200,
-    imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 2-4 Day Delivery',
-    badge: 'Bestseller',
-    inStock: true,
-    stockCount: 620,
-    specSummary: {
-      Processor: 'Intel Core i5 1335U',
-      RAM: '16 GB LPDDR5',
-      Storage: '512 GB SSD',
-      BatteryLife: 'Up to 11 Hours',
-      Weight: '1.38 kg',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 55,
-    isAvailableOnGeM: true,
-  },
-  // Electrical Appliances
-  {
-    id: 'itm-003',
-    title: '70W Energy Efficient Street LED Luminaire IP66',
-    category: 'Electrical Appliances',
-    type: 'PRODUCT',
-    l1PriceInr: 2850,
-    mrpInr: 3800,
-    discountPercent: 25,
-    priceUnit: 'per Piece',
-    unitText: 'Pack of 10 Pieces',
-    minOrderQty: 10,
-    oemBrand: 'Havells / Surya / Bajaj',
-    rating: 4.9,
-    totalOrders: 92000,
-    imageUrl: 'https://images.unsplash.com/photo-1507499739999-097706ad8914?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 3-5 Days Direct',
-    badge: 'ODOP Indigenous',
-    inStock: true,
-    stockCount: 1800,
-    specSummary: {
-      Wattage: '70 Watts',
-      Efficacy: '140 Lumens / Watt',
-      IngressProtection: 'IP66 Waterproof & Dustproof',
-      SurgeProtection: '10 kV Integrated SPD',
-      Warranty: '5 Years Onsite Comprehensive',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID', 'REVERSE_AUCTION'],
-    msePreference: true,
-    makeInIndiaPercent: 88,
-    outletStore: 'odop',
-    isAvailableOnGeM: true,
-  },
-  // Medical Products
-  {
-    id: 'itm-004',
-    title: 'Sterile Surgical Examination Gloves as per IS 4148',
-    category: 'Medical Products',
-    type: 'PRODUCT',
-    l1PriceInr: 14,
-    mrpInr: 22,
-    discountPercent: 36,
-    priceUnit: 'per Pair',
-    unitText: 'Box of 100 Pairs (Pack of 5)',
-    minOrderQty: 500,
-    oemBrand: 'HLL / Medilife IS:4148',
-    rating: 4.9,
-    totalOrders: 540000,
-    imageUrl: 'https://images.unsplash.com/photo-1584744982491-665216d95f8b?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 24-48 Hours Express',
-    badge: '100% MSE Exemption',
-    inStock: true,
-    stockCount: 15000,
-    specSummary: {
-      Material: 'Natural Rubber Latex',
-      Standard: 'IS:4148 / EN 455 Certified',
-      Sterilization: 'Gamma Irradiated Sterile',
-      Sizes: '6.5, 7.0, 7.5, 8.0 Available',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 95,
-    isAvailableOnGeM: true,
-  },
-  // Automobiles
-  {
-    id: 'itm-005',
-    title: '32-Seater BS-VI Low Floor City Transit Staff Bus',
-    category: 'Automobiles',
-    type: 'PRODUCT',
-    l1PriceInr: 2850000,
-    mrpInr: 3200000,
-    discountPercent: 11,
-    priceUnit: 'per Vehicle',
-    unitText: '1 Fully Built Passenger Bus',
-    minOrderQty: 1,
-    oemBrand: 'Tata Motors / Ashok Leyland',
-    rating: 4.8,
-    totalOrders: 3200,
-    imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '7-14 Days Dispatch',
-    badge: 'Class 1 MII',
-    inStock: true,
-    stockCount: 14,
-    specSummary: {
-      Seating: '32 Passenger + Driver',
-      Engine: 'BS-VI Diesel / CNG',
-      Safety: 'ABS, Rear Camera, Panic Buttons',
-      AirConditioning: 'Roof-Mounted HVAC 18kW',
-    },
-    procurementModes: ['BID', 'REVERSE_AUCTION'],
-    msePreference: false,
-    makeInIndiaPercent: 80,
-    isAvailableOnGeM: true,
-  },
-  // Furniture
-  {
-    id: 'itm-006',
-    title: 'Ergonomic High Back Revolving Chair with Lumbar Support',
-    category: 'Furniture',
-    type: 'PRODUCT',
-    l1PriceInr: 5800,
-    mrpInr: 8500,
-    discountPercent: 32,
-    priceUnit: 'per Chair',
-    unitText: '1 Pre-Assembled Chair',
-    minOrderQty: 5,
-    oemBrand: 'Godrej Interio / Featherlite',
-    rating: 4.7,
-    totalOrders: 38000,
-    imageUrl: 'https://images.unsplash.com/photo-1580481077195-c277717f41cf?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 3-5 Days Direct',
-    badge: 'BIFMA Certified',
-    inStock: true,
-    stockCount: 840,
-    specSummary: {
-      Mechanism: 'Synchro-Tilt with Multi-Lock',
-      Lumbar: 'Adjustable 2D Lumbar Support',
-      Base: 'Nylon 5-Prong Base with Castors',
-      Certification: 'BIFMA X5.1 Certified',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 75,
-    isAvailableOnGeM: true,
-  },
-  // Trending Services
-  {
-    id: 'itm-007',
-    title: 'Security Manpower Service (Version 2.0)',
-    category: 'Security Services',
-    type: 'SERVICE',
-    l1PriceInr: 22400,
-    mrpInr: 25000,
-    discountPercent: 10,
-    priceUnit: 'per Guard / Month',
-    unitText: 'Per Deployed Guard / Month',
-    minOrderQty: 3,
-    oemBrand: 'DGR Empanelled Agencies',
-    rating: 4.8,
-    totalOrders: 4100,
-    imageUrl: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: 'Immediate Deployment',
-    badge: 'DGR Empanelled',
-    inStock: true,
-    specSummary: {
-      SLACompliance: 'DGR / PSARA Registered Agency',
-      Wages: 'Central Minimum Wages + EPF + ESIC + 5% Admin',
-      ShiftDuration: '8 Hours / Shift 24x7 Coverage',
-      RelieverCharges: '1/6th Reliever Mandatory Included',
-    },
-    procurementModes: ['BID', 'REVERSE_AUCTION'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-008',
-    title: 'Monthly Cab & Taxi Hiring Services (Sedan / SUV)',
-    category: 'Vehicle & Cab Hiring',
-    type: 'SERVICE',
-    l1PriceInr: 38000,
-    mrpInr: 42000,
-    discountPercent: 10,
-    priceUnit: 'per Vehicle / Month',
-    unitText: 'Per Commercial Vehicle / Month',
-    minOrderQty: 1,
-    oemBrand: 'Verified Fleet Operators',
-    rating: 4.6,
-    totalOrders: 9800,
-    imageUrl: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '48h Fleet Deployment',
-    badge: 'GPS VTS Tracked',
-    inStock: true,
-    specSummary: {
-      Coverage: '2000 KM & 250 Hours / Month',
-      VehicleAge: 'Under 2 Years Old (<50,000 KM)',
-      FuelAndDriver: 'Commercial Yellow Plate All Inclusive',
-      GPS: 'Real-time VTS GPS tracking mandatory',
-    },
-    procurementModes: ['BID', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-009',
-    title: 'Drone as a Service (V2.0) - GIS Mapping & Land Survey',
-    category: 'Drone Services',
-    type: 'SERVICE',
-    l1PriceInr: 85000,
-    mrpInr: 98000,
-    discountPercent: 13,
-    priceUnit: 'per Sq. KM Survey',
-    unitText: 'Per Sq. KM Survey with Orthomosaic',
-    minOrderQty: 1,
-    oemBrand: 'DGCA Certified Drone Operators',
-    rating: 4.9,
-    totalOrders: 650,
-    imageUrl: 'https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '72h Field Mobilization',
-    badge: 'DPIIT Startup',
-    inStock: true,
-    specSummary: {
-      Resolution: 'Sub-5cm Ground Sample Distance (GSD)',
-      Equipment: 'DGCA Type Certified Drone with RTK/PPK',
-      Outputs: 'Orthomosaic, Digital Surface Model (DSM), 3D Contours',
-      Compliance: 'DigitalSky Flight Permissions Pre-Cleared',
-    },
-    procurementModes: ['BID'],
-    msePreference: true,
-    makeInIndiaPercent: 90,
-    outletStore: 'startup-runway',
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-010',
-    title: 'Saras Ajeevika Handloom Cotton Bed Sheet with Pillow Covers',
-    category: 'Textile Products',
-    type: 'PRODUCT',
-    l1PriceInr: 650,
-    mrpInr: 950,
-    discountPercent: 32,
-    priceUnit: 'per Set',
-    unitText: 'Double Bed Set (1 Sheet + 2 Covers)',
-    minOrderQty: 10,
-    oemBrand: 'MoRD Ajeevika SHG Federation',
-    rating: 4.9,
-    totalOrders: 18200,
-    imageUrl: 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 3-5 Days Delivery',
-    badge: 'SHG Artisan Handloom',
-    inStock: true,
-    stockCount: 1200,
-    specSummary: {
-      Weave: '100% Handloom Cotton 200 Thread Count',
-      Certification: 'Handloom Mark / Craftmark Certified',
-      Artisans: 'Rural Women Self Help Group Co-op',
-      Dimensions: '228 cm x 274 cm (Double Bed)',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    outletStore: 'saras-ajeevika',
-    isAvailableOnGeM: true,
-  },
-  // Expanded Real-Time High Velocity Products (Instamart & Blinkit Style)
-  {
-    id: 'itm-011',
-    title: 'JK Copier A4 Multipurpose Office Copier Paper 75 GSM',
-    category: 'Stationery Items',
-    type: 'PRODUCT',
-    l1PriceInr: 1340,
-    mrpInr: 1850,
-    discountPercent: 28,
-    priceUnit: 'per Carton',
-    unitText: 'Carton of 5 Reams (2,500 Sheets)',
-    minOrderQty: 2,
-    oemBrand: 'JK Paper Ltd (FSC Certified)',
-    rating: 4.9,
-    totalOrders: 310000,
-    imageUrl: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ Same Day / 24h Express',
-    badge: 'Pantry Essential',
-    inStock: true,
-    stockCount: 3500,
-    specSummary: {
-      GSM: '75 GSM Ultra Bright',
-      Brightness: '98% ISO Brightness',
-      Compatibility: 'High Speed Laser & Inkjet Printers',
-      Packaging: 'Moisture-proof Poly Wrap Box',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-012',
-    title: '3M Aura N95 Particulate Disposable Respirator Masks (IS 9473)',
-    category: 'Medical Products',
-    type: 'PRODUCT',
-    l1PriceInr: 890,
-    mrpInr: 1500,
-    discountPercent: 41,
-    priceUnit: 'per Box',
-    unitText: 'Box of 50 Respirator Masks',
-    minOrderQty: 2,
-    oemBrand: '3M India Healthcare',
-    rating: 4.9,
-    totalOrders: 145000,
-    imageUrl: 'https://images.unsplash.com/photo-1586942593568-29361efcd571?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 24h Delivery',
-    badge: 'NIOSH / BIS Certified',
-    inStock: true,
-    stockCount: 4200,
-    specSummary: {
-      Filtration: '≥ 95% Filtration against non-oil aerosols',
-      Design: '3-Panel Flat-Fold Design with Embossed Top Panel',
-      Standard: 'BIS IS 9473 & NIOSH N95 Approved',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 70,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-013',
-    title: 'Canon imageRUNNER Network Laser Multi-Function Photocopier / Printer',
-    category: 'IT Products',
-    type: 'PRODUCT',
-    l1PriceInr: 27400,
-    mrpInr: 38000,
-    discountPercent: 28,
-    priceUnit: 'per Unit',
-    unitText: '1 Multi-Function Floor Machine',
-    minOrderQty: 1,
-    oemBrand: 'Canon India / HP',
-    rating: 4.8,
-    totalOrders: 8200,
-    imageUrl: 'https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 2-3 Days Free Onsite Demo',
-    badge: 'L1 Direct',
-    inStock: true,
-    stockCount: 180,
-    specSummary: {
-      Speed: '25 Pages Per Minute (Duplex A4/A3)',
-      Functions: 'Print, Copy, Color Scan, Network Send',
-      Connectivity: 'Gigabit Ethernet + Wi-Fi Direct',
-      Warranty: '3 Years Comprehensive Onsite',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 60,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-014',
-    title: 'Shree Anna Organic Barnyard & Foxtail Nutri-Millets Combo',
-    category: 'Textile Products',
-    type: 'PRODUCT',
-    l1PriceInr: 410,
-    mrpInr: 620,
-    discountPercent: 34,
-    priceUnit: 'per Pack',
-    unitText: 'Combo Pack of 2 kg (1kg x 2)',
-    minOrderQty: 5,
-    oemBrand: 'TRIFED / Shree Anna Farmer Producer Org',
-    rating: 4.9,
-    totalOrders: 29000,
-    imageUrl: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 24-48 Hours Express',
-    badge: 'Shree Anna FPO',
-    inStock: true,
-    stockCount: 5000,
-    specSummary: {
-      Certification: 'India Organic / FSSAI / Jaivik Bharat',
-      Dietary: '100% Gluten Free, High Fiber, Low Glycemic Index',
-      ShelfLife: '12 Months Vacuum Sealed',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    outletStore: 'millets',
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-015',
-    title: 'Havells 20W LED Slim Batten Tube Light 6500K Cool Daylight (Pack of 4)',
-    category: 'Electrical Appliances',
-    type: 'PRODUCT',
-    l1PriceInr: 980,
-    mrpInr: 1600,
-    discountPercent: 39,
-    priceUnit: 'per Pack',
-    unitText: 'Pack of 4 Battens (4ft 20W)',
-    minOrderQty: 3,
-    oemBrand: 'Havells India Ltd',
-    rating: 4.8,
-    totalOrders: 180000,
-    imageUrl: 'https://images.unsplash.com/photo-1565814636199-ae8133055c1c?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 24h Express Delivery',
-    badge: 'BEE 5-Star Rated',
-    inStock: true,
-    stockCount: 6400,
-    specSummary: {
-      LuminousFlux: '2200 Lumens / Batten',
-      SurgeImmunity: '4 kV Inbuilt Surge Protection',
-      Lifespan: '25,000 Burning Hours',
-      Warranty: '2 Years Manufacturer Replacement',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 90,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-016',
-    title: 'Dettol Hospital-Grade Disinfectant Floor Cleaner Liquid 5 Litres',
-    category: 'Medical Products',
-    type: 'PRODUCT',
-    l1PriceInr: 840,
-    mrpInr: 1250,
-    discountPercent: 33,
-    priceUnit: 'per Canister',
-    unitText: '5 Litre Heavy-Duty Canister',
-    minOrderQty: 2,
-    oemBrand: 'Reckitt Benckiser Professional',
-    rating: 4.9,
-    totalOrders: 78000,
-    imageUrl: 'https://images.unsplash.com/photo-1584813470613-5b1c1cad3d69?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ Same Day / 24h Dispatch',
-    badge: 'Disinfection SLA',
-    inStock: true,
-    stockCount: 2800,
-    specSummary: {
-      Efficacy: 'Kills 99.99% germs and viruses in 60 seconds',
-      Application: 'Hospitals, Govt Offices, Laboratories',
-      Fragrance: 'Pine / Fresh Citrus Neutralizer',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-017',
-    title: 'Cello Butterflow Classic Smooth Ballpoint Pens (Box of 20)',
-    category: 'Stationery Items',
-    type: 'PRODUCT',
-    l1PriceInr: 190,
-    mrpInr: 300,
-    discountPercent: 37,
-    priceUnit: 'per Box',
-    unitText: 'Box of 20 Pens (0.7mm Tip)',
-    minOrderQty: 5,
-    oemBrand: 'Cello BIC India',
-    rating: 4.8,
-    totalOrders: 420000,
-    imageUrl: 'https://images.unsplash.com/photo-1585336261026-7756f7ef5eb1?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ Next Day Delivery',
-    badge: 'Office Desk Essential',
-    inStock: true,
-    stockCount: 9500,
-    specSummary: {
-      Tip: '0.7 mm Swiss Carbide Tip',
-      Ink: 'Low Viscosity German Ink for Smudge-Free Writing',
-      Body: 'Soft Rubberized Comfort Grip',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-018',
-    title: 'Voltas 1.5 Ton 5-Star Adjustable Inverter Split Air Conditioner',
-    category: 'Electronic Equipments',
-    type: 'PRODUCT',
-    l1PriceInr: 34990,
-    mrpInr: 48000,
-    discountPercent: 27,
-    priceUnit: 'per Unit',
-    unitText: '1 Complete Split AC (Indoor + Outdoor Unit)',
-    minOrderQty: 1,
-    oemBrand: 'Voltas Tata Enterprise',
-    rating: 4.8,
-    totalOrders: 21000,
-    imageUrl: 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 3-5 Days Free Standard Installation',
-    badge: 'BEE 5-Star Inverter',
-    inStock: true,
-    stockCount: 320,
-    specSummary: {
-      Capacity: '1.5 Ton (Suitable for 150-180 sq ft room)',
-      Coil: '100% Copper Condenser with Anti-Corrosive Blue Fins',
-      Modes: '4-in-1 Adjustable Cooling (20% to 120% tonnage)',
-      Refrigerant: 'Eco-Friendly R32 Green Gas',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON', 'BID'],
-    msePreference: true,
-    makeInIndiaPercent: 85,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-019',
-    title: 'Tata Tea Premium Desh Ki Chai Fresh Blend (Pack of 1kg)',
-    category: 'Textile Products',
-    type: 'PRODUCT',
-    l1PriceInr: 385,
-    mrpInr: 520,
-    discountPercent: 26,
-    priceUnit: 'per Pack',
-    unitText: '1 kg Vacuum Sealed Foil Pack',
-    minOrderQty: 4,
-    oemBrand: 'Tata Consumer Products Ltd',
-    rating: 4.9,
-    totalOrders: 95000,
-    imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '⚡ 24h Pantry Delivery',
-    badge: 'Pantry Essential',
-    inStock: true,
-    stockCount: 4800,
-    specSummary: {
-      Composition: 'Selected large and fine grain CTC Assam tea leaves',
-      Packaging: 'Aroma-locked nitrogen flushed packaging',
-      ShelfLife: '12 Months',
-    },
-    procurementModes: ['DIRECT_PURCHASE', 'L1_COMPARISON'],
-    msePreference: true,
-    makeInIndiaPercent: 100,
-    isAvailableOnGeM: true,
-  },
-  {
-    id: 'itm-020',
-    title: 'Tata Ace EV Zero-Emission Commercial Electric Cargo Vehicle',
-    category: 'Automobiles',
-    type: 'PRODUCT',
-    l1PriceInr: 840000,
-    mrpInr: 950000,
-    discountPercent: 12,
-    priceUnit: 'per Vehicle',
-    unitText: '1 Fully Built Electric Mini Cargo Truck',
-    minOrderQty: 1,
-    oemBrand: 'Tata Motors Fleet Solutions',
-    rating: 4.9,
-    totalOrders: 1400,
-    imageUrl: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=500&auto=format&fit=crop&q=80',
-    etaDelivery: '7-14 Days Fleet Handover',
-    badge: 'Green Energy EV',
-    inStock: true,
-    stockCount: 25,
-    specSummary: {
-      Range: '154 KM Certified Range per Charge',
-      Battery: 'Advanced 21.3 kWh Lithium-Iron-Phosphate (LFP)',
-      Payload: '600 kg Certified Rated Payload Capacity',
-      Telematics: 'Fleet Edge 24x7 Real-Time Telematics Inbuilt',
-    },
-    procurementModes: ['BID', 'REVERSE_AUCTION'],
-    msePreference: true,
-    makeInIndiaPercent: 88,
-    outletStore: 'startup-runway',
-    isAvailableOnGeM: true,
-  },
-];
+// Purged all mock items (itm-001 through itm-020 with unsplash images)
+// Real catalog streams live from mkp.gem.gov.in via GeMClientCrawler
+export const MOCK_MARKETPLACE_ITEMS: MarketplaceItem[] = [];
 
 export class MarketplaceService {
   /**
@@ -956,44 +351,80 @@ export class MarketplaceService {
   }
 
   /**
+   * Streams live product pages directly from mkp.gem.gov.in using GeMClientCrawler.
+   * Supports pagination (page 1, 2, 3...) and subcategory filtering across 2,000+ pages of products.
+   */
+  public static async fetchLiveCategoryStream(filter?: MarketplaceFilter): Promise<{
+    items: MarketplaceItem[];
+    hasMore: boolean;
+    page: number;
+  }> {
+    const page = filter?.page || 1;
+
+    // 1. Direct real-time keyword search if query is provided
+    if (filter?.query && filter.query.trim()) {
+      try {
+        const searchRes = await GeMClientCrawler.searchLiveProducts(filter.query.trim(), page);
+        if (searchRes.items && searchRes.items.length > 0) {
+          this.ingestLiveProducts(searchRes.items);
+          return searchRes;
+        }
+      } catch {}
+    }
+
+    // 2. Direct real-time category crawl from mkp.gem.gov.in
+    let slug = 'computers-entry-level-computer-cpu/search'; // Official GeM desktop computers
+    if (filter?.subcategorySlug) {
+      slug = filter.subcategorySlug;
+    } else if (filter?.category && filter.category !== 'All Categories' && filter.category !== 'ALL') {
+      const match = OFFICIAL_GEM_SUBCATEGORIES.find(
+        (c) =>
+          c.category.toLowerCase() === filter.category!.toLowerCase() ||
+          filter.category!.toLowerCase().includes(c.category.toLowerCase()) ||
+          filter.category!.toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (match) {
+        slug = match.slug;
+      }
+    }
+
+    try {
+      const crawlRes = await GeMClientCrawler.fetchCategoryPage(slug, page);
+      if (crawlRes.items && crawlRes.items.length > 0) {
+        this.ingestLiveProducts(crawlRes.items);
+        return crawlRes;
+      }
+    } catch {}
+
+    // 3. Fallback: Check network connectivity
+    const online = await isNetworkOnline();
+    if (!online) {
+      return { items: [], hasMore: false, page };
+    }
+
+    return {
+      items: this.getItems(filter),
+      hasMore: false,
+      page,
+    };
+  }
+
+  /**
    * Fetches live marketplace products.
    * Leverages standalone in-app engine with real internet reachability detection.
    * If truly offline (no connectivity), returns empty array.
    * When online (4G/Wi-Fi), returns verified GeM marketplace items.
    */
   public static async fetchLiveProducts(filter?: MarketplaceFilter): Promise<MarketplaceItem[]> {
-    // 1. Try local or custom server if configured
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 800);
-      const queryParams = new URLSearchParams();
-      if (filter?.category && filter.category !== 'ALL') queryParams.append('category', filter.category);
-      if (filter?.query) queryParams.append('q', filter.query);
-      const qs = queryParams.toString();
-      
-      const res = await fetch(`http://localhost:5001/api/portal/products${qs ? `?${qs}` : ''}`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.success && Array.isArray(json?.data) && json.data.length > 0) {
-          MarketplaceService.ingestLiveProducts(json.data);
-          return MarketplaceService.getItems(filter);
-        }
-      }
-    } catch {
-      // Local server not running - continue to standalone in-app engine
+    const stream = await this.fetchLiveCategoryStream(filter);
+    if (stream.items && stream.items.length > 0) {
+      return stream.items;
     }
-
-    // 2. Check genuine internet connectivity (4G / Wi-Fi)
     const online = await isNetworkOnline();
     if (!online) {
       return []; // Truly offline (e.g. Airplane mode)
     }
-
-    // 3. When online, serve the verified GeM marketplace catalog
-    return MarketplaceService.getItems(filter);
+    return this.getItems(filter);
   }
 
   /**

@@ -21,9 +21,9 @@ describe('MarketplaceService', () => {
     assert.ok(itItems.length >= 2);
     assert.ok(itItems.every((i) => i.category === 'IT Products'));
 
-    const searchHits = MarketplaceService.getItems({ query: 'Luminaire' });
-    assert.strictEqual(searchHits.length, 1);
-    assert.strictEqual(searchHits[0].id, 'itm-003');
+    const searchHits = MarketplaceService.getItems({ query: 'DUGONG' });
+    assert.ok(searchHits.length >= 1);
+    assert.ok(searchHits.every((i) => i.title.toLowerCase().includes('dugong') || i.oemBrand.toLowerCase().includes('dugong')));
   });
 
   it('filters items belonging to special outlet stores (Saras / ODOP / Startup Runway)', () => {
@@ -31,8 +31,30 @@ describe('MarketplaceService', () => {
     assert.ok(outlets.some((o) => o.id === 'saras-ajeevika'));
     assert.ok(outlets.some((o) => o.id === 'startup-runway'));
 
+    // Ingest a verified outlet item
+    MarketplaceService.ingestLiveProducts([
+      {
+        id: 'gem-saras-live-01',
+        title: 'Handloom Pure Khadi Cotton Bed Sheets Set',
+        category: 'Textile Products',
+        type: 'PRODUCT',
+        l1PriceInr: 18500,
+        priceUnit: 'per Pack of 50',
+        minOrderQty: 1,
+        oemBrand: 'KVIC State Handloom',
+        rating: 4.9,
+        totalOrders: 120,
+        specSummary: {},
+        procurementModes: ['DIRECT_PURCHASE'],
+        msePreference: true,
+        makeInIndiaPercent: 100,
+        outletStore: 'saras-ajeevika',
+        isAvailableOnGeM: true,
+      },
+    ]);
+
     const sarasItems = MarketplaceService.getItems({ outletStore: 'saras-ajeevika' });
-    assert.strictEqual(sarasItems.length, 1);
+    assert.ok(sarasItems.length >= 1);
     assert.strictEqual(sarasItems[0].outletStore, 'saras-ajeevika');
   });
 

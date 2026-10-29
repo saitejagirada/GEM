@@ -33,7 +33,7 @@ LIVE_CATEGORY_ENDPOINTS = [
     {
         "category": "IT Products",
         "name": "Desktop Computers",
-        "url": "https://mkp.gem.gov.in/computers-desktop-computer/search",
+        "url": "https://mkp.gem.gov.in/computers-entry-level-computer-cpu/search",
         "default_unit": "per Unit",
         "eta": "⚡ 2-4 Days Delivery",
     },
