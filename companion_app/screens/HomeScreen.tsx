@@ -21,6 +21,7 @@ export interface HomeScreenProps {
   bids: DeconstructedBidDoc[];
   onNavigateTab: (tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'CATEGORIES' | 'HELP' | 'MORE') => void;
   onSelectBid: (bid: DeconstructedBidDoc) => void;
+  onOpenMyWork?: () => void;
 }
 
 const SEARCH_FILTER_PILLS = ['All', 'Products', 'Services', 'Bids', 'Contracts'];
@@ -36,6 +37,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   bids,
   onNavigateTab,
   onSelectBid,
+  onOpenMyWork,
 }) => {
   const { colors, fontMultiplier } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,7 +137,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
       </View>
 
-      {/* 4. Quick Access Grid (4 Tiles) */}
+      {/* 4. Personal workspace entry point */}
+      <View style={[styles.workspaceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.workspaceCopy}>
+          <Text style={[styles.workspaceEyebrow, { color: colors.primary }]}>YOUR WORKSPACE</Text>
+          <Text style={[styles.workspaceTitle, { color: colors.textPrimary }]}>Track bids and prepare documents</Text>
+          <Text style={[styles.workspaceSubtitle, { color: colors.textSecondary }]}>Keep previous bids, local attachments and preflight checklists together.</Text>
+        </View>
+        <PrimaryButton
+          label="Open My Work"
+          onPress={() => (onOpenMyWork ? onOpenMyWork() : onNavigateTab('MORE'))}
+          style={styles.workspaceButton}
+        />
+      </View>
+
+      {/* 5. Quick Access Grid (4 Tiles) */}
       <View style={styles.quickAccessSection}>
         <SectionHeader title="Quick access" />
         <View style={styles.quickGrid}>
@@ -197,7 +213,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
       </View>
 
-      {/* 5. Popular Categories Preview */}
+      {/* 6. Popular Categories Preview */}
       <View style={styles.categoriesSection}>
         <SectionHeader
           title="Browse categories"
@@ -236,7 +252,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
       </View>
 
-      {/* 6. Latest Opportunities Snippet */}
+      {/* 7. Latest Opportunities Snippet */}
       <View style={styles.opportunitiesSection}>
         <SectionHeader
           title="Latest opportunities"
@@ -295,7 +311,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         ))}
       </View>
 
-      {/* 7. Procurement Help Banner */}
+      {/* 8. Procurement Help Banner */}
       <View
         style={[
           styles.helpCard,
@@ -409,6 +425,17 @@ const styles = StyleSheet.create({
     height: 24,
     backgroundColor: '#E2E8F0',
   },
+  workspaceCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 14,
+    marginBottom: 20,
+  },
+  workspaceCopy: { marginBottom: 12 },
+  workspaceEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  workspaceTitle: { fontSize: 16, fontWeight: '800', marginTop: 4 },
+  workspaceSubtitle: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  workspaceButton: { alignSelf: 'stretch' },
   quickAccessSection: {
     marginBottom: 20,
   },

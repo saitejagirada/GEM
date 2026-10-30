@@ -100,8 +100,8 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
             <Text style={styles.menuIconEmoji}>📊</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Bids &amp; Purchases Portfolio</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Track quotes, awarded orders &amp; CVC credentials</Text>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Work</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Track bids, checklists and local documents</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
         </Pressable>

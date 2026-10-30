@@ -41,7 +41,7 @@ import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
-import { ParticipatedPortfolioScreen } from './screens/ParticipatedPortfolioScreen';
+import { MyWorkScreen } from './screens/MyWorkScreen';
 import { SupabaseClient } from './services/SupabaseClient';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network.ts';
@@ -369,9 +369,9 @@ const MainAppContent: React.FC = () => {
               >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
-              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>My Bids &amp; Purchases Portfolio</Text>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>My Work</Text>
             </View>
-            <ParticipatedPortfolioScreen />
+            <MyWorkScreen availableBids={bids} />
           </View>
         )}
         {subScreen === 'REG_BUYER' && (
@@ -398,6 +398,7 @@ const MainAppContent: React.FC = () => {
                 bids={bids}
                 onNavigateTab={handleHomeNavigate}
                 onSelectBid={(bid) => setSelectedBid(bid)}
+                onOpenMyWork={() => setSubScreen('PORTFOLIO')}
               />
             )}
             {activeTab === 'SEARCH' && <MarketplaceScreen />}

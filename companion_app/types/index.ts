@@ -304,3 +304,25 @@ export interface ParticipatedBid {
   corrigendumCount: number;
 }
 
+// -------------------------------------------------------------------------
+// Module 9: Phase 1 Local Productivity Workspace
+// -------------------------------------------------------------------------
+
+export type WorkspaceDocumentKind = 'TECHNICAL' | 'FINANCIAL' | 'COMPLIANCE' | 'OTHER';
+
+/**
+ * A document selected into the user's local preparation workspace.
+ * This is deliberately not an official GeM upload record.
+ */
+export interface WorkspaceDocument {
+  id: string;
+  name: string;
+  uri: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  addedAtUtc: string;
+  kind: WorkspaceDocumentKind;
+  linkedBidNumber?: string;
+  source: 'DEVICE_PICKER';
+}
+

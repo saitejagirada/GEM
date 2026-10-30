@@ -34,7 +34,7 @@ export const ParticipatedPortfolioScreen: React.FC<ParticipatedPortfolioScreenPr
       if (items && items.length > 0) {
         setBids(items);
       } else {
-        const local = await SupabaseClient.getPortfolio();
+        const local = await SupabaseClient.getVendorPortfolio('usr-agent-001');
         if (local && local.length > 0) setBids(local);
       }
     } catch {
