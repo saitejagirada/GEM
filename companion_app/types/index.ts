@@ -309,6 +309,7 @@ export interface ParticipatedBid {
 // -------------------------------------------------------------------------
 
 export type WorkspaceDocumentKind = 'TECHNICAL' | 'FINANCIAL' | 'COMPLIANCE' | 'OTHER';
+export type WorkspaceDocumentPersistence = 'PERSISTED' | 'SESSION_ONLY';
 
 /**
  * A document selected into the user's local preparation workspace.
@@ -324,5 +325,6 @@ export interface WorkspaceDocument {
   kind: WorkspaceDocumentKind;
   linkedBidNumber?: string;
   source: 'DEVICE_PICKER';
+  persistence: WorkspaceDocumentPersistence;
 }
 

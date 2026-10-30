@@ -29,6 +29,7 @@ import { PortalApiClient } from '../services/PortalApiClient';
 import { PortalDocService } from '../services/PortalDocService';
 import { SupabaseClient } from '../services/SupabaseClient';
 import { WorkspaceService } from '../services/WorkspaceService';
+import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { formatDateSafe, formatInr } from '../utils/formatters';
 
 type WorkspaceSection = 'BIDS' | 'DOCUMENTS';
@@ -46,21 +47,31 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);
   const [selectedBidNumber, setSelectedBidNumber] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
 
   const loadPortfolio = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const remoteFirst = await PortalApiClient.getPortfolio();
-      const records =
-        remoteFirst.length > 0
-          ? remoteFirst
-          : await SupabaseClient.getVendorPortfolio('usr-agent-001');
+      const [remoteRecords, vendorRecords, localRecords] = await Promise.all([
+        PortalApiClient.getPortfolio(),
+        SupabaseClient.getVendorPortfolio('usr-agent-001'),
+        WorkspaceStorage.loadPortfolio(),
+      ]);
+      const records = WorkspaceStorage.mergePortfolioRecords([
+        ...remoteRecords,
+        ...vendorRecords,
+        ...localRecords,
+      ]);
       setPortfolio(records);
       setSelectedBidNumber((current) => current || records[0]?.bidNumber || '');
     } catch {
-      const fallback = await SupabaseClient.getVendorPortfolio('usr-agent-001');
-      setPortfolio(fallback);
-      setSelectedBidNumber((current) => current || fallback[0]?.bidNumber || '');
+      const [fallback, localRecords] = await Promise.all([
+        SupabaseClient.getVendorPortfolio('usr-agent-001'),
+        WorkspaceStorage.loadPortfolio(),
+      ]);
+      const records = WorkspaceStorage.mergePortfolioRecords([...fallback, ...localRecords]);
+      setPortfolio(records);
+      setSelectedBidNumber((current) => current || records[0]?.bidNumber || '');
     } finally {
       setIsRefreshing(false);
     }
@@ -69,6 +80,19 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   useEffect(() => {
     loadPortfolio();
   }, [loadPortfolio]);
+
+  useEffect(() => {
+    let isMounted = true;
+    WorkspaceStorage.loadDocuments().then((storedDocuments) => {
+      if (!isMounted) return;
+      setDocuments(storedDocuments);
+      setWorkspaceLoaded(true);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const activeBids = useMemo(
     () => portfolio.filter((bid) => bid.stage !== 'AWARDED_L1' && bid.stage !== 'DISQUALIFIED'),
@@ -123,32 +147,27 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
 
       if (result.canceled) return;
 
-      const pickedAt = new Date().toISOString();
-      const newDocuments: WorkspaceDocument[] = result.assets.map((asset, index) => ({
-        id: 'workspace-doc-' + Date.now() + '-' + index,
-        name: asset.name,
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        sizeBytes: asset.size,
-        addedAtUtc: pickedAt,
-        kind: WorkspaceService.inferDocumentKind(asset.name),
-        linkedBidNumber: selectedBidNumber,
-        source: 'DEVICE_PICKER',
-      }));
+      const persisted = await WorkspaceStorage.persistPickedDocuments(
+        result.assets,
+        selectedBidNumber,
+        documents
+      );
 
-      setDocuments((current) => [...newDocuments, ...current]);
+      setDocuments(persisted.documents);
       setSection('DOCUMENTS');
       Alert.alert(
-        'Added to local workspace',
-        String(newDocuments.length) +
+        persisted.persistedCount > 0 ? 'Saved to local workspace' : 'Added for this session',
+        String(result.assets.length) +
           ' document' +
-          (newDocuments.length === 1 ? '' : 's') +
-          ' ready for review. Nothing was uploaded to GeM.'
+          (result.assets.length === 1 ? '' : 's') +
+          (persisted.sessionOnlyCount > 0
+            ? ' ready for review. Some files are session-only because device storage was unavailable.'
+            : ' saved on this device for review. Nothing was uploaded to GeM.')
       );
     } catch {
       Alert.alert('Could not add document', 'The device document picker returned an error. Please try again.');
     }
-  }, [selectedBidNumber]);
+  }, [documents, selectedBidNumber]);
 
   const removeDocument = useCallback((documentId: string) => {
     Alert.alert('Remove local document?', 'This only removes the preparation copy from this workspace.', [
@@ -156,10 +175,34 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => setDocuments((current) => current.filter((doc) => doc.id !== documentId)),
+        onPress: async () => {
+          const document = documents.find((item) => item.id === documentId);
+          if (document) await WorkspaceStorage.removeDocument(document);
+          setDocuments((current) => current.filter((doc) => doc.id !== documentId));
+        },
       },
     ]);
-  }, []);
+  }, [documents]);
+
+  const clearLocalDocuments = useCallback(() => {
+    if (documents.length === 0) return;
+
+    Alert.alert(
+      'Clear local workspace files?',
+      'This removes the preparation copies and their local metadata. It does not affect GeM.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear files',
+          style: 'destructive',
+          onPress: async () => {
+            await WorkspaceStorage.clearDocuments(documents);
+            setDocuments([]);
+          },
+        },
+      ]
+    );
+  }, [documents]);
 
   const renderBidCard = (bid: ParticipatedBid) => {
     const linked = documents.filter((doc) => doc.linkedBidNumber === bid.bidNumber);
@@ -236,7 +279,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <DataNotice>
-        Phase 1 workspace · Records and documents here are local preparation data, not official GeM submissions.
+        Phase 2 workspace · Saved files stay on this device for preparation. Nothing here is an official GeM submission.
       </DataNotice>
 
       <ScrollView
@@ -312,9 +355,22 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
           </View>
         ) : (
           <View>
-            <SectionHeader title="Document workspace" />
+            <SectionHeader
+              title="Document workspace"
+              actionLabel={documents.length > 0 ? 'Clear local files' : undefined}
+              onAction={clearLocalDocuments}
+            />
             <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
               Select a bid, choose supporting files from your device, then review the checklist before opening GeM.
+            </Text>
+
+            <Text style={[styles.storageHint, { color: colors.textMuted }]}>
+              {workspaceLoaded
+                ? documents.filter((document) => WorkspaceStorage.isPersisted(document)).length +
+                  ' file' +
+                  (documents.filter((document) => WorkspaceStorage.isPersisted(document)).length === 1 ? '' : 's') +
+                  ' saved on this device'
+                : 'Loading saved workspace files…'}
             </Text>
 
             <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Attach to bid</Text>
@@ -334,12 +390,13 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
                 Add files for {selectedBidNumber || 'a selected bid'}
               </Text>
               <Text style={[styles.uploadText, { color: colors.textSecondary }]}>
-                PDFs, images, Word and spreadsheet files are kept in this app session for preparation. They are not uploaded to GeM automatically.
+                PDFs, images, Word and spreadsheet files are copied into app-private storage when available. They are never uploaded to GeM automatically.
               </Text>
               <SecondaryButton
-                label="Choose files from device"
+                label={workspaceLoaded ? 'Choose files from device' : 'Loading workspace…'}
                 icon="＋"
                 onPress={pickDocuments}
+                disabled={!workspaceLoaded}
                 style={styles.fullButton}
               />
             </View>
@@ -386,7 +443,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
                     {document.name}
                   </Text>
                   <Text style={[styles.documentSub, { color: colors.textMuted }]}>
-                    {document.kind} · {WorkspaceService.formatFileSize(document.sizeBytes)} · local only
+                    {document.kind} · {WorkspaceService.formatFileSize(document.sizeBytes)} · {WorkspaceStorage.isPersisted(document) ? 'saved on device' : 'session only'}
                   </Text>
                 </View>
                 <SecondaryButton
@@ -456,6 +513,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 15, fontWeight: '800' },
   emptyText: { fontSize: 12, lineHeight: 17, marginTop: 4 },
   sectionDescription: { fontSize: 12, lineHeight: 17, marginBottom: 14 },
+  storageHint: { fontSize: 10.5, lineHeight: 15, marginTop: -8, marginBottom: 12 },
   fieldLabel: { fontSize: 11, fontWeight: '800', marginBottom: 6 },
   uploadCard: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: 1, padding: 14, marginTop: 4, marginBottom: 16 },
   uploadTitle: { fontSize: 15, fontWeight: '800' },

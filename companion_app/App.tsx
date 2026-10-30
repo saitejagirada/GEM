@@ -43,11 +43,17 @@ import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { MyWorkScreen } from './screens/MyWorkScreen';
 import { SupabaseClient } from './services/SupabaseClient';
+import { WorkspaceStorage } from './services/WorkspaceStorage';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network.ts';
 import { PortalApiClient } from './services/PortalApiClient';
 import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
-import type { DeconstructedBidDoc, UserAgentProfile, MarketPulseStats } from './types/index';
+import type {
+  DeconstructedBidDoc,
+  MarketPulseStats,
+  ParticipatedBid,
+  UserAgentProfile,
+} from './types/index';
 import type { MarketplaceCategory } from './services/MarketplaceService';
 
 export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
@@ -536,8 +542,7 @@ const MainAppContent: React.FC = () => {
           visible={true}
           onClose={() => setSelectedBid(null)}
           onAddToParticipated={(bid) => {
-            PortalApiClient.addToPortfolio(bid);
-            SupabaseClient.addToPortfolio({
+            const participatedRecord: ParticipatedBid = {
               bidNumber: bid.bidNumber,
               itemTitle: bid.title,
               department: bid.department,
@@ -547,7 +552,17 @@ const MainAppContent: React.FC = () => {
               stage: 'TECHNICAL_EVALUATION',
               currentRank: 1,
               corrigendumCount: 0,
+            };
+            PortalApiClient.addToPortfolio(bid);
+            void SupabaseClient.savePortfolioItem({
+              user_id: 'usr-agent-001',
+              bid_number: participatedRecord.bidNumber,
+              status: participatedRecord.stage,
+              quoted_l1: participatedRecord.quotedPriceInr,
+              expected_l1_benchmark: participatedRecord.expectedL1BenchmarkInr,
+              current_rank: participatedRecord.currentRank,
             });
+            void WorkspaceStorage.savePortfolioRecord(participatedRecord);
           }}
         />
       )}

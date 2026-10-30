@@ -51,6 +51,7 @@ test('WorkspaceService reports local checklist progress without claiming officia
       kind: 'COMPLIANCE',
       linkedBidNumber: participated.bidNumber,
       source: 'DEVICE_PICKER',
+      persistence: 'SESSION_ONLY',
     },
   ];
 

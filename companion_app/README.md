@@ -23,7 +23,19 @@ The app now includes a local productivity workspace opened from Home or More:
 - Local checklist preflight against any available bid requirements.
 - Explicit handoff to the official GeM bid page or marketplace for login, 2FA, upload, and final submission.
 
-Phase 1 does not store GeM credentials, OTPs, session cookies, or claim that a local attachment was uploaded. Files selected here remain preparation copies in the app session until an approved integration and secure document storage layer are added.
+Phase 1 did not store GeM credentials, OTPs, session cookies, or claim that a local attachment was uploaded. Phase 2 adds app-private persistence for preparation copies while keeping the same boundary.
+
+## Phase 2: Persistent Local Preparation
+
+Phase 2 keeps the productivity layer useful after the app is closed:
+
+- Selected files are copied into the app-private document directory when native storage is available.
+- File metadata and bid links are persisted locally with AsyncStorage.
+- Bids added from the inspector are restored as local tracking records when My Work opens again.
+- The workspace labels each file as saved on device or session-only, so storage failures are visible.
+- Users can remove individual files or clear all local preparation copies from My Work.
+
+This is still a preparation workspace, not an official GeM account mirror or upload channel. Local files are not encrypted by this feature and should be handled as sensitive business documents; credentials, OTPs, and session cookies are never stored.
 
 ## Documentation References
 
