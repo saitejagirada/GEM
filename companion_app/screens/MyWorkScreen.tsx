@@ -13,6 +13,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import type {
   DeconstructedBidDoc,
+  OfficialHandoffRecord,
   ParticipatedBid,
   WorkspaceDocument,
 } from '../types/index';
@@ -45,6 +46,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   const [bidFilter, setBidFilter] = useState<BidFilter>('ACTIVE');
   const [portfolio, setPortfolio] = useState<ParticipatedBid[]>([]);
   const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);
+  const [handoffs, setHandoffs] = useState<OfficialHandoffRecord[]>([]);
   const [selectedBidNumber, setSelectedBidNumber] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
@@ -83,11 +85,14 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
 
   useEffect(() => {
     let isMounted = true;
-    WorkspaceStorage.loadDocuments().then((storedDocuments) => {
-      if (!isMounted) return;
-      setDocuments(storedDocuments);
-      setWorkspaceLoaded(true);
-    });
+    Promise.all([WorkspaceStorage.loadDocuments(), WorkspaceStorage.loadHandoffs()]).then(
+      ([storedDocuments, storedHandoffs]) => {
+        if (!isMounted) return;
+        setDocuments(storedDocuments);
+        setHandoffs(storedHandoffs);
+        setWorkspaceLoaded(true);
+      }
+    );
 
     return () => {
       isMounted = false;
@@ -111,6 +116,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   const selectedBid = portfolio.find((bid) => bid.bidNumber === selectedBidNumber);
   const selectedAvailableBid = availableBids.find((bid) => bid.bidNumber === selectedBidNumber);
   const linkedDocuments = documents.filter((doc) => doc.linkedBidNumber === selectedBidNumber);
+  const selectedHandoff = handoffs.find((handoff) => handoff.bidNumber === selectedBidNumber);
 
   const openOfficialBid = useCallback((bidNumber?: string) => {
     const target = PortalDocService.resolvePdfUrl(bidNumber);
@@ -119,11 +125,36 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
     });
   }, []);
 
-  const openOfficialPortal = useCallback(() => {
+  const openOfficialPortal = useCallback(async () => {
+    if (selectedBidNumber) {
+      const handoff = await WorkspaceStorage.beginOfficialHandoff(
+        selectedBidNumber,
+        linkedDocuments.map((document) => document.id)
+      );
+      setHandoffs((current) => WorkspaceStorage.mergeHandoffs([...current, handoff]));
+    }
+
     Linking.openURL('https://mkp.gem.gov.in').catch(() => {
       Alert.alert('Open official GeM portal', 'The official marketplace could not be opened on this device.');
     });
-  }, []);
+  }, [linkedDocuments, selectedBidNumber]);
+
+  const markUserReportedSubmitted = useCallback(async () => {
+    if (!selectedBidNumber) {
+      Alert.alert('Choose a bid first', 'Select the bid you submitted on the official portal.');
+      return;
+    }
+
+    const handoff = await WorkspaceStorage.markUserReportedSubmitted(
+      selectedBidNumber,
+      linkedDocuments.map((document) => document.id)
+    );
+    setHandoffs((current) => WorkspaceStorage.mergeHandoffs([...current, handoff]));
+    Alert.alert(
+      'Saved as a local note',
+      'This records your own confirmation only. The companion app has not verified the GeM submission status.'
+    );
+  }, [linkedDocuments, selectedBidNumber]);
 
   const pickDocuments = useCallback(async () => {
     if (!selectedBidNumber) {
@@ -279,7 +310,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <DataNotice>
-        Phase 2 workspace · Saved files stay on this device for preparation. Nothing here is an official GeM submission.
+        Phase 3 handoff · GeM login, MFA, upload and final submission happen on the official portal. This app stores only local preparation notes.
       </DataNotice>
 
       <ScrollView
@@ -457,12 +488,35 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
 
             <View style={[styles.nextStepCard, { backgroundColor: colors.warningTint, borderColor: colors.warning }]}>
               <Text style={[styles.nextStepTitle, { color: colors.warning }]}>Next step</Text>
+              <View style={styles.handoffStatus}>
+                <StatusBadge
+                  label={
+                    selectedHandoff?.status === 'USER_REPORTED_SUBMITTED'
+                      ? 'User marked submitted'
+                      : selectedHandoff
+                        ? 'Portal handoff started'
+                        : 'Ready for official handoff'
+                  }
+                  tone={selectedHandoff?.status === 'USER_REPORTED_SUBMITTED' ? 'success' : 'warning'}
+                />
+                <Text style={[styles.handoffText, { color: colors.textSecondary }]}>
+                  {selectedHandoff?.status === 'USER_REPORTED_SUBMITTED'
+                    ? 'Local note only — verify the final state in your GeM account.'
+                    : 'Open GeM to complete authentication, MFA, document upload and final submission there.'}
+                </Text>
+              </View>
               <Text style={[styles.nextStepText, { color: colors.textSecondary }]}>
-                When your checklist is ready, open the official GeM portal, complete its login and 2FA, and upload or submit there.
+                The companion app never receives your GeM password, OTP, session cookie or official submission confirmation.
               </Text>
               <PrimaryButton
                 label="Continue on official GeM"
                 onPress={openOfficialPortal}
+                style={styles.fullButton}
+              />
+              <SecondaryButton
+                label="I submitted on official GeM"
+                onPress={markUserReportedSubmitted}
+                disabled={selectedHandoff?.status === 'USER_REPORTED_SUBMITTED'}
                 style={styles.fullButton}
               />
             </View>
@@ -523,6 +577,8 @@ const styles = StyleSheet.create({
   checklistTitle: { fontSize: 14, fontWeight: '800' },
   checklistProgress: { fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 10 },
   missingText: { fontSize: 11, lineHeight: 16, marginTop: 4 },
+  handoffStatus: { marginTop: 10 },
+  handoffText: { fontSize: 11, lineHeight: 16, marginTop: 7 },
   documentRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, padding: 10, marginBottom: 8 },
   documentIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   documentIconText: { fontSize: 10, fontWeight: '900' },

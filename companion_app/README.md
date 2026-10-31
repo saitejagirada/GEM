@@ -37,6 +37,17 @@ Phase 2 keeps the productivity layer useful after the app is closed:
 
 This is still a preparation workspace, not an official GeM account mirror or upload channel. Local files are not encrypted by this feature and should be handled as sensitive business documents; credentials, OTPs, and session cookies are never stored.
 
+## Phase 3: Official GeM Handoff
+
+Phase 3 adds a controlled bridge to the real GeM workflow:
+
+- My Work records which bid and local documents were prepared when the user opens the official GeM portal.
+- The user completes GeM login, MFA, document upload, and final submission in the official portal.
+- The user can record “I submitted on official GeM” as a local reminder after returning to the app.
+- The UI labels that note as user-reported and never treats it as verified GeM status.
+
+Direct authenticated GeM uploads remain behind an approved GeM API/SSO integration contract. The app does not automate MFA, capture portal cookies, replay browser sessions, or claim that a document reached GeM.
+
 ## Documentation References
 
 * Full PRD: [`docs/gem_mobile_companion_prd.md`](../docs/gem_mobile_companion_prd.md)

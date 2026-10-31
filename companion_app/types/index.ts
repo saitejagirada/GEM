@@ -328,3 +328,19 @@ export interface WorkspaceDocument {
   persistence: WorkspaceDocumentPersistence;
 }
 
+export type OfficialHandoffStatus = 'OPENED_OFFICIAL_PORTAL' | 'USER_REPORTED_SUBMITTED';
+
+/**
+ * A locally recorded handoff between the companion workspace and GeM.
+ * The companion app cannot verify the official submission state.
+ */
+export interface OfficialHandoffRecord {
+  id: string;
+  bidNumber: string;
+  documentIds: string[];
+  status: OfficialHandoffStatus;
+  createdAtUtc: string;
+  openedAtUtc: string;
+  userReportedSubmittedAtUtc?: string;
+}
+

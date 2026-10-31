@@ -1,4 +1,5 @@
 import type {
+  OfficialHandoffRecord,
   ParticipatedBid,
   WorkspaceDocument,
   WorkspaceDocumentPersistence,
@@ -7,6 +8,7 @@ import { WorkspaceService } from './WorkspaceService.ts';
 
 const DOCUMENTS_KEY = '@gem-mobile-companion/workspace-documents-v1';
 const PORTFOLIO_KEY = '@gem-mobile-companion/workspace-portfolio-v1';
+const HANDOFFS_KEY = '@gem-mobile-companion/official-handoffs-v1';
 const WORKSPACE_DIRECTORY = 'gem-workspace/';
 
 interface KeyValueStorage {
@@ -45,6 +47,7 @@ export interface WorkspacePersistResult {
 export class WorkspaceStorage {
   public static readonly documentsKey = DOCUMENTS_KEY;
   public static readonly portfolioKey = PORTFOLIO_KEY;
+  public static readonly handoffsKey = HANDOFFS_KEY;
 
   public static sanitizeFileName(fileName: string): string {
     const sanitized = fileName
@@ -95,6 +98,69 @@ export class WorkspaceStorage {
     } catch {
       return false;
     }
+  }
+
+  public static mergeHandoffs(records: OfficialHandoffRecord[]): OfficialHandoffRecord[] {
+    const byBidNumber = new Map<string, OfficialHandoffRecord>();
+    for (const record of records) {
+      if (record.bidNumber) byBidNumber.set(record.bidNumber, record);
+    }
+    return Array.from(byBidNumber.values());
+  }
+
+  public static async loadHandoffs(): Promise<OfficialHandoffRecord[]> {
+    const storage = await this.getKeyValueStorage();
+    if (!storage) return [];
+
+    try {
+      const raw = await storage.getItem(HANDOFFS_KEY);
+      if (!raw) return [];
+
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return this.mergeHandoffs(parsed.filter(this.isStoredHandoff));
+    } catch {
+      return [];
+    }
+  }
+
+  public static async beginOfficialHandoff(
+    bidNumber: string,
+    documentIds: string[]
+  ): Promise<OfficialHandoffRecord> {
+    const previous = (await this.loadHandoffs()).find((record) => record.bidNumber === bidNumber);
+    const openedAtUtc = new Date().toISOString();
+    const record: OfficialHandoffRecord = {
+      id: previous?.id || 'handoff-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+      bidNumber,
+      documentIds: [...documentIds],
+      status: 'OPENED_OFFICIAL_PORTAL',
+      createdAtUtc: previous?.createdAtUtc || openedAtUtc,
+      openedAtUtc,
+    };
+
+    await this.saveHandoffs(this.mergeHandoffs([...(await this.loadHandoffs()), record]));
+    return record;
+  }
+
+  public static async markUserReportedSubmitted(
+    bidNumber: string,
+    documentIds: string[]
+  ): Promise<OfficialHandoffRecord> {
+    const previous = (await this.loadHandoffs()).find((record) => record.bidNumber === bidNumber);
+    const reportedAtUtc = new Date().toISOString();
+    const record: OfficialHandoffRecord = {
+      id: previous?.id || 'handoff-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+      bidNumber,
+      documentIds: previous?.documentIds.length ? previous.documentIds : [...documentIds],
+      status: 'USER_REPORTED_SUBMITTED',
+      createdAtUtc: previous?.createdAtUtc || reportedAtUtc,
+      openedAtUtc: previous?.openedAtUtc || reportedAtUtc,
+      userReportedSubmittedAtUtc: reportedAtUtc,
+    };
+
+    await this.saveHandoffs(this.mergeHandoffs([...(await this.loadHandoffs()), record]));
+    return record;
   }
 
   public static async loadDocuments(): Promise<WorkspaceDocument[]> {
@@ -283,6 +349,32 @@ export class WorkspaceStorage {
       typeof candidate.stage === 'string' &&
       typeof candidate.corrigendumCount === 'number'
     );
+  }
+
+  private static isStoredHandoff(value: unknown): value is OfficialHandoffRecord {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as Partial<OfficialHandoffRecord>;
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.bidNumber === 'string' &&
+      Array.isArray(candidate.documentIds) &&
+      candidate.documentIds.every((id) => typeof id === 'string') &&
+      (candidate.status === 'OPENED_OFFICIAL_PORTAL' || candidate.status === 'USER_REPORTED_SUBMITTED') &&
+      typeof candidate.createdAtUtc === 'string' &&
+      typeof candidate.openedAtUtc === 'string'
+    );
+  }
+
+  private static async saveHandoffs(records: OfficialHandoffRecord[]): Promise<boolean> {
+    const storage = await this.getKeyValueStorage();
+    if (!storage) return false;
+
+    try {
+      await storage.setItem(HANDOFFS_KEY, JSON.stringify(records));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private static async getKeyValueStorage(): Promise<KeyValueStorage | null> {

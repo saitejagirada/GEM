@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorkspaceStorage } from '../services/WorkspaceStorage.ts';
-import type { ParticipatedBid, WorkspaceDocument } from '../types/index.ts';
+import type {
+  OfficialHandoffRecord,
+  ParticipatedBid,
+  WorkspaceDocument,
+} from '../types/index.ts';
 
 const persistedDocument: WorkspaceDocument = {
   id: 'workspace-doc-1',
@@ -47,4 +51,25 @@ test('WorkspaceStorage keeps the latest local tracking record per bid number', (
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].stage, 'FINANCIAL_EVALUATION');
+});
+
+test('WorkspaceStorage keeps the latest official handoff note per bid number', () => {
+  const opened: OfficialHandoffRecord = {
+    id: 'handoff-1',
+    bidNumber: 'GEM/2026/B/890123',
+    documentIds: ['workspace-doc-1'],
+    status: 'OPENED_OFFICIAL_PORTAL',
+    createdAtUtc: '2026-10-30T00:00:00.000Z',
+    openedAtUtc: '2026-10-30T00:05:00.000Z',
+  };
+  const reported: OfficialHandoffRecord = {
+    ...opened,
+    status: 'USER_REPORTED_SUBMITTED',
+    userReportedSubmittedAtUtc: '2026-10-30T00:20:00.000Z',
+  };
+
+  const merged = WorkspaceStorage.mergeHandoffs([opened, reported]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].status, 'USER_REPORTED_SUBMITTED');
 });
