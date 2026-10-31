@@ -190,6 +190,51 @@ export const OFFICIAL_SERVICE_CATEGORIES: MarketplaceCategory[] = [
   },
 ];
 
+export interface GeMServiceItem {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  badge?: string;
+  gfrMode: string;
+}
+
+export const OFFICIAL_TRENDING_SERVICES: GeMServiceItem[] = [
+  { id: 'manpower-min-wage', name: 'Manpower Outsourcing Services - Minimum wage', category: 'Manpower Outsourcing', icon: '👥', badge: 'High Demand', gfrMode: 'L1 Comparison / Bid' },
+  { id: 'custom-bid-services', name: 'Custom Bid for Services', category: 'Custom Services', icon: '📋', badge: 'Custom SLA', gfrMode: 'Mandatory Bid' },
+  { id: 'short-term-cab', name: 'Short Term Cab & Taxi Hiring Services', category: 'Vehicle & Cab Hiring', icon: '🚕', badge: 'Fast Dispatch', gfrMode: 'Direct Purchase / L1' },
+  { id: 'manpower-fixed-rem', name: 'Manpower Outsourcing Services - Fixed Remuneration', category: 'Manpower Outsourcing', icon: '🧑‍💼', badge: 'Contractual', gfrMode: 'L1 / Bid' },
+  { id: 'amc-it-peripherals', name: 'Annual Maintenance Service - Desktops, Laptops & Peripherals', category: 'ICT & AMC', icon: '💻', badge: 'OEM / MSP', gfrMode: 'Direct / L1' },
+  { id: 'catering-duration', name: 'Catering service (Duration Based)', category: 'Catering & Hospitality', icon: '🍲', badge: 'FSSAI Certified', gfrMode: 'L1 Comparison' },
+  { id: 'amc-photocopier', name: 'Annual Maintenance Service - Photocopier Machine', category: 'ICT & AMC', icon: '🖨️', badge: 'Preventive Care', gfrMode: 'Direct Purchase' },
+  { id: 'printing-quantity', name: 'Non Paper Printing Services - Quantity Based', category: 'Printing & Scanning', icon: '📄', badge: 'High Volume', gfrMode: 'Direct / L1' },
+  { id: 'bus-hiring-short', name: 'Bus Hiring Service - Short Term', category: 'Vehicle & Cab Hiring', icon: '🚌', badge: 'Fleet Verified', gfrMode: 'L1 Comparison' },
+  { id: 'vehicle-per-day', name: 'Vehicle Hiring Service - Per Vehicle-Day basis', category: 'Vehicle & Cab Hiring', icon: '🚙', badge: 'Daily Logs', gfrMode: 'Direct Purchase' },
+  { id: 'paper-printing', name: 'Paper-based Printing Services', category: 'Printing & Scanning', icon: '📑', badge: 'Govt Standard', gfrMode: 'L1 Comparison' },
+  { id: 'monthly-cab-hiring', name: 'Monthly Basis Cab & Taxi Hiring Services', category: 'Vehicle & Cab Hiring', icon: '🚖', badge: 'Monthly SLA', gfrMode: 'L1 Comparison / RA' },
+  { id: 'catering-event', name: 'Catering service (Event Based)', category: 'Catering & Hospitality', icon: '🍽️', badge: 'Institutional', gfrMode: 'L1 Comparison' },
+  { id: 'security-manpower-v2', name: 'Security Manpower Service (Version 2.0)', category: 'Security Services', icon: '🛡️', badge: 'PSARA Verified', gfrMode: 'Mandatory L1 / Bid' },
+  { id: 'printing-area', name: 'Non Paper Printing Services - Area Based', category: 'Printing & Scanning', icon: '📐', badge: 'Custom Measure', gfrMode: 'Direct / L1' },
+  { id: 'goods-transport-trip', name: 'Goods Transport Service - Per Trip based Service', category: 'Logistics', icon: '🚚', badge: 'GPS Tracked', gfrMode: 'Direct Purchase' },
+  { id: 'cleaning-sanitation', name: 'Cleaning, Sanitation and Disinfection Service - Outcome Based', category: 'Facility Management', icon: '🧹', badge: 'Hygiene Assured', gfrMode: 'L1 Comparison' },
+  { id: 'goods-transport-km', name: 'Goods Transport Service - Per KM Based Service', category: 'Logistics', icon: '🚛', badge: 'Odometer SLA', gfrMode: 'Direct / L1' },
+  { id: 'hiring-sanitation', name: 'Hiring of Sanitation Service', category: 'Facility Management', icon: '🧼', badge: 'Municipal Grade', gfrMode: 'L1 / Bid' },
+  { id: 'amc-air-conditioner', name: 'Annual Maintenance service - AIR CONDITIONER', category: 'HVAC & Maintenance', icon: '❄️', badge: 'Seasonal AMC', gfrMode: 'Direct Purchase' },
+];
+
+export const OFFICIAL_EMERGING_SERVICES: GeMServiceItem[] = [
+  { id: 'gift-vouchers', name: 'Gift Vouchers Service', category: 'Institutional Gifting', icon: '🎁', badge: 'Emerging', gfrMode: 'Direct Purchase' },
+  { id: 'missed-call-alert', name: 'Missed Call and Keyword Alert Service', category: 'Telecom & Cloud', icon: '📲', badge: 'Digital India', gfrMode: 'Direct Purchase' },
+  { id: 'facility-mgmt-v2', name: 'Facility Management Service - Manpower based (Version 2)', category: 'Facility Management', icon: '🏢', badge: 'Integrated', gfrMode: 'L1 / Bid' },
+  { id: 'canteen-service', name: 'Canteen Service - Percentage Model', category: 'Catering & Hospitality', icon: '☕', badge: 'Subsidized', gfrMode: 'Revenue Share' },
+  { id: 'data-recovery', name: 'Data Recovery and Data Wiping Service', category: 'ICT & Cyber Security', icon: '💾', badge: 'CERT-In Compliant', gfrMode: 'Direct / L1' },
+  { id: 'mine-dev-revenue', name: 'Mine Development & Operations Service - Revenue Sharing Basis', category: 'Mining & Heavy Ops', icon: '⛏️', badge: 'Specialized', gfrMode: 'Custom Bidding' },
+  { id: 'mortuary-van', name: 'Hiring of Mortuary Van', category: 'Healthcare Logistics', icon: '🚑', badge: 'Priority Service', gfrMode: 'Direct Purchase' },
+  { id: 'record-mgmt-storage', name: 'Record Management Service - Storage Area Based', category: 'Archives & Records', icon: '📦', badge: 'Secure Storage', gfrMode: 'L1 Comparison' },
+  { id: 'catering-packet', name: 'Catering Service per Packet based', category: 'Catering & Hospitality', icon: '🍱', badge: 'Meal Box', gfrMode: 'Direct Purchase' },
+  { id: 'tea-coffee-vending', name: 'Hiring of Tea/Coffee Vending Machine', category: 'Pantry Services', icon: '☕', badge: 'Automated', gfrMode: 'Monthly Lease' },
+];
+
 export const OFFICIAL_OUTLET_STORES: GeMOutletStore[] = [
   {
     id: 'saras-ajeevika',

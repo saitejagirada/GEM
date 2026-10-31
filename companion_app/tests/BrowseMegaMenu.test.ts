@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   OFFICIAL_PRODUCT_CATEGORIES,
   OFFICIAL_SERVICE_CATEGORIES,
+  OFFICIAL_TRENDING_SERVICES,
+  OFFICIAL_EMERGING_SERVICES,
   OFFICIAL_OUTLET_STORES,
   MarketplaceService,
 } from '../services/MarketplaceService.ts';
@@ -52,6 +54,16 @@ describe('BrowseMegaMenu & National Taxonomy Verification', () => {
     assert.ok(serviceNames.some((n) => n.includes('Manpower')));
     assert.ok(serviceNames.some((n) => n.includes('Vehicle') || n.includes('Cab')));
     assert.ok(serviceNames.some((n) => n.includes('Facility') || n.includes('Security')));
+
+    // Official GeM portal screenshot 4 taxonomy verification
+    assert.strictEqual(OFFICIAL_TRENDING_SERVICES.length, 20);
+    assert.ok(OFFICIAL_TRENDING_SERVICES.some((s) => s.name.includes('Minimum wage')));
+    assert.ok(OFFICIAL_TRENDING_SERVICES.some((s) => s.name.includes('Cab & Taxi')));
+    assert.ok(OFFICIAL_TRENDING_SERVICES.some((s) => s.name.includes('AIR CONDITIONER')));
+
+    assert.strictEqual(OFFICIAL_EMERGING_SERVICES.length, 10);
+    assert.ok(OFFICIAL_EMERGING_SERVICES.some((s) => s.name.includes('Gift Vouchers')));
+    assert.ok(OFFICIAL_EMERGING_SERVICES.some((s) => s.name.includes('Facility Management')));
   });
 
   it('verifies all 5 National Outlet Stores are available', () => {

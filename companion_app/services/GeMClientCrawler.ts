@@ -117,11 +117,45 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
   // Automobiles
   {
     id: 'passenger-cars',
-    name: 'Cars & Utility Vehicles',
+    name: 'Cars',
     category: 'Automobiles',
     slug: '25101500-cars-version-2-/search',
     priceUnit: 'per Vehicle',
     defaultEta: '⚡ 7-14 Days Fleet Handover',
+  },
+  {
+    id: 'utility-vehicles',
+    name: 'Utility Vehicles',
+    category: 'Automobiles',
+    slug: 'utility-vehicles/search',
+    priceUnit: 'per Vehicle',
+    defaultEta: '⚡ 7-14 Days Delivery',
+  },
+  {
+    id: 'buses-chassis',
+    name: 'Buses',
+    category: 'Automobiles',
+    slug: 'bus-chassis/search',
+    priceUnit: 'per Bus',
+    defaultEta: '⚡ 15-30 Days Handover',
+  },
+  {
+    id: 'agricultural-tractors',
+    name: 'Tractors',
+    category: 'Automobiles',
+    slug: 'agricultural-tractors/search',
+    priceUnit: 'per Tractor',
+    defaultEta: '⚡ 10-20 Days Delivery',
+  },
+
+  // Furniture
+  {
+    id: 'movable-file-storage',
+    name: 'Movable File Storage System',
+    category: 'Furniture',
+    slug: 'movable-storage-system/search',
+    priceUnit: 'per Unit System',
+    defaultEta: '⚡ 7-10 Days Installation',
   },
 
   // Electrical
@@ -133,8 +167,86 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     priceUnit: 'per Luminaire',
     defaultEta: '⚡ 2-4 Days Dispatch',
   },
+  {
+    id: 'mccb-breakers',
+    name: 'Circuit Breakers (MCCB)',
+    category: 'Electrical Appliances',
+    slug: 'molded-case-circuit-breakers-mccb/search',
+    priceUnit: 'per Breaker',
+    defaultEta: '⚡ 2-3 Days Delivery',
+  },
+  {
+    id: 'telecom-cables',
+    name: 'Telecommunication Cables',
+    category: 'Electrical Appliances',
+    slug: 'telecommunication-cable/search',
+    priceUnit: 'per Drum / 100m',
+    defaultEta: '⚡ 2-4 Days Delivery',
+  },
+
+  // Electronic Equipments
+  {
+    id: 'television-tv',
+    name: 'Television TVs',
+    category: 'Electronic Equipments',
+    slug: 'television-tv/search',
+    priceUnit: 'per TV Unit',
+    defaultEta: '⚡ 2-4 Days Delivery',
+  },
+  {
+    id: 'domestic-refrigerators',
+    name: 'Domestic Refrigerators',
+    category: 'Electronic Equipments',
+    slug: 'refrigerators/search',
+    priceUnit: 'per Refrigerator',
+    defaultEta: '⚡ 3-5 Days Delivery',
+  },
+
+  // Textile Products
+  {
+    id: 'cotton-bed-sheets',
+    name: 'Handloom Cotton Bed Sheets',
+    category: 'Textile Products',
+    slug: 'bedsheets/search',
+    priceUnit: 'per Set of 2',
+    defaultEta: '⚡ 2-4 Days Express',
+  },
+  {
+    id: 'cotton-towels',
+    name: 'Cotton Towels (IS 7056)',
+    category: 'Textile Products',
+    slug: 'towels/search',
+    priceUnit: 'per Pack of 6',
+    defaultEta: '⚡ 24-48 Hours Express',
+  },
+
+  // Pipes and Fittings
+  {
+    id: 'steel-tubes-fittings',
+    name: 'Steel Tubes & Fittings',
+    category: 'Pipes & Fittings',
+    slug: 'steel-tubes/search',
+    priceUnit: 'per Metric Tonne',
+    defaultEta: '⚡ 5-7 Days Dispatch',
+  },
+  {
+    id: 'cpvc-pipe-fittings',
+    name: 'CPVC Pipe Fittings',
+    category: 'Pipes & Fittings',
+    slug: 'pipe-fittings/search',
+    priceUnit: 'per Carton of 50',
+    defaultEta: '⚡ 2-4 Days Delivery',
+  },
 
   // Medical
+  {
+    id: 'hand-sanitizer',
+    name: 'Hand Sanitizer (IS 4148)',
+    category: 'Medical Products',
+    slug: 'hand-sanitizer/search',
+    priceUnit: 'per 5L Container',
+    defaultEta: '⚡ 24-48 Hours Express',
+  },
   {
     id: 'surgical-gloves',
     name: 'Surgical Gloves',

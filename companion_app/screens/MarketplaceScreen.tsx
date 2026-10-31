@@ -1,13 +1,23 @@
 /**
- * GeM Marketplace Screen - Instamart & Blinkit Style High-Velocity Procurement Catalog
- * Conforms to GeM Mobile Specification with Quick-Commerce UX:
- * - High-resolution product cards with real images and fallback thumbnails
- * - Blinkit/Instamart style discount chips (-25% OFF), delivery ETAs, and unit text
- * - Instant ADD + button transforming into interactive quantity stepper [ - qty + ]
- * - Floating Bottom Cart / Direct Procure Bar showing total items and procurement price
- * - GFR 149 Direct Purchase & L1 comparison compliance evaluation
- * - Full Android hardware BackHandler integration preventing premature app exit
- * - Zero touch delay (delayPressIn={0}) for lightning-fast responsive controls
+ * GeM Marketplace Screen - Amazon-Style Category Explorer & 2-Column High-Efficiency Grid
+ * 
+ * Conforms strictly to user requirements and official GeM taxonomy:
+ * 1. Category Explorer View (browseView === 'categories'):
+ *    - Search bar with instant category & subcategory autocomplete
+ *    - Direct "Search all live products for '{query}'" jump
+ *    - [ Products ] and [ Services ] segmented tabs matching mkp.gem.gov.in
+ *    - 9 Official Product Domains (IT, Automobiles, Furniture, Medical, Stationery, etc.)
+ *    - 20 Trending & 10 Emerging Services from official GeM portal taxonomy
+ *    - Quick subcategory pills on each category card
+ * 2. 2-Column Product Grid View (browseView === 'products'):
+ *    - 2 products per row (numColumns={2}) for maximum browsing efficiency
+ *    - High-density cards with live photography, badges, brand, seller type, L1 price, MRP, and MOQ
+ *    - Instamart/Blinkit quick-commerce stepper [ - qty + ]
+ *    - Subcategory carousel pills for instant horizontal switching
+ *    - GFR 149 Legal Procurement Guide accordion
+ *    - Real-time infinite scroll pagination across 26,000+ listings (mkp.gem.gov.in)
+ * 3. Mobile Back Navigation:
+ *    - Hardware Android BackHandler + header back button gracefully returns to Category Explorer
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -30,14 +40,16 @@ import {
   MarketplaceService,
   MarketplaceItem,
   OFFICIAL_PRODUCT_CATEGORIES,
+  OFFICIAL_TRENDING_SERVICES,
+  OFFICIAL_EMERGING_SERVICES,
+  type GeMServiceItem,
 } from '../services/MarketplaceService';
-import { OFFICIAL_GEM_SUBCATEGORIES } from '../services/GeMClientCrawler';
+import { OFFICIAL_GEM_SUBCATEGORIES, type GeMSubcategoryConfig } from '../services/GeMClientCrawler';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
   SegmentedTabs,
   CompactChip,
-  StatusBadge,
   PrimaryButton,
   SecondaryButton,
   FilterBottomSheetModal,
@@ -48,10 +60,19 @@ import { formatInr } from '../utils/formatters';
 export const MarketplaceScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
 
-  const [activeTypeTab, setActiveTypeTab] = useState<'All' | 'Products' | 'Services'>('All');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
+  // Navigation mode: 'categories' (Amazon-style explorer) vs 'products' (2-column grid)
+  const [browseView, setBrowseView] = useState<'categories' | 'products'>('categories');
+  const [activeTypeTab, setActiveTypeTab] = useState<'Products' | 'Services'>('Products');
+  const [selectedCategory, setSelectedCategory] = useState<string>('IT Products');
+  const [selectedSubcategorySlug, setSelectedSubcategorySlug] = useState<string>(
+    'computers-entry-level-computer-cpu/search'
+  );
+  const [selectedSubcategoryName, setSelectedSubcategoryName] = useState<string>('Desktop Computers');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Modals & Selection state
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  const [selectedService, setSelectedService] = useState<GeMServiceItem | null>(null);
   const [savedItemIds, setSavedItemIds] = useState<Set<string>>(new Set());
   const [comparedItemIds, setComparedItemIds] = useState<Set<string>>(new Set());
 
@@ -68,7 +89,18 @@ export const MarketplaceScreen: React.FC = () => {
   const [isGfrExpanded, setIsGfrExpanded] = useState<boolean>(false);
   const [gfrOrderValue, setGfrOrderValue] = useState<number>(45000);
 
-  // Android hardware back handler to close modals and cart sheet without exiting
+  // Dynamic live products state
+  const [itemsList, setItemsList] = useState<MarketplaceItem[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
+
+  // Infinite scroll pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [hasMorePages, setHasMorePages] = useState<boolean>(true);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+
+  // Android hardware back handler: navigate back to Categories view without exiting
   useEffect(() => {
     const onBackPress = () => {
       if (orderPlacedRef) {
@@ -83,30 +115,24 @@ export const MarketplaceScreen: React.FC = () => {
         setSelectedItem(null);
         return true;
       }
+      if (selectedService) {
+        setSelectedService(null);
+        return true;
+      }
       if (showFilterModal) {
         setShowFilterModal(false);
         return true;
       }
-      return false; // let parent/App handle
+      if (browseView === 'products') {
+        setBrowseView('categories');
+        return true;
+      }
+      return false; // Let parent/App handle exit
     };
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [orderPlacedRef, showCartModal, selectedItem, showFilterModal]);
-
-  // Dynamic live products state - starts empty and waits for internet loading
-  const [itemsList, setItemsList] = useState<MarketplaceItem[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isOffline, setIsOffline] = useState<boolean>(false);
-
-  // Subcategory and real-time pagination state
-  const [selectedSubcategorySlug, setSelectedSubcategorySlug] = useState<string>(
-    'computers-entry-level-computer-cpu/search'
-  );
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [hasMorePages, setHasMorePages] = useState<boolean>(true);
-  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  }, [orderPlacedRef, showCartModal, selectedItem, selectedService, showFilterModal, browseView]);
 
   // Subscribe to real-time live product updates from portal/crawler
   useEffect(() => {
@@ -119,18 +145,8 @@ export const MarketplaceScreen: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // Map active tab to service type
-  const serviceType = useMemo(() => {
-    if (activeTypeTab === 'Products') return 'PRODUCT';
-    if (activeTypeTab === 'Services') return 'SERVICE';
-    return 'ALL';
-  }, [activeTypeTab]);
-
-  // Dynamic available subcategories based on selected category
+  // Dynamic available subcategories for the selected category
   const availableSubcategories = useMemo(() => {
-    if (selectedCategory === 'All Categories') {
-      return OFFICIAL_GEM_SUBCATEGORIES.slice(0, 8);
-    }
     const filtered = OFFICIAL_GEM_SUBCATEGORIES.filter(
       (s) =>
         s.category.toLowerCase() === selectedCategory.toLowerCase() ||
@@ -140,12 +156,13 @@ export const MarketplaceScreen: React.FC = () => {
     return filtered.length > 0 ? filtered : OFFICIAL_GEM_SUBCATEGORIES.slice(0, 6);
   }, [selectedCategory]);
 
+  // Load products for the active subcategory/category from mkp.gem.gov.in
   const loadLiveProducts = useCallback(async () => {
     setIsRefreshing(true);
     setCurrentPage(1);
     try {
       const stream = await MarketplaceService.fetchLiveCategoryStream({
-        type: serviceType,
+        type: 'PRODUCT',
         category: selectedCategory,
         subcategorySlug: selectedSubcategorySlug,
         query: searchQuery,
@@ -168,15 +185,16 @@ export const MarketplaceScreen: React.FC = () => {
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, [serviceType, selectedCategory, selectedSubcategorySlug, searchQuery]);
+  }, [selectedCategory, selectedSubcategorySlug, searchQuery]);
 
+  // Infinite scroll load more
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMorePages || isOffline) return;
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
     try {
       const stream = await MarketplaceService.fetchLiveCategoryStream({
-        type: serviceType,
+        type: 'PRODUCT',
         category: selectedCategory,
         subcategorySlug: selectedSubcategorySlug,
         query: searchQuery,
@@ -199,58 +217,42 @@ export const MarketplaceScreen: React.FC = () => {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMorePages, isOffline, currentPage, serviceType, selectedCategory, selectedSubcategorySlug, searchQuery]);
+  }, [isLoadingMore, hasMorePages, isOffline, currentPage, selectedCategory, selectedSubcategorySlug, searchQuery]);
 
+  // Trigger live products when switching to products view or changing subcategory
   useEffect(() => {
-    loadLiveProducts();
-  }, [loadLiveProducts]);
-
-  // Dynamic 2-column popular categories reflecting live catalog
-  const popularCategories = useMemo(() => {
-    const itCount = itemsList.filter(
-      (i) => i.category === 'IT Products' || i.category.toLowerCase().includes('computer') || i.category.toLowerCase().includes('laptop')
-    ).length;
-    const medCount = itemsList.filter(
-      (i) => i.category === 'Medical Products' || i.category.toLowerCase().includes('medical') || i.category.toLowerCase().includes('health')
-    ).length;
-    const furnCount = itemsList.filter(
-      (i) => i.category === 'Furniture' || i.category.toLowerCase().includes('chair') || i.category.toLowerCase().includes('furniture')
-    ).length;
-    const autoCount = itemsList.filter(
-      (i) => i.category === 'Automobiles' || i.category.toLowerCase().includes('vehicle') || i.category.toLowerCase().includes('car')
-    ).length;
-
-    return [
-      { id: 'it-products', name: 'Computers & IT', icon: '💻', count: `${itCount || 18} live items`, tint: '#E8F1FF' },
-      { id: 'medical-products', name: 'Medical Supplies', icon: '🩺', count: `${medCount || 6} live items`, tint: '#E7F8EE' },
-      { id: 'furniture', name: 'Office Furniture', icon: '🪑', count: `${furnCount || 12} live items`, tint: '#FFF4DB' },
-      { id: 'automobiles', name: 'Electric Vehicles', icon: '🚙', count: `${autoCount || 8} live items`, tint: '#F0EAFE' },
-    ];
-  }, [itemsList]);
-
-
-  // Query catalog from live list
-  const filteredItems = useMemo(() => {
-    let items = itemsList.filter((item) => {
-      if (serviceType !== 'ALL' && item.type !== serviceType) return false;
-      if (selectedCategory !== 'All Categories' && item.category !== selectedCategory) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesTitle = item.title.toLowerCase().includes(q);
-        const matchesCat = item.category.toLowerCase().includes(q);
-        const matchesBrand = item.oemBrand.toLowerCase().includes(q);
-        const matchesSpecs = Object.values(item.specSummary || {}).some((v) => v.toLowerCase().includes(q));
-        if (!matchesTitle && !matchesCat && !matchesBrand && !matchesSpecs) return false;
-      }
-      return true;
-    });
-
-    if (filterBrand !== 'ALL') {
-      items = items.filter((it) => it.oemBrand.toLowerCase().includes(filterBrand.toLowerCase()));
+    if (browseView === 'products') {
+      loadLiveProducts();
     }
-    return items;
-  }, [itemsList, serviceType, selectedCategory, searchQuery, filterBrand]);
+  }, [browseView, selectedSubcategorySlug, loadLiveProducts]);
 
+  // Quick category selection action: transitions to 2-column product grid
+  const handleSelectCategory = (catName: string, subSlug?: string, subName?: string) => {
+    setSelectedCategory(catName);
+    const targetSlug =
+      subSlug ||
+      OFFICIAL_GEM_SUBCATEGORIES.find((s) => s.category.toLowerCase() === catName.toLowerCase())?.slug ||
+      'computers-entry-level-computer-cpu/search';
+    const targetName =
+      subName ||
+      OFFICIAL_GEM_SUBCATEGORIES.find((s) => s.category.toLowerCase() === catName.toLowerCase())?.name ||
+      catName;
+    setSelectedSubcategorySlug(targetSlug);
+    setSelectedSubcategoryName(targetName);
+    setBrowseView('products');
+    setCurrentPage(1);
+    setIsLoading(true);
+  };
+
+  // Direct global product search jump
+  const handleDirectProductSearch = () => {
+    setBrowseView('products');
+    setCurrentPage(1);
+    setIsLoading(true);
+    loadLiveProducts();
+  };
+
+  // Cart operations
   const updateCartQty = useCallback((id: string, delta: number) => {
     setCart((prev) => {
       const current = prev[id] || 0;
@@ -325,122 +327,283 @@ export const MarketplaceScreen: React.FC = () => {
     setCart({});
   };
 
-  // Header Component for FlatList
-  const renderListHeader = () => (
-    <View style={styles.headerWrapper}>
-      {/* Search Input */}
-      <SearchField
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Search 10,000+ items (laptops, paper, gloves...)"
-        style={{ marginBottom: 12 }}
-      />
+  // Filtered live products for the 2-column grid
+  const filteredProducts = useMemo(() => {
+    let items = itemsList;
+    if (filterBrand !== 'ALL') {
+      items = items.filter((it) => it.oemBrand.toLowerCase().includes(filterBrand.toLowerCase()));
+    }
+    return items;
+  }, [itemsList, filterBrand]);
 
-      {/* Segmented Tabs: All | Products | Services */}
-      <SegmentedTabs
-        options={['All', 'Products', 'Services']}
-        selected={activeTypeTab}
-        onSelect={(tab) => setActiveTypeTab(tab as 'All' | 'Products' | 'Services')}
-        style={{ marginBottom: 12 }}
-      />
+  // Filtered categories for Category Explorer search
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return OFFICIAL_PRODUCT_CATEGORIES;
+    const q = searchQuery.toLowerCase().trim();
+    return OFFICIAL_PRODUCT_CATEGORIES.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.subcategories.some((s) => s.toLowerCase().includes(q))
+    );
+  }, [searchQuery]);
 
-      {/* Horizontal Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterChipScroll}
-        contentContainerStyle={styles.filterChipRow}
+  // Filtered services for Category Explorer search
+  const filteredTrendingServices = useMemo(() => {
+    if (!searchQuery.trim()) return OFFICIAL_TRENDING_SERVICES;
+    const q = searchQuery.toLowerCase().trim();
+    return OFFICIAL_TRENDING_SERVICES.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  const filteredEmergingServices = useMemo(() => {
+    if (!searchQuery.trim()) return OFFICIAL_EMERGING_SERVICES;
+    const q = searchQuery.toLowerCase().trim();
+    return OFFICIAL_EMERGING_SERVICES.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  // Color tint helper for categories
+  const getCategoryTint = (id: string) => {
+    switch (id) {
+      case 'it-products':
+        return { tint: '#E8F1FF', border: '#BFDBFE' };
+      case 'automobiles':
+        return { tint: '#F0EAFE', border: '#DDD6FE' };
+      case 'furniture':
+        return { tint: '#FFF4DB', border: '#FDE68A' };
+      case 'medical-products':
+        return { tint: '#E7F8EE', border: '#A7F3D0' };
+      case 'stationery':
+        return { tint: '#FFFBEB', border: '#FDE047' };
+      case 'electrical-appliances':
+        return { tint: '#FEF3C7', border: '#FCD34D' };
+      case 'electronic-equipments':
+        return { tint: '#EDE9FE', border: '#C4B5FD' };
+      case 'textile-products':
+        return { tint: '#FCE7F3', border: '#FBCFE8' };
+      case 'pipes-fittings':
+        return { tint: '#F1F5F9', border: '#CBD5E1' };
+      default:
+        return { tint: '#F3F4F6', border: '#E5E7EB' };
+    }
+  };
+
+  // ==========================================
+  // RENDER: 2-COLUMN PRODUCT CARD
+  // ==========================================
+  const renderProductGridItem = ({ item }: { item: MarketplaceItem }) => {
+    const qty = cart[item.id] || 0;
+    const isSaved = savedItemIds.has(item.id);
+
+    return (
+      <Pressable
+        style={[
+          styles.gridProductCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+        delayPressIn={0}
+        unstable_pressDelay={0}
+        onPress={() => setSelectedItem(item)}
       >
-        <CompactChip
-          label="Filters"
-          icon="⚙️"
-          selected={showFilterModal || filterBrand !== 'ALL'}
-          onPress={() => setShowFilterModal(true)}
-        />
-        <CompactChip
-          label="All"
-          selected={selectedCategory === 'All Categories'}
-          onPress={() => setSelectedCategory('All Categories')}
-        />
-        {OFFICIAL_PRODUCT_CATEGORIES.slice(0, 5).map((cat) => (
-          <CompactChip
-            key={cat.id}
-            label={cat.name}
-            selected={selectedCategory === cat.name}
-            onPress={() => setSelectedCategory(selectedCategory === cat.name ? 'All Categories' : cat.name)}
-          />
-        ))}
-      </ScrollView>
+        {/* Top Product Showcase (Image + Floating Badges) */}
+        <View style={styles.gridImageContainer}>
+          {item.imageUrl ? (
+            <Image
+              source={{ uri: item.imageUrl }}
+              style={styles.gridProductImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.gridThumbnailFallback, { backgroundColor: colors.surfaceSubtle }]}>
+              <Text style={styles.gridThumbnailEmoji}>
+                {item.type === 'SERVICE' ? '🛠️' : '📦'}
+              </Text>
+            </View>
+          )}
 
-      {/* 2-Column Popular Categories Grid */}
-      <View style={styles.gridSection}>
-        <SectionHeader title="Popular categories" />
-        <View style={styles.catGrid}>
-          {popularCategories.map((cat) => (
+          {/* Floating Badges */}
+          <View style={styles.gridBadgesOverlay}>
+            {item.discountPercent ? (
+              <View style={styles.gridDiscountBadge}>
+                <Text style={styles.gridDiscountBadgeText}>{item.discountPercent}% OFF</Text>
+              </View>
+            ) : null}
+            {item.badge ? (
+              <View style={styles.gridFeatureBadge}>
+                <Text style={styles.gridFeatureBadgeText} numberOfLines={1}>{item.badge}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Delivery ETA pill */}
+          {item.etaDelivery ? (
+            <View style={styles.gridEtaPill}>
+              <Text style={styles.gridEtaText} numberOfLines={1}>{item.etaDelivery}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Content Section */}
+        <View style={styles.gridCardContent}>
+          {/* Brand & Seller Tag */}
+          <View style={styles.gridMetaRow}>
+            <Text style={[styles.gridBrandText, { color: colors.primary }]} numberOfLines={1}>
+              {item.oemBrand}
+            </Text>
+            <Text style={[styles.gridSellerTag, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.specSummary?.['Seller Type'] ? item.specSummary['Seller Type'] : 'Reseller'}
+            </Text>
+          </View>
+
+          {/* Title (2 Lines) */}
+          <Text
+            style={[styles.gridTitleText, { color: colors.textPrimary, fontSize: 13 * fontMultiplier }]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+
+          {/* MOQ Indicator */}
+          <Text style={[styles.gridMoqText, { color: colors.textMuted }]}>
+            Min Qty: {item.minOrderQty || 1}
+          </Text>
+
+          {/* L1 Price & MRP Row */}
+          <View style={styles.gridPriceRow}>
+            <Text style={[styles.gridL1Price, { color: colors.primary, fontSize: 15 * fontMultiplier }]}>
+              {formatInr(item.l1PriceInr)}
+            </Text>
+            {item.mrpInr ? (
+              <Text style={[styles.gridMrpPrice, { color: colors.textMuted }]}>
+                {formatInr(item.mrpInr)}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Interactive Stepper Button */}
+          <View style={styles.gridActionRow}>
+            {qty === 0 ? (
+              <Pressable
+                style={[
+                  styles.gridAddBtn,
+                  {
+                    borderColor: colors.primary,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+                delayPressIn={0}
+                unstable_pressDelay={0}
+                hitSlop={6}
+                onPress={() => updateCartQty(item.id, 1)}
+              >
+                <Text style={[styles.gridAddBtnText, { color: colors.primary }]}>+ ADD</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.gridStepperBox, { backgroundColor: colors.primary }]}>
+                <Pressable
+                  style={styles.gridStepperBtn}
+                  delayPressIn={0}
+                  unstable_pressDelay={0}
+                  hitSlop={6}
+                  onPress={() => updateCartQty(item.id, -1)}
+                >
+                  <Text style={styles.gridStepperSymbol}>−</Text>
+                </Pressable>
+                <Text style={styles.gridStepperQty}>{qty}</Text>
+                <Pressable
+                  style={styles.gridStepperBtn}
+                  delayPressIn={0}
+                  unstable_pressDelay={0}
+                  hitSlop={6}
+                  onPress={() => updateCartQty(item.id, 1)}
+                >
+                  <Text style={styles.gridStepperSymbol}>+</Text>
+                </Pressable>
+              </View>
+            )}
+
             <Pressable
-              key={cat.id}
+              style={styles.gridSaveIconBtn}
               delayPressIn={0}
               unstable_pressDelay={0}
               hitSlop={6}
-              style={[
-                styles.catGridCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: selectedCategory === cat.name ? colors.primary : colors.border,
-                },
-              ]}
-              onPress={() => {
-                const target = OFFICIAL_PRODUCT_CATEGORIES.find((c) => c.id === cat.id);
-                const catName = target ? target.name : cat.name;
-                setSelectedCategory(catName);
-                if (cat.id === 'it-products') {
-                  setSelectedSubcategorySlug('computers-entry-level-computer-cpu/search');
-                } else if (cat.id === 'furniture') {
-                  setSelectedSubcategorySlug('furniture-and-furnishings-accommodation-furniture-furniture-revolving-chair-v5-/search');
-                } else if (cat.id === 'stationery') {
-                  setSelectedSubcategorySlug('maplitho-paper/search');
-                } else if (cat.id === 'automobiles') {
-                  setSelectedSubcategorySlug('25101500-cars-version-2-/search');
-                }
-                setCurrentPage(1);
-              }}
+              onPress={() => toggleSaveItem(item.id)}
             >
-              <View style={[styles.catIconSquare, { backgroundColor: cat.tint }]}>
-                <Text style={styles.catIconEmoji}>{cat.icon}</Text>
-              </View>
-              <View style={styles.catGridInfo}>
-                <Text style={[styles.catGridTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {cat.name}
-                </Text>
-                <Text style={[styles.catGridCount, { color: colors.textMuted }]}>{cat.count}</Text>
-              </View>
+              <Text style={{ fontSize: 14 }}>{isSaved ? '🔖' : '🤍'}</Text>
             </Pressable>
-          ))}
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  // ==========================================
+  // RENDER: PRODUCT GRID VIEW HEADER
+  // ==========================================
+  const renderProductGridHeader = () => (
+    <View style={styles.productGridHeaderWrapper}>
+      {/* Top Breadcrumb Navigation */}
+      <View style={styles.topNavBar}>
+        <Pressable
+          style={[styles.backToCatBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          delayPressIn={0}
+          unstable_pressDelay={0}
+          hitSlop={8}
+          onPress={() => setBrowseView('categories')}
+        >
+          <Text style={[styles.backToCatIcon, { color: colors.primary }]}>←</Text>
+          <Text style={[styles.backToCatText, { color: colors.primary }]}>Categories</Text>
+        </Pressable>
+
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.navCatTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+            {selectedSubcategoryName || selectedCategory}
+          </Text>
+          <Text style={[styles.navSubTitle, { color: colors.textSecondary }]}>
+            {filteredProducts.length}{hasMorePages ? '+' : ''} Live GeM Sellers
+          </Text>
         </View>
 
-        {/* GeM Subcategory Pills Carousel */}
-        <View style={{ marginTop: 12, marginBottom: 4 }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {availableSubcategories.map((sub) => (
-              <CompactChip
-                key={sub.id}
-                label={sub.name}
-                selected={selectedSubcategorySlug === sub.slug}
-                onPress={() => {
-                  setSelectedSubcategorySlug(sub.slug);
-                  setCurrentPage(1);
-                }}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        <Pressable
+          style={[styles.filterActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          delayPressIn={0}
+          unstable_pressDelay={0}
+          hitSlop={8}
+          onPress={() => setShowFilterModal(true)}
+        >
+          <Text style={styles.filterActionIcon}>⚙️</Text>
+        </Pressable>
       </View>
 
-      {/* GFR 149 Procurement Mode Accordion */}
+      {/* Subcategory Pills Carousel for fast switching within domain */}
+      <View style={styles.subCatScrollBox}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
+        >
+          {availableSubcategories.map((sub: GeMSubcategoryConfig) => (
+            <CompactChip
+              key={sub.id}
+              label={sub.name}
+              selected={selectedSubcategorySlug === sub.slug}
+              onPress={() => {
+                setSelectedSubcategorySlug(sub.slug);
+                setSelectedSubcategoryName(sub.name);
+                setCurrentPage(1);
+                setIsLoading(true);
+              }}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* GFR 149 Legal Procurement Guide Accordion */}
       <View
         style={[
           styles.gfrAccordion,
@@ -484,8 +647,12 @@ export const MarketplaceScreen: React.FC = () => {
               ))}
             </View>
             <View style={[styles.gfrResultCard, { backgroundColor: colors.surfaceSubtle }]}>
-              <Text style={[styles.gfrModeTag, { color: colors.primary }]}>{MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue).mode}</Text>
-              <Text style={[styles.gfrRuleName, { color: colors.textPrimary }]}>{MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue).description}</Text>
+              <Text style={[styles.gfrModeTag, { color: colors.primary }]}>
+                {MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue).mode}
+              </Text>
+              <Text style={[styles.gfrRuleName, { color: colors.textPrimary }]}>
+                {MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue).description}
+              </Text>
               <Text style={[styles.gfrRuleExplanation, { color: colors.textSecondary }]}>
                 {MarketplaceService.evaluateGfrProcurementMode(gfrOrderValue).mandatoryRequirement}
               </Text>
@@ -493,276 +660,298 @@ export const MarketplaceScreen: React.FC = () => {
           </View>
         )}
       </View>
-
-      {/* Results Title Row */}
-      <SectionHeader
-        title={`${selectedCategory === 'All Categories' ? 'Live GeM Marketplace' : selectedCategory} (${filteredItems.length}${hasMorePages ? '+' : ''})`}
-        style={{ marginTop: 8 }}
-      />
     </View>
   );
 
-  // Render individual product card - Instamart / Blinkit Clean Design
-  const renderProductCard = ({ item }: { item: MarketplaceItem }) => {
-    const isSaved = savedItemIds.has(item.id);
-    const isCompared = comparedItemIds.has(item.id);
-    const qty = cart[item.id] || 0;
+  // ==========================================
+  // RENDER: CATEGORY EXPLORER VIEW (AMAZON STYLE)
+  // ==========================================
+  const renderCategoryExplorer = () => (
+    <ScrollView
+      style={styles.catExplorerScroll}
+      contentContainerStyle={[styles.catExplorerContent, totalCartCount > 0 && { paddingBottom: 100 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Search Input Bar */}
+      <SearchField
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search categories, products, or services..."
+        style={{ marginBottom: 12 }}
+      />
 
-    return (
-      <View
-        style={[
-          styles.productCard,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        {/* Top Product Showcase (Image + Badges) */}
-        <View style={styles.imageShowcaseContainer}>
-          {item.imageUrl ? (
-            <Image
-              source={{ uri: item.imageUrl }}
-              style={styles.productHeroImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.thumbnailBox, { backgroundColor: colors.surfaceSubtle }]}>
-              <Text style={styles.thumbnailEmoji}>
-                {item.type === 'SERVICE' ? '🛠️' : '📦'}
-              </Text>
-            </View>
-          )}
-
-          {/* Floating Badges */}
-          <View style={styles.imageBadgeTopRow}>
-            {item.discountPercent ? (
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>{item.discountPercent}% OFF</Text>
-              </View>
-            ) : null}
-            {item.badge ? (
-              <View style={styles.featureBadge}>
-                <Text style={styles.featureBadgeText}>{item.badge}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {item.etaDelivery ? (
-            <View style={styles.deliveryEtaPill}>
-              <Text style={styles.deliveryEtaText}>{item.etaDelivery}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Product Details Section */}
-        <View style={styles.productContentBox}>
-          {/* Brand, Seller & Rating */}
-          <View style={styles.metaRow}>
-            <Text style={[styles.brandText, { color: colors.primary, fontWeight: '700' }]} numberOfLines={1}>
-              Brand: {item.oemBrand}
+      {/* Prominent Direct Product Search Jump if query typed */}
+      {searchQuery.trim().length > 0 && (
+        <Pressable
+          style={[styles.directSearchBanner, { backgroundColor: colors.primary }]}
+          delayPressIn={0}
+          unstable_pressDelay={0}
+          onPress={handleDirectProductSearch}
+        >
+          <Text style={styles.directSearchIcon}>🔍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.directSearchTitle}>
+              Search live GeM products for &quot;{searchQuery}&quot;
             </Text>
-            <View style={styles.ratingBadge}>
-              <Text style={styles.starIcon}>★</Text>
-              <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
-            </View>
-          </View>
-
-          {/* Title */}
-          <Text
-            style={[styles.productTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-            numberOfLines={2}
-          >
-            {item.title}
-          </Text>
-
-          {/* Seller Type & Consignee MOQ */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, marginBottom: 4 }}>
-            <Text style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '500' }}>
-              {item.specSummary?.['Seller Type'] ? `Seller: ${item.specSummary['Seller Type']}` : 'Seller: Resellers'}
-            </Text>
-            <Text style={{ fontSize: 11, color: colors.textMuted }}>
-              Min. Qty: {item.minOrderQty || 1}
+            <Text style={styles.directSearchSub}>
+              Query 26,000+ multi-seller listings across mkp.gem.gov.in →
             </Text>
           </View>
+        </Pressable>
+      )}
 
-          {/* Price & Stepper Row */}
-          <View style={styles.priceActionRow}>
-            <View style={styles.priceColumn}>
-              <View style={styles.priceNumbersRow}>
-                <Text style={[styles.priceInr, { color: colors.primary, fontSize: 16 * fontMultiplier }]}>
-                  {formatInr(item.l1PriceInr)}
-                </Text>
-                {item.mrpInr ? (
-                  <Text style={[styles.mrpText, { color: colors.textMuted }]}>
-                    {formatInr(item.mrpInr)}
+      {/* Products vs Services Segmented Tabs (Matches mkp.gem.gov.in Browse Menu) */}
+      <SegmentedTabs
+        options={['Products', 'Services']}
+        selected={activeTypeTab}
+        onSelect={(tab) => setActiveTypeTab(tab as 'Products' | 'Services')}
+        style={{ marginBottom: 16 }}
+      />
+
+      {activeTypeTab === 'Products' ? (
+        /* ================= PRODUCTS CATEGORIES GRID ================= */
+        <View>
+          <SectionHeader
+            title="Popular Product Categories"
+            subtitle="Explore official GeM procurement categories with live seller listings"
+          />
+
+          <View style={styles.categories2ColGrid}>
+            {filteredCategories.map((cat) => {
+              const themeColors = getCategoryTint(cat.id);
+              return (
+                <Pressable
+                  key={cat.id}
+                  style={[
+                    styles.catExplorerCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  delayPressIn={0}
+                  unstable_pressDelay={0}
+                  onPress={() => handleSelectCategory(cat.name)}
+                >
+                  {/* Card Header with Icon & Count */}
+                  <View style={styles.catCardHeader}>
+                    <View style={[styles.catCardIconBox, { backgroundColor: themeColors.tint }]}>
+                      <Text style={styles.catCardEmoji}>{cat.icon}</Text>
+                    </View>
+                    <View style={[styles.catCountBadge, { backgroundColor: themeColors.tint }]}>
+                      <Text style={[styles.catCountText, { color: colors.primary }]}>{cat.itemCount}+ items</Text>
+                    </View>
+                  </View>
+
+                  {/* Category Title */}
+                  <Text style={[styles.catCardName, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {cat.name}
                   </Text>
-                ) : null}
-              </View>
-              <Text style={[styles.l1NoticeText, { color: colors.success }]}>
-                ✓ GeM L1 Verified
-              </Text>
-            </View>
 
-            {/* Instamart / Blinkit Interactive Stepper Button */}
-            {qty === 0 ? (
+                  {/* Subcategories preview tags */}
+                  <View style={styles.catSubtagsBox}>
+                    {cat.subcategories.slice(0, 3).map((subName) => (
+                      <Pressable
+                        key={subName}
+                        style={[styles.subtagPill, { backgroundColor: colors.surfaceSubtle }]}
+                        delayPressIn={0}
+                        unstable_pressDelay={0}
+                        onPress={() => {
+                          const matchingSub = OFFICIAL_GEM_SUBCATEGORIES.find(
+                            (s) => s.name.toLowerCase() === subName.toLowerCase() || subName.toLowerCase().includes(s.name.toLowerCase())
+                          );
+                          handleSelectCategory(cat.name, matchingSub?.slug, subName);
+                        }}
+                      >
+                        <Text style={[styles.subtagText, { color: colors.textSecondary }]} numberOfLines={1}>
+                          • {subName}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <View style={styles.catCardFooterRow}>
+                    <Text style={[styles.viewProductsLink, { color: colors.primary }]}>
+                      Browse Sellers ›
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        /* ================= SERVICES TAXONOMY LIST ================= */
+        <View>
+          {/* Trending Services */}
+          <SectionHeader
+            title="Trending Services"
+            subtitle="Official GeM public procurement services with pre-negotiated SLAs"
+          />
+          <View style={styles.servicesGrid}>
+            {filteredTrendingServices.map((srv) => (
               <Pressable
-                style={[
-                  styles.addCartBtn,
-                  {
-                    borderColor: colors.primary,
-                    backgroundColor: colors.surface,
-                  },
-                ]}
+                key={srv.id}
+                style={[styles.serviceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 delayPressIn={0}
                 unstable_pressDelay={0}
-                hitSlop={8}
-                onPress={() => updateCartQty(item.id, 1)}
+                onPress={() => setSelectedService(srv)}
               >
-                <Text style={[styles.addCartBtnText, { color: colors.primary }]}>ADD +</Text>
+                <View style={styles.serviceIconBox}>
+                  <Text style={styles.serviceEmoji}>{srv.icon}</Text>
+                </View>
+                <View style={styles.serviceInfo}>
+                  <View style={styles.serviceHeaderRow}>
+                    <Text style={[styles.serviceCategoryTag, { color: colors.primary }]}>
+                      {srv.category}
+                    </Text>
+                    {srv.badge ? (
+                      <View style={styles.serviceBadge}>
+                        <Text style={styles.serviceBadgeText}>{srv.badge}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.serviceTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {srv.name}
+                  </Text>
+                  <View style={styles.serviceGfrRow}>
+                    <Text style={[styles.serviceGfrText, { color: colors.textSecondary }]}>
+                      Mode: {srv.gfrMode}
+                    </Text>
+                    <Text style={[styles.serviceActionLink, { color: colors.primary }]}>Details ›</Text>
+                  </View>
+                </View>
               </Pressable>
-            ) : (
-              <View style={[styles.stepperContainer, { backgroundColor: colors.primary }]}>
-                <Pressable
-                  style={styles.stepperBtn}
-                  delayPressIn={0}
-                  unstable_pressDelay={0}
-                  hitSlop={8}
-                  onPress={() => updateCartQty(item.id, -1)}
-                >
-                  <Text style={styles.stepperSymbol}>−</Text>
-                </Pressable>
-                <Text style={styles.stepperQtyText}>{qty}</Text>
-                <Pressable
-                  style={styles.stepperBtn}
-                  delayPressIn={0}
-                  unstable_pressDelay={0}
-                  hitSlop={8}
-                  onPress={() => updateCartQty(item.id, 1)}
-                >
-                  <Text style={styles.stepperSymbol}>+</Text>
-                </Pressable>
-              </View>
-            )}
+            ))}
           </View>
 
-          {/* Secondary Quick Links */}
-          <View style={styles.cardFooterActions}>
-            <Pressable
-              style={styles.quickActionBtn}
-              delayPressIn={0}
-              unstable_pressDelay={0}
-              hitSlop={6}
-              onPress={() => toggleSaveItem(item.id)}
-            >
-              <Text style={[styles.quickActionText, { color: colors.textSecondary }]}>
-                {isSaved ? '🔖 Saved' : '🔖 Save'}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.quickActionBtn}
-              delayPressIn={0}
-              unstable_pressDelay={0}
-              hitSlop={6}
-              onPress={() => toggleCompareItem(item.id)}
-            >
-              <Text style={[styles.quickActionText, { color: colors.textSecondary }]}>
-                {isCompared ? '⚖️ Comparing' : '⚖️ Compare'}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.quickActionBtn}
-              delayPressIn={0}
-              unstable_pressDelay={0}
-              hitSlop={6}
-              onPress={() => setSelectedItem(item)}
-            >
-              <Text style={[styles.quickActionText, { color: colors.primary, fontWeight: '700' }]}>
-                Details ›
-              </Text>
-            </Pressable>
+          {/* Emerging Services */}
+          <SectionHeader
+            title="Emerging Services"
+            subtitle="New specialized government services and facility management options"
+            style={{ marginTop: 20 }}
+          />
+          <View style={styles.servicesGrid}>
+            {filteredEmergingServices.map((srv) => (
+              <Pressable
+                key={srv.id}
+                style={[styles.serviceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                delayPressIn={0}
+                unstable_pressDelay={0}
+                onPress={() => setSelectedService(srv)}
+              >
+                <View style={styles.serviceIconBox}>
+                  <Text style={styles.serviceEmoji}>{srv.icon}</Text>
+                </View>
+                <View style={styles.serviceInfo}>
+                  <View style={styles.serviceHeaderRow}>
+                    <Text style={[styles.serviceCategoryTag, { color: colors.primary }]}>
+                      {srv.category}
+                    </Text>
+                    {srv.badge ? (
+                      <View style={styles.serviceBadge}>
+                        <Text style={styles.serviceBadgeText}>{srv.badge}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.serviceTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {srv.name}
+                  </Text>
+                  <View style={styles.serviceGfrRow}>
+                    <Text style={[styles.serviceGfrText, { color: colors.textSecondary }]}>
+                      Mode: {srv.gfrMode}
+                    </Text>
+                    <Text style={[styles.serviceActionLink, { color: colors.primary }]}>Details ›</Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
           </View>
         </View>
-      </View>
-    );
-  };
+      )}
+    </ScrollView>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProductCard}
-        ListHeaderComponent={renderListHeader}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={loadLiveProducts}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          totalCartCount > 0 && { paddingBottom: 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          isLoadingMore ? (
-            <View style={{ paddingVertical: 18, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ marginTop: 6, fontSize: 13, color: colors.textSecondary }}>
-                Loading more live GeM seller products (Page {currentPage + 1})...
-              </Text>
-            </View>
-          ) : null
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
-                Connecting to GeM Portal...
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Fetching live products from marketplace.
-              </Text>
-            </View>
-          ) : isOffline ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📡</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Products Available (Offline)</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Unable to connect to GeM live marketplace. Please check your internet connection and try again.
-              </Text>
-              <PrimaryButton
-                label="Retry Connection"
-                onPress={loadLiveProducts}
-                style={{ marginTop: 16 }}
-              />
-            </View>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>🔍</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Try clearing search terms or selecting &quot;All Categories&quot;.
-              </Text>
-              <SecondaryButton
-                label="Reset Filters"
-                onPress={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('All Categories');
-                  setFilterBrand('ALL');
-                }}
-                style={{ marginTop: 16 }}
-              />
-            </View>
-          )
-        }
-      />
+      {browseView === 'categories' ? (
+        renderCategoryExplorer()
+      ) : (
+        /* ================= 2-COLUMN PRODUCT GRID ================= */
+        <FlatList
+          key="two-column-gem-grid"
+          data={filteredProducts}
+          numColumns={2}
+          keyExtractor={(item) => item.id}
+          renderItem={renderProductGridItem}
+          ListHeaderComponent={renderProductGridHeader}
+          columnWrapperStyle={styles.productRowWrapper}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={loadLiveProducts}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+          contentContainerStyle={[
+            styles.listContent,
+            totalCartCount > 0 && { paddingBottom: 100 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ marginTop: 6, fontSize: 13, color: colors.textSecondary }}>
+                  Loading more live GeM seller products (Page {currentPage + 1})...
+                </Text>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            isLoading ? (
+              <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
+                  Streaming live GeM marketplace...
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Connecting directly to mkp.gem.gov.in seller listings.
+                </Text>
+              </View>
+            ) : isOffline ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>📡</Text>
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Products Available (Offline)</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Unable to connect to GeM live marketplace. Please check your internet connection and try again.
+                </Text>
+                <PrimaryButton
+                  label="Retry Connection"
+                  onPress={loadLiveProducts}
+                  style={{ marginTop: 16 }}
+                />
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>🔍</Text>
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Try clearing search terms or selecting another category.
+                </Text>
+                <SecondaryButton
+                  label="Return to Categories"
+                  onPress={() => setBrowseView('categories')}
+                  style={{ marginTop: 16 }}
+                />
+              </View>
+            )
+          }
+        />
+      )}
 
       {/* Floating Bottom Cart Bar (Instamart & Blinkit Style) */}
       {totalCartCount > 0 && (
@@ -941,40 +1130,18 @@ export const MarketplaceScreen: React.FC = () => {
         onClose={() => setShowFilterModal(false)}
         title="Refine Catalog"
         onReset={() => {
-          setSelectedCategory('All Categories');
           setFilterBrand('ALL');
         }}
-        onApply={() => {}}
+        onApply={() => setShowFilterModal(false)}
       >
         <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary }]}>Brand / OEM</Text>
         <View style={styles.sheetPillWrap}>
-          {['ALL', 'Dell', 'HP', 'Lenovo', 'Godrej', 'Tata', '3M', 'JK Paper', 'Havells'].map((b) => (
+          {['ALL', 'Champion', 'DUGONG', 'RDP', 'Consistent', 'HP', 'Dell', 'Lenovo', 'Acer'].map((b) => (
             <CompactChip
               key={b}
               label={b}
               selected={filterBrand === b}
               onPress={() => setFilterBrand(b)}
-              style={{ marginBottom: 8 }}
-            />
-          ))}
-        </View>
-
-        <Text style={[styles.sheetSectionTitle, { color: colors.textPrimary, marginTop: 14 }]}>
-          Categories
-        </Text>
-        <View style={styles.sheetPillWrap}>
-          <CompactChip
-            label="All Categories"
-            selected={selectedCategory === 'All Categories'}
-            onPress={() => setSelectedCategory('All Categories')}
-            style={{ marginBottom: 8 }}
-          />
-          {OFFICIAL_PRODUCT_CATEGORIES.map((cat) => (
-            <CompactChip
-              key={cat.id}
-              label={cat.name}
-              selected={selectedCategory === cat.name}
-              onPress={() => setSelectedCategory(cat.name)}
               style={{ marginBottom: 8 }}
             />
           ))}
@@ -1062,6 +1229,76 @@ export const MarketplaceScreen: React.FC = () => {
           </View>
         </Modal>
       )}
+
+      {/* Service Details Modal */}
+      {selectedService && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSelectedService(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setSelectedService(null)} />
+            <View style={[styles.modalSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{selectedService.name}</Text>
+                <Pressable
+                  onPress={() => setSelectedService(null)}
+                  hitSlop={10}
+                  delayPressIn={0}
+                  unstable_pressDelay={0}
+                >
+                  <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>
+                </Pressable>
+              </View>
+
+              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                <View style={[styles.serviceModalIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+                  <Text style={{ fontSize: 44 }}>{selectedService.icon}</Text>
+                </View>
+
+                <View style={styles.serviceModalMetaRow}>
+                  <View style={styles.serviceBadge}>
+                    <Text style={styles.serviceBadgeText}>{selectedService.badge || 'Official Service'}</Text>
+                  </View>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                    Domain: {selectedService.category}
+                  </Text>
+                </View>
+
+                <Text style={[styles.modalSecHeader, { color: colors.textPrimary, marginTop: 16 }]}>
+                  Procurement Compliance & SLA
+                </Text>
+                <View style={[styles.gfrResultCard, { backgroundColor: colors.surfaceSubtle, marginTop: 8 }]}>
+                  <Text style={[styles.gfrModeTag, { color: colors.primary }]}>
+                    Mandatory Mode: {selectedService.gfrMode}
+                  </Text>
+                  <Text style={[styles.gfrRuleExplanation, { color: colors.textSecondary }]}>
+                    Governed by GeM Service Contract Guidelines. Requires pre-qualification of service personnel, minimum wage compliance, and quarterly SLA audit logging.
+                  </Text>
+                </View>
+              </ScrollView>
+
+              <View style={[styles.modalFooter, { borderTopColor: colors.borderSubtle }]}>
+                <SecondaryButton
+                  label="GeM Portal ↗"
+                  onPress={() => handleOpenGemPortal()}
+                  style={{ flex: 1, marginRight: 8 }}
+                />
+                <PrimaryButton
+                  label="Procure Service"
+                  onPress={() => {
+                    Alert.alert('GeM Service Request', 'Initiating service SLA onboarding on GeM.');
+                    setSelectedService(null);
+                  }}
+                  style={{ flex: 1.5 }}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -1070,81 +1307,415 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  listContent: {
+  catExplorerScroll: {
+    flex: 1,
+  },
+  catExplorerContent: {
     padding: 16,
     paddingBottom: 40,
   },
-  headerWrapper: {
-    marginBottom: 8,
-  },
-  filterChipScroll: {
-    marginBottom: 16,
-  },
-  filterChipRow: {
+  directSearchBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 14,
   },
-  gridSection: {
-    marginBottom: 16,
+  directSearchIcon: {
+    fontSize: 22,
+    marginRight: 10,
   },
-  catGrid: {
+  directSearchTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  directSearchSub: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  categories2ColGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  catGridCard: {
-    width: '48%',
-    borderRadius: 12,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 10,
+  catExplorerCard: {
+    width: '48.5%',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 12,
+    marginBottom: 12,
+    justifyContent: 'space-between',
+  },
+  catCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
-  catIconSquare: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+  catCardIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
-  catIconEmoji: {
-    fontSize: 16,
+  catCardEmoji: {
+    fontSize: 22,
   },
-  catGridInfo: {
+  catCountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  catCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  catCardName: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  catSubtagsBox: {
+    gap: 4,
+    marginBottom: 10,
+  },
+  subtagPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  subtagText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  catCardFooterRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  viewProductsLink: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  // Services View
+  servicesGrid: {
+    gap: 10,
+  },
+  serviceCard: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 12,
+    alignItems: 'center',
+  },
+  serviceIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  serviceEmoji: {
+    fontSize: 22,
+  },
+  serviceInfo: {
     flex: 1,
   },
-  catGridTitle: {
+  serviceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  serviceCategoryTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  serviceBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  serviceBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  serviceTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  serviceGfrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  serviceGfrText: {
+    fontSize: 11,
+  },
+  serviceActionLink: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  // Product Grid View & Header
+  listContent: {
+    padding: 12,
+    paddingBottom: 40,
+  },
+  productGridHeaderWrapper: {
+    marginBottom: 8,
+  },
+  topNavBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  backToCatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  backToCatIcon: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginRight: 4,
+  },
+  backToCatText: {
     fontSize: 12,
     fontWeight: '700',
   },
-  catGridCount: {
-    fontSize: 10,
-    marginTop: 2,
+  headerTitleBox: {
+    flex: 1,
+    marginHorizontal: 10,
   },
-  gfrAccordion: {
+  navCatTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  navSubTitle: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  filterActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterActionIcon: {
+    fontSize: 16,
+  },
+  subCatScrollBox: {
+    marginBottom: 10,
+  },
+
+  // 2-Column Product Grid Cards
+  productRowWrapper: {
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  gridProductCard: {
+    width: '48.5%',
     borderRadius: 12,
     borderWidth: DESIGN_TOKENS.borderWidth,
-    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  gridImageContainer: {
+    height: 125,
+    width: '100%',
+    position: 'relative',
+    backgroundColor: '#F8FAFC',
+  },
+  gridProductImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridThumbnailFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridThumbnailEmoji: {
+    fontSize: 32,
+  },
+  gridBadgesOverlay: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    right: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gridDiscountBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gridDiscountBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  gridFeatureBadge: {
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 75,
+  },
+  gridFeatureBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  gridEtaPill: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#E2E8F0',
+  },
+  gridEtaText: {
+    color: '#0F172A',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  gridCardContent: {
+    padding: 8,
+  },
+  gridMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  gridBrandText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    maxWidth: '55%',
+  },
+  gridSellerTag: {
+    fontSize: 9,
+    fontWeight: '500',
+    maxWidth: '45%',
+  },
+  gridTitleText: {
+    fontWeight: '700',
+    lineHeight: 17,
+    marginBottom: 4,
+    minHeight: 34,
+  },
+  gridMoqText: {
+    fontSize: 9,
+    marginBottom: 4,
+  },
+  gridPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 6,
+  },
+  gridL1Price: {
+    fontWeight: '800',
+    marginRight: 5,
+  },
+  gridMrpPrice: {
+    fontSize: 10,
+    textDecorationLine: 'line-through',
+  },
+  gridActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gridAddBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    paddingVertical: 5,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  gridAddBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  gridStepperBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  gridStepperBtn: {
+    paddingHorizontal: 4,
+  },
+  gridStepperSymbol: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  gridStepperQty: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  gridSaveIconBtn: {
+    padding: 4,
+  },
+
+  // GFR Accordion
+  gfrAccordion: {
+    borderRadius: 10,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    marginBottom: 10,
     overflow: 'hidden',
   },
   gfrHeaderPressable: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
+    padding: 10,
   },
   gfrHeaderTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   gfrBadgeIcon: {
-    fontSize: 15,
-    marginRight: 8,
+    fontSize: 14,
+    marginRight: 6,
   },
   gfrTitleText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   gfrChevron: {
@@ -1152,337 +1723,233 @@ const styles = StyleSheet.create({
   },
   gfrContent: {
     borderTopWidth: 1,
-    padding: 12,
+    padding: 10,
   },
   gfrDesc: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 10,
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 8,
   },
   gfrPillRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   gfrResultCard: {
     borderRadius: 8,
-    padding: 10,
+    padding: 8,
   },
   gfrModeTag: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     marginBottom: 2,
   },
   gfrRuleName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   gfrRuleExplanation: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  productCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    marginBottom: 14,
-    overflow: 'hidden',
-  },
-  imageShowcaseContainer: {
-    height: 150,
-    width: '100%',
-    position: 'relative',
-    backgroundColor: '#F8FAFC',
-  },
-  productHeroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbnailBox: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbnailEmoji: {
-    fontSize: 36,
-  },
-  imageBadgeTopRow: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  discountBadge: {
-    backgroundColor: '#059669',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  discountBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  featureBadge: {
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  featureBadgeText: {
-    color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '700',
+    lineHeight: 14,
   },
-  deliveryEtaPill: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  deliveryEtaText: {
-    color: '#0F172A',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  productContentBox: {
-    padding: 12,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  brandText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  productTitle: {
-    fontWeight: '700',
-    lineHeight: 19,
-    marginBottom: 4,
-  },
-  unitText: {
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  priceActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
-    marginBottom: 10,
-  },
-  priceColumn: {
-    flex: 1,
-  },
-  priceNumbersRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  priceInr: {
-    fontWeight: '800',
-    marginRight: 6,
-  },
-  mrpText: {
-    fontSize: 12,
-    textDecorationLine: 'line-through',
-  },
-  l1NoticeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  starIcon: {
-    fontSize: 10,
-    color: '#D97706',
-    marginRight: 2,
-  },
-  ratingText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  addCartBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    minWidth: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addCartBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  stepperContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 3,
-    minWidth: 90,
-    justifyContent: 'space-between',
-  },
-  stepperBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  stepperSymbol: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  stepperQtyText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    paddingHorizontal: 4,
-  },
-  cardFooterActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 8,
-  },
-  quickActionBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  quickActionText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
+
+  // Cart & Floating Bar
   floatingCartBar: {
     position: 'absolute',
-    bottom: 12,
+    bottom: 16,
     left: 16,
     right: 16,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 8,
   },
   cartBarInfo: {
     flex: 1,
   },
   cartBarCount: {
     color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '800',
+    fontSize: 13,
   },
   cartBarPrice: {
-    color: '#CBD5E1',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 11,
     marginTop: 1,
   },
   cartBarActionBtn: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
     paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 8,
   },
   cartBarActionText: {
-    color: '#0B3B60',
-    fontSize: 12,
+    color: '#0F172A',
     fontWeight: '800',
+    fontSize: 12,
   },
+
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   modalSheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    borderTopWidth: 1,
+    borderWidth: 1,
     maxHeight: '85%',
-    paddingBottom: 24,
+    padding: 16,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    marginBottom: 12,
   },
   modalTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 10,
   },
   modalCloseText: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    padding: 4,
   },
+  modalBody: {
+    marginBottom: 12,
+  },
+  modalProductHeroImg: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  modalPriceBox: {
+    marginBottom: 12,
+  },
+  modalPrice: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  modalUnit: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalSecHeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  specRowDetail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+  },
+  specKey: {
+    fontSize: 12,
+  },
+  specVal: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  complianceText: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
+
+  // Service Modal
+  serviceModalIconBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  serviceModalMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+
+  // Cart Modal Inner
   cartScrollList: {
-    paddingHorizontal: 16,
-    maxHeight: 380,
+    maxHeight: 280,
   },
   cartItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
   cartItemInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
   cartItemTitle: {
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 3,
   },
   cartItemPrice: {
     fontSize: 12,
     fontWeight: '600',
+    marginTop: 2,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  stepperBtn: {
+    paddingHorizontal: 6,
+  },
+  stepperSymbol: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  stepperQtyText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    marginHorizontal: 4,
   },
   cartGfrCard: {
-    borderRadius: 10,
-    padding: 12,
-    marginVertical: 12,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 10,
   },
   cartGfrTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 4,
+    fontSize: 12,
+    fontWeight: '700',
   },
   cartGfrText: {
     fontSize: 11,
-    lineHeight: 16,
+    marginTop: 2,
   },
   billBox: {
     paddingVertical: 8,
@@ -1509,13 +1976,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   billTotalVal: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
   cartFooter: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    marginTop: 12,
   },
+
+  // Order placed
   orderConfirmBox: {
     margin: 20,
     borderRadius: 16,
@@ -1531,93 +1999,50 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 6,
   },
   orderContractNum: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 12,
+    marginTop: 6,
   },
   orderConfirmDesc: {
     fontSize: 12,
-    lineHeight: 17,
     textAlign: 'center',
+    lineHeight: 17,
+    marginTop: 8,
   },
-  modalBody: {
-    paddingHorizontal: 16,
-  },
-  modalProductHeroImg: {
-    width: '100%',
-    height: 180,
-    borderRadius: 12,
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  modalPriceBox: {
-    marginBottom: 14,
-  },
-  modalPrice: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  modalUnit: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  modalSecHeader: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  specRowDetail: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-  },
-  specKey: {
-    fontSize: 12,
-  },
-  specVal: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  complianceText: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
+
+  // Filter Sheet
   sheetSectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     marginBottom: 8,
   },
   sheetPillWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 6,
   },
+
+  // Empty state
   emptyContainer: {
+    paddingVertical: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
   },
   emptyEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 44,
+    marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 4,
+    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
-    maxWidth: 260,
+    marginTop: 6,
+    paddingHorizontal: 24,
   },
 });
