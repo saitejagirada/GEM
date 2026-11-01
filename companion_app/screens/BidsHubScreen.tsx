@@ -282,7 +282,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         >
           <CompactChip
             label="Filters"
-            icon="⚙️"
+            icon="≡"
             selected={showFilterModal || filterMseOnly || filterMinValLakhs > 0}
             onPress={() => setShowFilterModal(true)}
           />
@@ -334,7 +334,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             </View>
           ) : bids.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={styles.emptyEmoji}>!</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Tenders Available (Offline)</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Unable to load live tenders from GeM portal. Please check your internet connection and tap Retry.

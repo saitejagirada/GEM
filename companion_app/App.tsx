@@ -1,5 +1,5 @@
 /**
- * GeM Mobile Companion App - NotebookLM-Inspired Procurement Experience
+ * GeM Mobile Companion App - official-style procurement companion
  * Conforms to the GeM Mobile UI Specification & 10-Screen Blueprint:
  * - Clean 56px Header: India flag mark, GeM wordmark, subtitle, notifications bell, profile avatar
  * - 64px 5-Tab Fixed Bottom Bar: Home, Search, Bids, Auctions, More with pale blue active surface
@@ -42,6 +42,7 @@ import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { MyWorkScreen } from './screens/MyWorkScreen';
+import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network.ts';
 import type {
@@ -50,13 +51,13 @@ import type {
 import type { MarketplaceCategory } from './services/MarketplaceService';
 
 export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
-export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'PORTFOLIO' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
+export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'PORTFOLIO' | 'PORTAL' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
 
 const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: string }[] = [
-  { id: 'HOME', label: 'Home', icon: '🏠' },
-  { id: 'SEARCH', label: 'Search', icon: '🔍' },
-  { id: 'BIDS', label: 'Bids', icon: '📄' },
-  { id: 'AUCTIONS', label: 'Auctions', icon: '⚡' },
+  { id: 'HOME', label: 'Home', icon: '⌂' },
+  { id: 'SEARCH', label: 'Search', icon: '⌕' },
+  { id: 'BIDS', label: 'Bids', icon: '▤' },
+  { id: 'AUCTIONS', label: 'Auctions', icon: '↘' },
   { id: 'MORE', label: 'More', icon: '⋯' },
 ];
 
@@ -200,8 +201,10 @@ const MainAppContent: React.FC = () => {
       setSubScreen('NONE');
     } else if (target === 'ORDERS') {
       setSubScreen('CONTRACTS');
-    } else if (target === 'PORTFOLIO' || target === 'PORTAL') {
+    } else if (target === 'PORTFOLIO') {
       setSubScreen('PORTFOLIO');
+    } else if (target === 'PORTAL') {
+      setSubScreen('PORTAL');
     } else if (target === 'CATEGORIES') {
       setSubScreen('CATEGORIES');
     } else if (target === 'HELP') {
@@ -235,7 +238,7 @@ const MainAppContent: React.FC = () => {
         <View style={{ flex: 1, backgroundColor: '#138808' }} />
       </View>
 
-      {/* 56px NotebookLM-Inspired Sticky Top Header */}
+      {/* Compact GeM-style portal header */}
       <View
         style={[
           styles.headerBar,
@@ -256,8 +259,10 @@ const MainAppContent: React.FC = () => {
             setSubScreen('NONE');
           }}
         >
-          <View style={[styles.flagPill, { backgroundColor: colors.surfaceSubtle }]}>
-            <Text style={styles.flagEmoji}>🇮🇳</Text>
+          <View style={styles.tricolorMark}>
+            <View style={{ flex: 1, backgroundColor: colors.saffron }} />
+            <View style={{ flex: 1, backgroundColor: colors.surface }} />
+            <View style={{ flex: 1, backgroundColor: colors.emerald }} />
           </View>
           <View style={styles.brandTextCol}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -280,18 +285,18 @@ const MainAppContent: React.FC = () => {
             hitSlop={8}
             accessibilityLabel="Instant bid lookup"
           >
-            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>🔍</Text>
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>⌕</Text>
           </Pressable>
 
           <Pressable
             style={styles.headerIconBtn}
             delayPressIn={0}
             unstable_pressDelay={0}
-            onPress={() => Alert.alert('Notifications', 'All your bids and contracts are up to date.')}
+            onPress={() => Alert.alert('Notifications', 'Public feed refreshes are available from the Bids tab. Private GeM notifications remain inside the official portal.')}
             hitSlop={8}
             accessibilityLabel="Notifications"
           >
-            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>🔔</Text>
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>!</Text>
           </Pressable>
 
           <Pressable
@@ -336,6 +341,9 @@ const MainAppContent: React.FC = () => {
             <OrdersKnowledgeScreen />
           </View>
         )}
+        {subScreen === 'PORTAL' && (
+          <OfficialPortalScreen onBack={() => setSubScreen('NONE')} />
+        )}
         {subScreen === 'PORTFOLIO' && (
           <View style={{ flex: 1 }}>
             <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
@@ -350,7 +358,11 @@ const MainAppContent: React.FC = () => {
               </Pressable>
               <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Document preparation</Text>
             </View>
-            <MyWorkScreen availableBids={bids} initialBidNumber={preparationBidNumber} />
+            <MyWorkScreen
+              availableBids={bids}
+              initialBidNumber={preparationBidNumber}
+              onOpenOfficialPortal={() => setSubScreen('PORTAL')}
+            />
           </View>
         )}
         {subScreen === 'REG_BUYER' && (
@@ -378,6 +390,7 @@ const MainAppContent: React.FC = () => {
                 onNavigateTab={handleHomeNavigate}
                 onSelectBid={(bid) => setSelectedBid(bid)}
                 onOpenMyWork={() => setSubScreen('PORTFOLIO')}
+                onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
             )}
             {activeTab === 'SEARCH' && <MarketplaceScreen />}
@@ -394,6 +407,7 @@ const MainAppContent: React.FC = () => {
               <MoreProfileScreen
                 onNavigateTab={handleHomeNavigate}
                 onOpenPortfolio={() => setSubScreen('PORTFOLIO')}
+                onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
             )}
           </>
@@ -532,7 +546,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tricolorBar: {
-    height: 3,
+    height: 2,
     flexDirection: 'row',
   },
   headerBar: {
@@ -547,14 +561,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  flagPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+  tricolorMark: {
+    width: 18,
+    height: 18,
+    borderRadius: 2,
+    overflow: 'hidden',
+    flexDirection: 'column',
     marginRight: 8,
-  },
-  flagEmoji: {
-    fontSize: 16,
   },
   brandTextCol: {},
   brandGeM: {
@@ -586,7 +599,7 @@ const styles = StyleSheet.create({
   profileAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
@@ -631,7 +644,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 52,
-    borderRadius: 12,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
     paddingVertical: 4,
   },
   navIcon: {
@@ -645,7 +658,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   lookupCard: {
-    borderRadius: 16,
+    borderRadius: DESIGN_TOKENS.cardRadius,
     borderWidth: 1,
     padding: 18,
   },

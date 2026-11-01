@@ -5,20 +5,20 @@ import { PortalOnboardingService } from '../services/PortalOnboardingService.ts'
 import { MarketplaceService } from '../services/MarketplaceService.ts';
 
 describe('UI/UX Specification & Design Tokens Verification', () => {
-  it('conforms strictly to the NotebookLM-inspired design tokens', () => {
-    expect(DESIGN_TOKENS.cardRadius).toBe(16);
-    expect(DESIGN_TOKENS.headerHeight).toBe(56);
-    expect(DESIGN_TOKENS.bottomNavHeight).toBe(64);
-    expect(DESIGN_TOKENS.inputRadius).toBe(10);
+  it('conforms to the compact official-portal design tokens', () => {
+    expect(DESIGN_TOKENS.cardRadius).toBe(8);
+    expect(DESIGN_TOKENS.headerHeight).toBe(54);
+    expect(DESIGN_TOKENS.bottomNavHeight).toBe(60);
+    expect(DESIGN_TOKENS.inputRadius).toBe(4);
     expect(DESIGN_TOKENS.touchTargetMin).toBe(44);
 
     // Light Theme Colors from specification
-    expect(LIGHT_THEME.background).toBe('#F7F9FC');
+    expect(LIGHT_THEME.background).toBe('#F3F5F7');
     expect(LIGHT_THEME.surface).toBe('#FFFFFF');
-    expect(LIGHT_THEME.primary).toBe('#174EA6');
-    expect(LIGHT_THEME.textPrimary).toBe('#14233B');
-    expect(LIGHT_THEME.border).toBe('#DCE5F0');
-    expect(LIGHT_THEME.success).toBe('#16834A');
+    expect(LIGHT_THEME.primary).toBe('#0B4F71');
+    expect(LIGHT_THEME.textPrimary).toBe('#24313D');
+    expect(LIGHT_THEME.border).toBe('#CDD5DC');
+    expect(LIGHT_THEME.success).toBe('#0B7A3B');
   });
 
   it('verifies safe Indian currency and date formatting for high-density cards', () => {

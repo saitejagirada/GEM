@@ -99,7 +99,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
         {/* Quick Filter Input */}
         <View style={[styles.filterBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View style={[styles.filterInputWrapper, { backgroundColor: isDark ? colors.surfaceSubtle : '#F1F5F9' }]}>
-            <Text style={styles.filterIcon}>🔍</Text>
+            <Text style={styles.filterIcon}>⌕</Text>
             <TextInput
               style={[styles.filterInput, { color: colors.textPrimary }]}
               placeholder="Filter categories (e.g., Laptops, Desktops, Gloves, Cabs)..."
@@ -127,7 +127,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
             <ScrollView showsVerticalScrollIndicator={false}>
               <TouchButton
                 title="Products"
-                icon="📦"
+                icon="P"
                 variant={activeSection === 'PRODUCTS' ? 'primary' : 'ghost'}
                 size="small"
                 onPress={() => setActiveSection('PRODUCTS')}
@@ -136,7 +136,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
               />
               <TouchButton
                 title="Services"
-                icon="🛠️"
+                icon="S"
                 variant={activeSection === 'SERVICES' ? 'primary' : 'ghost'}
                 size="small"
                 onPress={() => setActiveSection('SERVICES')}
@@ -145,7 +145,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
               />
               <TouchButton
                 title="Outlet Stores"
-                icon="🏛️"
+                icon="O"
                 variant={activeSection === 'OUTLETS' ? 'primary' : 'ghost'}
                 size="small"
                 onPress={() => setActiveSection('OUTLETS')}
@@ -163,7 +163,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
               />
               <TouchButton
                 title="Bunching"
-                icon="⚡"
+                icon="A"
                 variant={activeSection === 'BUNCHING' ? 'primary' : 'ghost'}
                 size="small"
                 onPress={() => setActiveSection('BUNCHING')}
@@ -329,7 +329,7 @@ export const BrowseMegaMenuModal: React.FC<BrowseMegaMenuModalProps> = ({
               {/* SECTION: ENHANCED BUNCHING */}
               {activeSection === 'BUNCHING' && (
                 <View style={[styles.infoBlock, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.infoBlockTitle, { color: colors.textPrimary }]}>⚡ Enhanced Bunching - Services</Text>
+                  <Text style={[styles.infoBlockTitle, { color: colors.textPrimary }]}>Enhanced bunching - services</Text>
                   <Text style={[styles.infoBlockBody, { color: colors.textMuted }]}>
                     Consolidate multiple related services (e.g., Security + Cleaning + Manpower) across consignee locations into a unified procurement bundle under GFR Rule 149.
                   </Text>

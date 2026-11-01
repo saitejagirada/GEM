@@ -87,34 +87,34 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     if (bid.isRa || bid.type === 'RA') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>⚡ REVERSE AUCTION</Text>
+          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>RA · REVERSE AUCTION</Text>
         </View>
       );
     }
     if (bid.type === 'SERVICE') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>🛠️ SERVICE CONTRACT</Text>
+          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>SERVICE CONTRACT</Text>
         </View>
       );
     }
     if (bid.type === 'CUSTOM') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#D97706' }]}>📑 CUSTOM TENDER</Text>
+          <Text style={[styles.typeBadgeText, { color: '#D97706' }]}>CUSTOM TENDER</Text>
         </View>
       );
     }
     if (bid.type === 'BOQ') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#7C3AED' }]}>📊 BOQ TENDER</Text>
+          <Text style={[styles.typeBadgeText, { color: '#7C3AED' }]}>BOQ TENDER</Text>
         </View>
       );
     }
     return (
       <View style={[styles.typeBadge, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-        <Text style={[styles.typeBadgeText, { color: '#2563EB' }]}>📦 PRODUCT BID</Text>
+        <Text style={[styles.typeBadgeText, { color: '#2563EB' }]}>PRODUCT BID</Text>
       </View>
     );
   };
@@ -143,7 +143,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
           </View>
           <TouchableOpacity style={styles.shareBtn} onPress={handleShare} accessibilityLabel="Share summary">
-            <Text style={styles.shareBtnText}>📤</Text>
+            <Text style={styles.shareBtnText}>↗</Text>
           </TouchableOpacity>
         </View>
 
@@ -151,7 +151,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           {/* Bid Closing Cutoff & Freeze Protection Banner */}
           <View style={styles.cutoffBanner}>
             <View style={styles.cutoffLeft}>
-              <Text style={styles.cutoffIcon}>⏱️</Text>
+              <Text style={styles.cutoffIcon}>C</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cutoffTitle}>Closing: {formatDateSafe(bid.closingTimeUtc)}</Text>
                 <Text style={styles.cutoffSubtitle}>{remainingLabel} • GeM portal freezes in final 15 mins</Text>
@@ -181,32 +181,32 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           {(bid.serviceDetails || bid.type === 'SERVICE') && (
             <View style={[styles.card, styles.serviceCard]}>
               <View style={styles.serviceHeader}>
-                <Text style={styles.serviceHeaderTitle}>🛠️ Service Contract Terms &amp; SLAs</Text>
+                <Text style={styles.serviceHeaderTitle}>Service contract terms &amp; SLAs</Text>
                 <Text style={styles.serviceSlaBadge}>GeM SLA Governed</Text>
               </View>
               <View style={styles.serviceGrid}>
                 <View style={styles.serviceCell}>
                   <Text style={styles.serviceCellLabel}>Contract Duration</Text>
                   <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : '12 Months'}
+                    {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : 'Not published'}
                   </Text>
                 </View>
                 <View style={styles.serviceCell}>
                   <Text style={styles.serviceCellLabel}>Manpower / Staffing</Text>
                   <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'As per Scope'}
+                    {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'Not published'}
                   </Text>
                 </View>
                 <View style={styles.serviceCell}>
                   <Text style={styles.serviceCellLabel}>Billing Cycle</Text>
                   <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.billingCycle || 'Monthly Invoice'}
+                    {bid.serviceDetails?.billingCycle || 'Not published'}
                   </Text>
                 </View>
                 <View style={styles.serviceCell}>
                   <Text style={styles.serviceCellLabel}>Statutory Compliance</Text>
                   <Text style={[styles.serviceCellValue, { color: '#059669' }]}>
-                    {bid.serviceDetails?.minimumWageCompliance !== false ? 'Central Min Wages Act' : 'Standard'}
+                    {bid.serviceDetails?.minimumWageCompliance === true ? 'Published compliance term' : 'Not published'}
                   </Text>
                 </View>
               </View>

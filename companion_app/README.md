@@ -1,18 +1,18 @@
 # GeM Mobile Companion App
 
-> A mobile-first companion application for the Government e-Marketplace (GeM), designed based on 21-persona simulation findings from MiroFish.
+> A mobile-first companion application for the Government e-Marketplace (GeM): public discovery, response preparation, and an explicit handoff to the official portal.
 
 ## Key Modules Implemented
 
-1. **Live Reverse Auction (RA) Bid Room** (`services/AuctionRoom.ts`):
-   - Real-time WebSocket auction clock synchronization with NTP-style drift compensation.
-   - 1-tap counter-bid increments with local biometric authorization (eliminating SMS OTP delays).
-2. **Field-Level CRAC Inspection Engine** (`services/InspectionEngine.ts`):
-   - Offline-ready barcode and QR scanner verification.
-   - Watermarked camera integration embedding GPS coordinates, UTC timestamps, and Consignee IDs directly onto photo evidence.
-   - Statutory 10-day SLA countdown calculator with automated deemed acceptance triggers.
-3. **Domain Models & Contracts** (`types/index.ts`):
-   - End-to-end TypeScript interfaces covering Bids, Invoices, CRAC inspections, and PFMS payment milestones.
+1. **Live public discovery** (`services/GeMLiveSyncService.ts`):
+   - Reads the current public GeM bid listing without seeding demo rows or inventing commercial fields.
+   - Shows public reverse-auction records without simulating L1, rank, quotes, or bid placement.
+2. **Document preparation** (`screens/MyWorkScreen.tsx`):
+   - Bid-linked local folders, file picker, checklist review, and storage state.
+   - Keeps business documents on the device until the user chooses to continue on GeM.
+3. **Official portal workspace** (`screens/OfficialPortalScreen.tsx`):
+   - Opens official GeM login and public pages through the device browser.
+   - Keeps credentials, OTPs, cookies, private history, and final submission inside GeM.
 
 ## Public live bids and document preparation
 
@@ -40,13 +40,21 @@ This is still a preparation workspace, not an official GeM account mirror or upl
 
 ## Official GeM Handoff
 
-Phase 3 adds a controlled bridge to the real GeM workflow:
+The companion provides a controlled bridge to the real GeM workflow:
 
 - My Work records which bid and local documents were prepared when the user opens the official GeM portal.
 - The user completes GeM login, MFA, document upload, and final submission in the official portal.
 - The handoff record only records that the official bid page was opened; it does not verify submission.
 
 Direct authenticated GeM uploads remain behind an approved GeM API/SSO integration contract. The app does not automate MFA, capture portal cookies, replay browser sessions, or claim that a document reached GeM.
+
+## Phase 4: Official-style visual system
+
+The UI uses a compact, information-first visual language aligned with the public GeM portal:
+
+- Government blue, neutral grey surfaces, tricolor micro-accent, and restrained status colors.
+- Square-edged cards, compact controls, dense metadata, and plain text labels instead of emoji-heavy dashboard decoration.
+- Clear separation between public feed data, local preparation state, and official account actions.
 
 ## Documentation References
 

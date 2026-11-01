@@ -522,7 +522,7 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                 {/* MSE Statutory Benefit Notice */}
                 <View style={[styles.benefitNotice, { backgroundColor: colors.successTint }]}>
                   <Text style={[styles.benefitTitle, { color: colors.success }]}>
-                    🏛️ Verified MSE Statutory Privileges
+                    Verified MSE statutory privileges
                   </Text>
                   <Text style={[styles.benefitDesc, { color: colors.textPrimary }]}>
                     • 100% EMD Exemption on all eligible public procurement tenders.{'\n'}

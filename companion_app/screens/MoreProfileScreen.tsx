@@ -22,11 +22,13 @@ import { StatusBadge } from '../components/SharedUI';
 export interface MoreProfileScreenProps {
   onNavigateTab: (tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'HELP' | 'REG_BUYER' | 'REG_SELLER') => void;
   onOpenPortfolio?: () => void;
+  onOpenOfficialPortal?: () => void;
 }
 
 export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onNavigateTab,
   onOpenPortfolio,
+  onOpenOfficialPortal,
 }) => {
   const { colors, fontMultiplier, isDark, toggleColorMode, fontScale, setFontScale } = useTheme();
   return (
@@ -72,13 +74,27 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Pressable
           style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>G</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Official GeM workspace</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Login, 2FA, bidding and account records</Text>
+          </View>
+          <StatusBadge label="GeM" tone="success" />
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
           onPress={() => {
             if (onOpenPortfolio) onOpenPortfolio();
             else onNavigateTab('PORTAL');
           }}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
-            <Text style={styles.menuIconEmoji}>📊</Text>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>D</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Document preparation</Text>
@@ -92,7 +108,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => onNavigateTab('ORDERS')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.violetTint }]}>
-            <Text style={styles.menuIconEmoji}>📑</Text>
+            <Text style={[styles.menuIconText, { color: colors.violet }]}>C</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Contracts &amp; CRAC</Text>
@@ -106,7 +122,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => Alert.alert('Saved items', 'Saved-item persistence is not connected yet.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.warningTint }]}>
-            <Text style={styles.menuIconEmoji}>★</Text>
+            <Text style={[styles.menuIconText, { color: colors.warning }]}>S</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Saved Items &amp; Watchlist</Text>
@@ -120,7 +136,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => Alert.alert('Notifications', 'Refresh the public feed from the Bids tab. Account notifications require GeM integration.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
-            <Text style={styles.menuIconEmoji}>🔔</Text>
+            <Text style={[styles.menuIconText, { color: colors.success }]}>!</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Notifications &amp; Corrigenda</Text>
@@ -141,7 +157,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => Alert.alert('Account connection', 'Role and account details will appear after an approved GeM integration is available.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
-            <Text style={styles.menuIconEmoji}>🔄</Text>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>↻</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Switch Role</Text>
@@ -155,7 +171,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => onNavigateTab('REG_BUYER')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
-            <Text style={styles.menuIconEmoji}>🏛️</Text>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>B</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Buyer Registration</Text>
@@ -169,7 +185,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => onNavigateTab('REG_SELLER')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
-            <Text style={styles.menuIconEmoji}>🛡️</Text>
+            <Text style={[styles.menuIconText, { color: colors.success }]}>K</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Seller / MSE KYC</Text>
@@ -183,7 +199,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={() => onNavigateTab('HELP')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
-            <Text style={styles.menuIconEmoji}>❓</Text>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>?</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Help &amp; Support</Text>
@@ -198,7 +214,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           onPress={toggleColorMode}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
-            <Text style={styles.menuIconEmoji}>{isDark ? '☀️' : '🌙'}</Text>
+          <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>{isDark ? 'L' : 'D'}</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>
@@ -211,7 +227,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
 
         <Pressable style={styles.menuItem} onPress={() => Alert.alert('Account connection', 'There is no app session to sign out of. GeM authentication happens on the official portal.')}>
           <View style={[styles.menuIconBox, { backgroundColor: colors.dangerTint }]}>
-            <Text style={styles.menuIconEmoji}>🚪</Text>
+          <Text style={[styles.menuIconText, { color: colors.danger }]}>↪</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.danger, fontWeight: '700' }]}>Official account session</Text>
@@ -243,7 +259,7 @@ const styles = StyleSheet.create({
   avatarCircle: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -287,13 +303,14 @@ const styles = StyleSheet.create({
   menuIconBox: {
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  menuIconEmoji: {
-    fontSize: 18,
+  menuIconText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   menuTextCol: {
     flex: 1,

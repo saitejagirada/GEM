@@ -214,7 +214,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
         >
           <CompactChip
             label="Filters"
-            icon="⚙️"
+            icon="≡"
             selected={showFilterModal}
             onPress={() => setShowFilterModal(true)}
           />
@@ -279,7 +279,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
             </View>
           ) : isOffline ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={styles.emptyEmoji}>!</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Contracts Available (Offline)</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Unable to load executed contracts from GeM portal. Please check your internet connection and try again.
@@ -292,7 +292,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
             </View>
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📑</Text>
+              <Text style={styles.emptyEmoji}>C</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Account contracts are not connected</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Public contract discovery cannot show your private executed orders, CRAC status, PFMS details, or payment history. Sign in on GeM to view those records.

@@ -46,7 +46,7 @@ export const SearchField: React.FC<SearchFieldProps> = ({
         style,
       ]}
     >
-      <Text style={[styles.searchIcon, { color: colors.textSecondary }]}>🔍</Text>
+      <Text style={[styles.searchIcon, { color: colors.textSecondary }]}>⌕</Text>
       <TextInput
         style={[
           styles.searchInput,
@@ -598,7 +598,7 @@ const styles = StyleSheet.create({
   badge: {
     height: 24,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: DESIGN_TOKENS.inputRadius,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -682,8 +682,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: DESIGN_TOKENS.cardRadius,
+    borderTopRightRadius: DESIGN_TOKENS.cardRadius,
     borderTopWidth: 1,
     maxHeight: '75%',
     paddingBottom: 24,

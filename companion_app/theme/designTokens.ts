@@ -30,76 +30,77 @@ export interface ThemeColors {
 }
 
 export const DESIGN_TOKENS = {
-  cardRadius: 16,
-  inputRadius: 10,
-  buttonRadius: 10,
-  chipRadius: 999,
+  // GeM's public portal is dense, square-edged, and information-first.
+  cardRadius: 8,
+  inputRadius: 4,
+  buttonRadius: 4,
+  chipRadius: 4,
   borderWidth: 1,
-  headerHeight: 56,
-  bottomNavHeight: 64,
+  headerHeight: 54,
+  bottomNavHeight: 60,
   touchTargetMin: 44,
   unit: 4,
-  pagePaddingMobile: 16,
+  pagePaddingMobile: 14,
 };
 
 export const LIGHT_THEME: ThemeColors = {
-  primary: '#174EA6',          // NotebookLM-inspired deep crisp blue
-  primaryDark: '#123B70',
-  primaryLight: '#38BDF8',
-  primaryTint: '#E8F1FF',
-  saffron: '#FF9933',           // National Saffron Accent
-  emerald: '#16834A',           // Success green
-  crimson: '#C62828',           // Danger crimson
-  background: '#F7F9FC',        // Clean bright light grey-blue canvas
+  primary: '#0B4F71',          // GeM-style government blue
+  primaryDark: '#063D59',
+  primaryLight: '#4F92B5',
+  primaryTint: '#EAF2F6',
+  saffron: '#F58220',           // National Saffron Accent
+  emerald: '#0B7A3B',           // Government green
+  crimson: '#B3261E',           // Accessible alert red
+  background: '#F3F5F7',        // Neutral portal canvas
   surface: '#FFFFFF',
-  surfaceSubtle: '#F1F5FB',
+  surfaceSubtle: '#F7F8F9',
   surfaceElevated: '#FFFFFF',
-  border: '#DCE5F0',
-  borderSubtle: '#E2E8F0',
-  textPrimary: '#14233B',       // Slate navy
-  textSecondary: '#64748B',
-  textMuted: '#94A3B8',
+  border: '#CDD5DC',
+  borderSubtle: '#E2E6EA',
+  textPrimary: '#24313D',       // Portal charcoal
+  textSecondary: '#596773',
+  textMuted: '#7B8791',
   textInverse: '#FFFFFF',
-  cardShadow: 'rgba(23, 78, 166, 0.06)',
-  success: '#16834A',
-  successTint: '#E7F8EE',
-  warning: '#B96A0B',
-  warningTint: '#FFF4DB',
-  danger: '#C62828',
-  dangerTint: '#FDECEC',
-  violet: '#7048C8',
-  violetTint: '#F0EAFE',
-  orange: '#F28C28',
-  orangeTint: '#FFF0DE',
+  cardShadow: 'rgba(15, 52, 72, 0.08)',
+  success: '#0B7A3B',
+  successTint: '#E8F4EC',
+  warning: '#9A5B00',
+  warningTint: '#FFF4DF',
+  danger: '#B3261E',
+  dangerTint: '#FBEAE8',
+  violet: '#49627A',
+  violetTint: '#EDF1F4',
+  orange: '#B85C00',
+  orangeTint: '#FFF0DF',
 };
 
 export const DARK_THEME: ThemeColors = {
-  primary: '#38BDF8',          // High-contrast Cyan in dark mode
-  primaryDark: '#0284C7',
-  primaryLight: '#7DD3FC',
-  primaryTint: 'rgba(56, 189, 248, 0.15)',
-  saffron: '#FBBF24',
-  emerald: '#4ADE80',
-  crimson: '#F87171',
-  background: '#0B132B',        // Deep space midnight
-  surface: '#1C2541',           // Elevated slate blue
-  surfaceSubtle: '#222F55',
-  surfaceElevated: '#2A3A69',
-  border: '#334155',
-  borderSubtle: '#475569',
-  textPrimary: '#F8FAFC',
-  textSecondary: '#E2E8F0',
-  textMuted: '#94A3B8',
-  textInverse: '#0B132B',
-  cardShadow: 'rgba(0, 0, 0, 0.4)',
-  success: '#4ADE80',
-  successTint: 'rgba(74, 222, 128, 0.15)',
-  warning: '#FBBF24',
-  warningTint: 'rgba(251, 191, 36, 0.15)',
-  danger: '#F87171',
-  dangerTint: 'rgba(248, 113, 113, 0.15)',
-  violet: '#A78BFA',
-  violetTint: 'rgba(167, 139, 250, 0.15)',
-  orange: '#FB923C',
-  orangeTint: 'rgba(251, 146, 60, 0.15)',
+  primary: '#6FB0D0',
+  primaryDark: '#4F92B5',
+  primaryLight: '#A9D1E3',
+  primaryTint: 'rgba(111, 176, 208, 0.16)',
+  saffron: '#F6A24A',
+  emerald: '#65C58A',
+  crimson: '#F28B82',
+  background: '#172127',
+  surface: '#202D35',
+  surfaceSubtle: '#263740',
+  surfaceElevated: '#2D414C',
+  border: '#40535E',
+  borderSubtle: '#344750',
+  textPrimary: '#F2F5F7',
+  textSecondary: '#C8D1D6',
+  textMuted: '#9AAAB3',
+  textInverse: '#172127',
+  cardShadow: 'rgba(0, 0, 0, 0.28)',
+  success: '#65C58A',
+  successTint: 'rgba(101, 197, 138, 0.16)',
+  warning: '#F6C56C',
+  warningTint: 'rgba(246, 197, 108, 0.16)',
+  danger: '#F28B82',
+  dangerTint: 'rgba(242, 139, 130, 0.16)',
+  violet: '#A9C2D4',
+  violetTint: 'rgba(169, 194, 212, 0.14)',
+  orange: '#F6A24A',
+  orangeTint: 'rgba(246, 162, 74, 0.16)',
 };

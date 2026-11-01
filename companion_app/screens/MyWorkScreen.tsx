@@ -31,9 +31,10 @@ type PreparationSection = 'LIVE' | 'DOCUMENTS';
 interface MyWorkScreenProps {
   availableBids: DeconstructedBidDoc[];
   initialBidNumber?: string;
+  onOpenOfficialPortal?: () => void;
 }
 
-export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initialBidNumber }) => {
+export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initialBidNumber, onOpenOfficialPortal }) => {
   const { colors, fontMultiplier } = useTheme();
   const [section, setSection] = useState<PreparationSection>('LIVE');
   const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);
@@ -214,17 +215,17 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
         <Text style={[styles.pageTitle, { color: colors.textPrimary, fontSize: 24 * fontMultiplier }]}>Document preparation</Text>
         <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>Choose a live bid, assemble the response files, review the checklist, and continue on the official GeM portal.</Text>
 
-        <View style={[styles.summaryCard, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-          <Text style={[styles.summaryEyebrow, { color: colors.textInverse }]}>PUBLIC LIVE FEED</Text>
-          <Text style={[styles.summaryTitle, { color: colors.textInverse }]}>{availableBids.length} live bid{availableBids.length === 1 ? '' : 's'} available</Text>
+        <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border, borderTopColor: colors.saffron }]}>
+          <Text style={[styles.summaryEyebrow, { color: colors.primary }]}>PUBLIC LIVE FEED</Text>
+          <Text style={[styles.summaryTitle, { color: colors.textPrimary }]}>{availableBids.length} live bid{availableBids.length === 1 ? '' : 's'} available</Text>
           <View style={styles.summaryMetrics}>
             <View style={styles.summaryMetric}>
-              <Text style={[styles.summaryMetricValue, { color: colors.textInverse }]}>{documents.length}</Text>
-              <Text style={[styles.summaryMetricLabel, { color: colors.textInverse }]}>local files</Text>
+              <Text style={[styles.summaryMetricValue, { color: colors.primary }]}>{documents.length}</Text>
+              <Text style={[styles.summaryMetricLabel, { color: colors.textSecondary }]}>local files</Text>
             </View>
             <View style={styles.summaryMetric}>
-              <Text style={[styles.summaryMetricValue, { color: colors.textInverse }]}>{linkedDocuments.length}</Text>
-              <Text style={[styles.summaryMetricLabel, { color: colors.textInverse }]}>for selected bid</Text>
+              <Text style={[styles.summaryMetricValue, { color: colors.primary }]}>{linkedDocuments.length}</Text>
+              <Text style={[styles.summaryMetricLabel, { color: colors.textSecondary }]}>for selected bid</Text>
             </View>
           </View>
         </View>
@@ -317,6 +318,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
                 </View>
                 <Text style={[styles.nextStepText, { color: colors.textSecondary }]}>This app does not receive your GeM password, OTP, session cookie, or official submission confirmation.</Text>
                 <PrimaryButton label="Open official GeM bid" onPress={openOfficialPortal} style={styles.fullButton} />
+                <SecondaryButton label="Open official GeM workspace" onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : Linking.openURL('https://ui.gem.gov.in/login'))} style={styles.fullButton} />
               </View>
             ) : null}
           </View>
@@ -331,7 +333,7 @@ const styles = StyleSheet.create({
   content: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 40 },
   pageTitle: { fontWeight: '800', letterSpacing: -0.4, marginTop: 8 },
   pageSubtitle: { fontSize: 13, lineHeight: 19, marginTop: 4, marginBottom: 16 },
-  summaryCard: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: DESIGN_TOKENS.borderWidth, padding: 16, marginBottom: 16 },
+  summaryCard: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: DESIGN_TOKENS.borderWidth, borderTopWidth: 3, padding: 16, marginBottom: 16 },
   summaryEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   summaryTitle: { fontSize: 18, fontWeight: '800', marginTop: 5 },
   summaryMetrics: { flexDirection: 'row', gap: 18, marginTop: 18 },

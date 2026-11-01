@@ -193,14 +193,14 @@ export const AuctionsHubScreen: React.FC = () => {
             </View>
           ) : isOffline ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📡</Text>
+              <Text style={styles.emptyEmoji}>!</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Public auction feed unavailable</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Check your internet connection and try again. No demo auction data is shown.</Text>
               <PrimaryButton label="Retry connection" onPress={loadLiveAuctions} style={{ marginTop: 14 }} />
             </View>
           ) : filteredReverseAuctions.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>⚡</Text>
+              <Text style={styles.emptyEmoji}>RA</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No active reverse auctions found</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Try another search or refresh the public GeM feed.</Text>
             </View>
@@ -233,7 +233,7 @@ export const AuctionsHubScreen: React.FC = () => {
         {activeTab === 'Forward e-Scrap' && (
           filteredForwardLots.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>↗</Text>
+              <Text style={styles.emptyEmoji}>FA</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No public forward-auction records loaded</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>This app does not seed auction lots or simulate bid placement. Use the official portal for current lots and authenticated bidding.</Text>
               <SecondaryButton label="Open official forward auctions ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 14 }} />

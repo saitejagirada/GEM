@@ -428,7 +428,7 @@ export const MarketplaceScreen: React.FC = () => {
           ) : (
             <View style={[styles.gridThumbnailFallback, { backgroundColor: colors.surfaceSubtle }]}>
               <Text style={styles.gridThumbnailEmoji}>
-                {item.type === 'SERVICE' ? '🛠️' : '📦'}
+                {item.type === 'SERVICE' ? 'S' : 'P'}
               </Text>
             </View>
           )}
@@ -588,7 +588,7 @@ export const MarketplaceScreen: React.FC = () => {
           hitSlop={8}
           onPress={() => setShowFilterModal(true)}
         >
-          <Text style={styles.filterActionIcon}>⚙️</Text>
+          <Text style={styles.filterActionIcon}>≡</Text>
         </Pressable>
       </View>
 
@@ -633,7 +633,7 @@ export const MarketplaceScreen: React.FC = () => {
           onPress={() => setIsGfrExpanded((prev) => !prev)}
         >
           <View style={styles.gfrHeaderTitleRow}>
-            <Text style={styles.gfrBadgeIcon}>⚖️</Text>
+            <Text style={styles.gfrBadgeIcon}>GFR</Text>
             <Text style={[styles.gfrTitleText, { color: colors.textPrimary }]}>
               GFR 149 Legal Procurement Guide
             </Text>
@@ -676,7 +676,7 @@ export const MarketplaceScreen: React.FC = () => {
   );
 
   // ==========================================
-  // RENDER: CATEGORY EXPLORER VIEW (AMAZON STYLE)
+  // RENDER: CATEGORY EXPLORER VIEW
   // ==========================================
   const renderCategoryExplorer = () => (
     <ScrollView
@@ -700,7 +700,7 @@ export const MarketplaceScreen: React.FC = () => {
           unstable_pressDelay={0}
           onPress={handleDirectProductSearch}
         >
-          <Text style={styles.directSearchIcon}>🔍</Text>
+          <Text style={styles.directSearchIcon}>⌕</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.directSearchTitle}>
               Search live GeM products for &quot;{searchQuery}&quot;
@@ -936,7 +936,7 @@ export const MarketplaceScreen: React.FC = () => {
               </View>
             ) : isOffline ? (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>📡</Text>
+                <Text style={styles.emptyEmoji}>!</Text>
                 <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Products Available (Offline)</Text>
                 <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                   Unable to connect to GeM live marketplace. Please check your internet connection and try again.
@@ -949,7 +949,7 @@ export const MarketplaceScreen: React.FC = () => {
               </View>
             ) : (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>🔍</Text>
+                <Text style={styles.emptyEmoji}>⌕</Text>
                 <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching items found</Text>
                 <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                   Try clearing search terms or selecting another category.
@@ -965,7 +965,7 @@ export const MarketplaceScreen: React.FC = () => {
         />
       )}
 
-      {/* Floating Bottom Cart Bar (Instamart & Blinkit Style) */}
+      {/* Floating bottom cart summary */}
       {totalCartCount > 0 && (
         <View style={[styles.floatingCartBar, { backgroundColor: colors.primary }]}>
           <View style={styles.cartBarInfo}>
