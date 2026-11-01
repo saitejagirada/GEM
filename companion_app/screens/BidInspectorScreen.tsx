@@ -10,8 +10,7 @@ import {
   Share,
   Linking,
 } from 'react-native';
-import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
-import { UserAgentService } from '../services/UserAgentService';
+import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
@@ -20,73 +19,25 @@ interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
   visible: boolean;
   onClose: () => void;
-  userProfile: UserAgentProfile;
-  onAddToParticipated?: (bid: DeconstructedBidDoc) => void;
+  onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
 }
 
 export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   bid,
   visible,
   onClose,
-  userProfile,
-  onAddToParticipated,
+  onPrepareDocuments,
 }) => {
   if (!bid) return null;
 
-  const safeUserProfile = userProfile || {
-    id: 'default-profile',
-    organizationName: 'Verified Enterprise',
-    msmeCategory: 'MICRO',
-    annualTurnoverInr: 5000000,
-    yearsExperience: 3,
-    productCategories: ['Solar', 'LED', 'IT', 'Computer', 'Furniture'],
-    targetStates: ['Delhi', 'Uttar Pradesh', 'Maharashtra'],
-    isOem: false,
-    hasUdyamCertificate: true,
-    acceptedOrders: [],
-  };
-
-  const evaluation = UserAgentService.evaluateBid(safeUserProfile, bid);
   const fundamentals = BidDocService.getFundamentalsSummary(bid);
   const risks = BidDocService.assessTenderRisks(bid);
 
-  const requiredDocuments = Array.isArray(bid.requiredDocuments) && bid.requiredDocuments.length > 0
-    ? bid.requiredDocuments
-    : [
-        'Udyam Registration Certificate (MSE)',
-        'CA Audited Turnover Certificate (3 FY)',
-        'OEM Authorization Form (MAF)',
-        'Technical Compliance Sheet',
-      ];
+  const requiredDocuments = Array.isArray(bid.requiredDocuments) ? bid.requiredDocuments : [];
+  const boqItems = Array.isArray(bid.boqItems) ? bid.boqItems : [];
+  const consignees = Array.isArray(bid.consignees) ? bid.consignees : [];
 
-  const boqItems = Array.isArray(bid.boqItems) && bid.boqItems.length > 0
-    ? bid.boqItems
-    : [
-        {
-          itemTitle: bid.title || 'Procurement Package Item',
-          quantity: bid.quantity || 1,
-          unit: bid.type === 'SERVICE' ? 'Months' : 'Units',
-          specsSummary: `Official GeM specification compliant with ${bid.department || 'Government of India'} requirements`,
-        },
-      ];
-
-  const consignees = Array.isArray(bid.consignees) && bid.consignees.length > 0
-    ? bid.consignees
-    : [
-        {
-          location: `${bid.department || 'Central Stores Depot'}, Regional HQ`,
-          state: 'Delhi',
-          pincode: '110001',
-          quantity: bid.quantity || 1,
-          reportingOfficer: 'Consignee Officer',
-        },
-      ];
-
-  const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({
-    'Udyam Registration Certificate (MSE)': true,
-    'Udyam Registration Certificate': true,
-    'Udyam MSE Exemption Certificate': true,
-  });
+  const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
 
   const toggleDoc = (docName: string) => {
     setCheckedDocs((prev) => ({
@@ -105,11 +56,12 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     }
   };
 
-  const handleAddPortfolio = () => {
-    if (onAddToParticipated) {
-      onAddToParticipated(bid);
+  const handlePrepareDocuments = () => {
+    if (onPrepareDocuments) {
+      onPrepareDocuments(bid);
+      return;
     }
-    Alert.alert('Tracked in History', `Bid ${bid.bidNumber} added to your Participated Submissions.`);
+    Alert.alert('Document preparation', 'Choose this bid from the document preparation workspace.');
   };
 
   const handleOpenDoc = () => {
@@ -188,7 +140,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerBidNum}>{bid.bidNumber}</Text>
-            <Text style={styles.headerSubtitle}>Zero-PDF Instant Fundamentals</Text>
+            <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
           </View>
           <TouchableOpacity style={styles.shareBtn} onPress={handleShare} accessibilityLabel="Share summary">
             <Text style={styles.shareBtnText}>📤</Text>
@@ -209,76 +161,6 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               <Text style={styles.cutoffBadgeText}>SUBMIT EARLY</Text>
             </View>
           </View>
-
-          {/* Eligibility Verdict Banner */}
-          <View
-            style={[
-              styles.verdictBanner,
-              evaluation.verdictTag === 'HIGH_MATCH' && styles.verdictHigh,
-              evaluation.verdictTag === 'MODERATE_MATCH' && styles.verdictModerate,
-              evaluation.verdictTag === 'DISQUALIFIED' && styles.verdictDisqualified,
-            ]}
-          >
-            <View style={styles.verdictTopRow}>
-              <Text style={styles.verdictPill}>
-                {evaluation.verdictTag === 'HIGH_MATCH'
-                  ? '★ ELIGIBLE TO BID'
-                  : evaluation.verdictTag === 'MODERATE_MATCH'
-                  ? '⚠ CONDITIONAL MATCH'
-                  : '✕ CRITERIA SHORTFALL'}
-              </Text>
-              <Text style={styles.matchScoreText}>{evaluation.matchScore}% FIT</Text>
-            </View>
-            <Text style={styles.verdictSummary}>{evaluation.verdictSummary}</Text>
-          </View>
-
-          {/* Reseller OEM Authorization (MAF) Mandatory Warning */}
-          {userProfile && !userProfile.isOem && (
-            <View style={styles.oemWarningCard}>
-              <Text style={styles.oemWarningIcon}>⚠️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.oemWarningTitle}>OEM Authorization (MAF) Mandatory for Resellers</Text>
-                <Text style={styles.oemWarningText}>
-                  Your profile is registered as Reseller. Ensure you upload a valid Manufacturer Authorization Form (MAF), or technical scrutiny will disqualify this bid immediately.
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* CVC Past Performance Qualification Card based on Accepted Orders */}
-          {evaluation.pastExperienceMatch && (
-            <View style={styles.pastPerfCard}>
-              <View style={styles.pastPerfHeader}>
-                <Text style={styles.pastPerfBadge}>
-                  {evaluation.pastExperienceMatch.qualifiesCriteria
-                    ? '★ CVC PAST PERFORMANCE QUALIFIED'
-                    : '⚠ EXPERIENCE CRITERIA SHORTFALL'}
-                </Text>
-                <Text style={styles.pastPerfStatus}>CRAC Verified</Text>
-              </View>
-              <Text style={styles.pastPerfDesc}>
-                {evaluation.pastExperienceMatch.ruleDescription}
-              </Text>
-              {evaluation.pastExperienceMatch.matchingOrderNumber && (
-                <View style={styles.pastPerfFooter}>
-                  <Text style={styles.pastPerfContract}>
-                    Verified GeM Order: {evaluation.pastExperienceMatch.matchingOrderNumber}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.copyProofBtn}
-                    onPress={() =>
-                      Alert.alert(
-                        'CRAC Proof Copied',
-                        `Contract: ${evaluation.pastExperienceMatch?.matchingOrderNumber}\nAmount: ₹${((evaluation.pastExperienceMatch?.matchingOrderValueInr || 0) / 100000).toFixed(1)} Lakhs\nStatus: CRAC Accepted & PFMS UTR Cleared`
-                      )
-                    }
-                  >
-                    <Text style={styles.copyProofBtnText}>Copy Proof 📋</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
 
           {/* Tender Title & Ministry */}
           <View style={styles.card}>
@@ -334,18 +216,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             </View>
           )}
 
-          {/* Expected Winning L1 Benchmark Range */}
-          <View style={styles.benchmarkCard}>
-            <View style={styles.benchmarkHeader}>
-              <Text style={styles.benchmarkLabel}>EXPECTED WINNING L1 BENCHMARK</Text>
-              <Text style={styles.benchmarkHint}>AI Predictive Range</Text>
-            </View>
-            <Text style={styles.benchmarkRange}>
-              ₹{(((evaluation?.expectedWinningBidRange?.minInr || ((bid.estimatedBidValueInr || 2500000) * 0.82))) / 100000).toFixed(2)}L – ₹
-              {(((evaluation?.expectedWinningBidRange?.maxInr || ((bid.estimatedBidValueInr || 2500000) * 0.94))) / 100000).toFixed(2)}L
-            </Text>
-            <Text style={styles.benchmarkSub}>
-              Based on historical {bid.category || 'procurement'} clearing ratios (82%–94% of budget).
+          <View style={styles.card}>
+            <Text style={styles.sectionHeading}>Commercial guidance</Text>
+            <Text style={styles.notPublishedText}>
+              Bid ranking, L1 benchmarks, seller eligibility, and account-specific participation data are not available in the public feed. Confirm commercial terms on the official GeM document.
             </Text>
           </View>
 
@@ -378,12 +252,12 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               <View style={styles.gridCell}>
                 <Text style={styles.cellLabel}>e-PBG Bank Guarantee</Text>
                 <Text style={[styles.cellValueSecondary, { color: '#B45309' }]}>
-                  {bid.epbgPercentage || 3}% (₹{(((bid.estimatedBidValueInr || 2850000) * (bid.epbgPercentage || 3)) / 10000000).toFixed(2)}L)
+                  {bid.epbgPercentage === undefined ? 'Not published' : `${bid.epbgPercentage}%`}
                 </Text>
               </View>
               <View style={styles.gridCell}>
                 <Text style={styles.cellLabel}>Splitting Rule</Text>
-                <Text style={styles.cellValueSecondary}>{bid.splittingRatio || '100% to L1'}</Text>
+                <Text style={styles.cellValueSecondary}>{bid.splittingRatio || 'Not published'}</Text>
               </View>
             </View>
           </View>
@@ -402,8 +276,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
           {/* BOQ Technical Scope */}
           <View style={styles.card}>
-            <Text style={styles.sectionHeading}>BOQ &amp; Scope Breakdown ({boqItems.length} Items)</Text>
-            {boqItems.map((item, idx) => (
+            <Text style={styles.sectionHeading}>Published scope</Text>
+            {boqItems.length > 0 ? boqItems.map((item, idx) => (
               <View key={idx} style={styles.boqItemRow}>
                 <View style={styles.boqTopRow}>
                   <Text style={styles.boqItemTitle}>{item.itemTitle}</Text>
@@ -411,15 +285,15 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     {item.quantity} {item.unit}
                   </Text>
                 </View>
-                <Text style={styles.boqSpecsText}>{item.specsSummary}</Text>
+                {item.specsSummary ? <Text style={styles.boqSpecsText}>{item.specsSummary}</Text> : null}
               </View>
-            ))}
+            )) : <Text style={styles.notPublishedText}>Detailed scope is not included in the public listing. Open the official bid document before preparing a response.</Text>}
           </View>
 
           {/* Consignee Destinations */}
           <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Consignee Delivery Locations</Text>
-            {consignees.map((c, idx) => (
+            <Text style={styles.sectionHeading}>Delivery locations</Text>
+            {consignees.length > 0 ? consignees.map((c, idx) => (
               <View key={idx} style={styles.consigneeRow}>
                 <View style={styles.consigneeLeft}>
                   <Text style={styles.consigneeLocation}>{c.location}</Text>
@@ -430,18 +304,18 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   <Text style={styles.consigneeQty}>{c.quantity} Units</Text>
                 </View>
               </View>
-            ))}
+            )) : <Text style={styles.notPublishedText}>Consignee locations are not included in the public listing.</Text>}
           </View>
 
           {/* Interactive Document Readiness Checklist */}
           <View style={styles.card}>
             <View style={styles.checklistHeader}>
-              <Text style={styles.sectionHeading}>Required Document Checklist</Text>
+              <Text style={styles.sectionHeading}>Required document checklist</Text>
               <Text style={styles.checkRatio}>
-                {checkedCount}/{requiredDocuments.length} Ready
+                {requiredDocuments.length > 0 ? `${checkedCount}/${requiredDocuments.length} added` : 'Open official document'}
               </Text>
             </View>
-            {requiredDocuments.map((doc, idx) => {
+            {requiredDocuments.length > 0 ? requiredDocuments.map((doc, idx) => {
               const isChecked = !!checkedDocs[doc];
               return (
                 <TouchableOpacity
@@ -458,7 +332,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   </Text>
                 </TouchableOpacity>
               );
-            })}
+            }) : <Text style={styles.notPublishedText}>The public listing does not expose a document checklist. Confirm every requirement in the official GeM bid document.</Text>}
           </View>
         </ScrollView>
 
@@ -466,10 +340,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         <View style={styles.stickyFooter}>
           <TouchableOpacity
             style={styles.addPortfolioBtn}
-            onPress={handleAddPortfolio}
+            onPress={handlePrepareDocuments}
             activeOpacity={0.8}
           >
-            <Text style={styles.addPortfolioText}>+ Track in History</Text>
+            <Text style={styles.addPortfolioText}>Prepare documents</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.officialLinkBtn}
@@ -569,6 +443,7 @@ const styles = StyleSheet.create({
   benchmarkRange: { color: '#111827', fontSize: 22, fontWeight: '900', marginVertical: 4 },
   benchmarkSub: { color: '#4B5563', fontSize: 11, lineHeight: 15 },
   sectionHeading: { color: '#111827', fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  notPublishedText: { color: '#6B7280', fontSize: 12, lineHeight: 17 },
   grid2x2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridCell: {
     width: '48%',

@@ -280,7 +280,7 @@ export class SupabaseClient {
       if (params?.state) {
         const stateQuery = params.state.toLowerCase();
         filtered = filtered.filter((b) =>
-          b.consignees.some((c) => c.state.toLowerCase().includes(stateQuery))
+          (b.consignees ?? []).some((c) => c.state.toLowerCase().includes(stateQuery))
         );
       }
 
@@ -358,7 +358,7 @@ export class SupabaseClient {
     if (params?.state) {
       const stateQuery = params.state.toLowerCase();
       merged = merged.filter((b) =>
-        b.consignees.some((c) => c.state.toLowerCase().includes(stateQuery))
+        (b.consignees ?? []).some((c) => c.state.toLowerCase().includes(stateQuery))
       );
     }
     if (params?.bidType && params.bidType !== 'ALL') {
@@ -387,15 +387,15 @@ export class SupabaseClient {
 
       return {
         tender_id: match.bidNumber,
-        turnover_required: match.minAnnualTurnoverInr,
-        experience_years: match.yearsExperienceRequired,
-        delivery_period_days: match.deliveryPeriodDays,
-        epbg_percentage: match.epbgPercentage,
-        epbg_amount_inr: (match.estimatedBidValueInr ?? 0) * (match.epbgPercentage / 100),
-        oem_authorization_required: match.requiredDocuments.some((d) => d.toLowerCase().includes('oem')),
-        past_performance_percentage: match.pastPerformancePercentage,
-        required_documents: match.requiredDocuments,
-        technical_clauses: match.boqItems.map((item) => ({
+        turnover_required: match.minAnnualTurnoverInr ?? 0,
+        experience_years: match.yearsExperienceRequired ?? 0,
+        delivery_period_days: match.deliveryPeriodDays ?? 0,
+        epbg_percentage: match.epbgPercentage ?? 0,
+        epbg_amount_inr: (match.estimatedBidValueInr ?? 0) * ((match.epbgPercentage ?? 0) / 100),
+        oem_authorization_required: (match.requiredDocuments ?? []).some((d) => d.toLowerCase().includes('oem')),
+        past_performance_percentage: match.pastPerformancePercentage ?? 0,
+        required_documents: match.requiredDocuments ?? [],
+        technical_clauses: (match.boqItems ?? []).map((item) => ({
           clause: `${item.itemTitle}: ${item.specsSummary}`,
           mandatory: true,
         })),

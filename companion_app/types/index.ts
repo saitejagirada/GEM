@@ -227,22 +227,31 @@ export interface DeconstructedBidDoc {
   evaluationStage?: GeMEvaluationStage;
   isCancelled?: boolean;
   b_id?: string;
-  serviceDetails?: ServiceContractDetails;
+  serviceDetails?: ServiceContractDetails | null;
   estimatedBidValueInr?: number;
-  emdAmountInr: number;
-  isEmdExemptForMse: boolean;
-  epbgPercentage: number;
-  minAnnualTurnoverInr: number;
-  yearsExperienceRequired: number;
-  pastPerformancePercentage: number;
-  deliveryPeriodDays: number;
+  emdAmountInr?: number;
+  isEmdExemptForMse?: boolean;
+  epbgPercentage?: number;
+  minAnnualTurnoverInr?: number;
+  yearsExperienceRequired?: number;
+  pastPerformancePercentage?: number;
+  deliveryPeriodDays?: number;
   splittingRatio?: string; // e.g. "100% to L1" or "70:30 MSE"
   makeInIndiaClass?: MiiClass;
-  boqItems: BoqLineItem[];
-  consignees: ConsigneeDestination[];
-  requiredDocuments: string[];
+  boqItems?: BoqLineItem[];
+  consignees?: ConsigneeDestination[];
+  requiredDocuments?: string[];
   closingTimeUtc: string;
   docUrl: string;
+  /** Indicates which fields were actually present in the public GeM feed. */
+  publishedFields?: {
+    estimatedValue: boolean;
+    quantity: boolean;
+    requirements: boolean;
+    consignees: boolean;
+    commercialTerms: boolean;
+  };
+  source?: 'LIVE_OFFICIAL_PUBLIC_FEED' | 'TEST_FIXTURE';
 }
 
 // -------------------------------------------------------------------------

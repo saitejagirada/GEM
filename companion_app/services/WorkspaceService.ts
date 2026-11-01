@@ -61,11 +61,31 @@ export class WorkspaceService {
 
     return {
       bidNumber: participatedBid.bidNumber,
-      requiredCount: availableBid.requiredDocuments.length,
+      requiredCount: (availableBid.requiredDocuments ?? []).length,
       attachedCount: linkedNames.length,
       missingDocuments: result.missingDocs,
       isComplete: result.completed,
-      hasRequirements: availableBid.requiredDocuments.length > 0,
+      hasRequirements: (availableBid.requiredDocuments ?? []).length > 0,
+    };
+  }
+
+  public static getBidChecklist(
+    bid: DeconstructedBidDoc,
+    documents: WorkspaceDocument[]
+  ): WorkspaceChecklist {
+    const linkedNames = documents
+      .filter((document) => document.linkedBidNumber === bid.bidNumber)
+      .map((document) => document.name);
+    const requiredDocuments = Array.isArray(bid.requiredDocuments) ? bid.requiredDocuments : [];
+    const result = BidDocService.verifyChecklist(bid, linkedNames);
+
+    return {
+      bidNumber: bid.bidNumber,
+      requiredCount: requiredDocuments.length,
+      attachedCount: linkedNames.length,
+      missingDocuments: result.missingDocs,
+      isComplete: requiredDocuments.length > 0 && result.completed,
+      hasRequirements: requiredDocuments.length > 0,
     };
   }
 

@@ -91,17 +91,17 @@ export class UserAgentService {
 
     if (isEligible && matchScore >= 75) {
       verdictTag = 'HIGH_MATCH';
-      verdictSummary = `Strong match: Meets turnover (₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L) and experience requirements. ${
+      verdictSummary = `Strong match: Meets turnover (₹${((bid.minAnnualTurnoverInr ?? 0) / 100000).toFixed(1)}L) and experience requirements. ${
         isEmdExempt ? 'EMD is 100% waived for your MSE status.' : ''
       }`;
     } else if (isEligible || matchScore >= 50) {
       verdictTag = 'MODERATE_MATCH';
       const warnings = [];
       if (!turnoverEligible) {
-        warnings.push(`Turnover gap: requires ₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L`);
+        warnings.push(`Turnover gap: requires ₹${((bid.minAnnualTurnoverInr ?? 0) / 100000).toFixed(1)}L`);
       }
       if (!experienceEligible) {
-        warnings.push(`Requires ${bid.yearsExperienceRequired} yrs past experience`);
+        warnings.push(`Requires ${bid.yearsExperienceRequired ?? 0} yrs past experience`);
       }
       verdictSummary = warnings.length > 0 ? warnings.join('. ') : 'Good category match with delivery in target region.';
     } else {

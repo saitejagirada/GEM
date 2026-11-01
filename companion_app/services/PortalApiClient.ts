@@ -1,7 +1,7 @@
 /**
  * GeM Mobile Companion App - Portal API Client
- * Connects the mobile frontend to the official GeM Flask intelligence endpoints (http://localhost:5001/api/portal).
- * Implements an Offline-First design: gracefully falls back to cached fixtures if the server is offline or unreachable.
+ * Connects optional backend endpoints without presenting fixture rows as official
+ * account data. Public discovery falls back only to the current in-memory feed.
  */
 
 import type {
@@ -11,16 +11,8 @@ import type {
   ParticipatedBid,
   AcceptedOrder,
 } from '../types/index.ts';
-import {
-  MOCK_MARKET_PULSE,
-  MOCK_DAILY_BIDS,
-  MOCK_FORWARD_AUCTIONS,
-  MOCK_PARTICIPATED_BIDS,
-  MOCK_ACCEPTED_ORDERS,
-  DYNAMIC_ACCEPTED_ORDERS,
-} from '../fixtures/mockData.ts';
 import { GeMLiveSyncService } from './GeMLiveSyncService.ts';
-import { MOCK_MARKETPLACE_ITEMS, type MarketplaceItem } from './MarketplaceService.ts';
+import { MarketplaceService, type MarketplaceItem } from './MarketplaceService.ts';
 
 export class PortalApiClient {
   private static baseUrl = 'http://localhost:5001/api/portal';
@@ -86,7 +78,13 @@ export class PortalApiClient {
   }
 
   public static async getMarketPulse(): Promise<MarketPulseStats> {
-    return this.safeFetch<MarketPulseStats>('/market-pulse', MOCK_MARKET_PULSE);
+    return this.safeFetch<MarketPulseStats>('/market-pulse', {
+      totalBidsToday: 0,
+      liveReverseAuctions: 0,
+      liveForwardAuctions: 0,
+      closingIn24Hours: 0,
+      zeroEmdBids: 0,
+    });
   }
 
   public static async getLiveBids(pages: number = 3): Promise<DeconstructedBidDoc[]> {
@@ -107,16 +105,16 @@ export class PortalApiClient {
   }
 
   public static async getBidFundamentals(bidNumber: string): Promise<DeconstructedBidDoc | null> {
-    const fallback = GeMLiveSyncService.getBidById(bidNumber) || MOCK_DAILY_BIDS.find((b) => b.bidNumber === bidNumber) || null;
+    const fallback = GeMLiveSyncService.getBidById(bidNumber) || null;
     return this.safeFetch<DeconstructedBidDoc | null>(`/bid/${encodeURIComponent(bidNumber)}/fundamentals`, fallback);
   }
 
   public static async getForwardAuctions(): Promise<ForwardAuctionLot[]> {
-    return this.safeFetch<ForwardAuctionLot[]>('/auctions?type=forward', MOCK_FORWARD_AUCTIONS);
+    return this.safeFetch<ForwardAuctionLot[]>('/auctions?type=forward', []);
   }
 
   public static async getPortfolio(): Promise<ParticipatedBid[]> {
-    return this.safeFetch<ParticipatedBid[]>('/portfolio', MOCK_PARTICIPATED_BIDS);
+    return this.safeFetch<ParticipatedBid[]>('/portfolio', []);
   }
 
   public static async getProducts(params?: { category?: string; q?: string }): Promise<MarketplaceItem[]> {
@@ -125,11 +123,11 @@ export class PortalApiClient {
     if (params?.q) query.append('q', params.q);
     const qs = query.toString();
     const endpoint = `/products${qs ? `?${qs}` : ''}`;
-    return this.safeFetch<MarketplaceItem[]>(endpoint, MOCK_MARKETPLACE_ITEMS);
+    return this.safeFetch<MarketplaceItem[]>(endpoint, MarketplaceService.getItems({ category: params?.category, query: params?.q }));
   }
 
   public static async getContracts(): Promise<AcceptedOrder[]> {
-    return this.safeFetch<AcceptedOrder[]>('/contracts', DYNAMIC_ACCEPTED_ORDERS);
+    return this.safeFetch<AcceptedOrder[]>('/contracts', []);
   }
 
   public static async addToPortfolio(bid: DeconstructedBidDoc): Promise<boolean> {

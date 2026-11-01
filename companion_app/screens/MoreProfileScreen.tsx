@@ -7,7 +7,7 @@
  *   Accessibility (Dark mode & font scale), Sign out
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -29,25 +29,6 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onOpenPortfolio,
 }) => {
   const { colors, fontMultiplier, isDark, toggleColorMode, fontScale, setFontScale } = useTheme();
-  const [currentRole, setCurrentRole] = useState<'Government Buyer' | 'Verified Seller (MSE)'>('Government Buyer');
-
-  const handleSwitchRole = () => {
-    const nextRole = currentRole === 'Government Buyer' ? 'Verified Seller (MSE)' : 'Government Buyer';
-    setCurrentRole(nextRole);
-    Alert.alert('Role Switched', `Active session switched to: ${nextRole}`);
-  };
-
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out from GeM Mobile?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => Alert.alert('Signed Out', 'You have been signed out.') },
-      ]
-    );
-  };
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -70,13 +51,13 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
 
         <View style={styles.profileMeta}>
           <Text style={[styles.profileName, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-            Sai Teja
+            GeM companion
           </Text>
           <Text style={[styles.profileRole, { color: colors.primary }]}>
-            {currentRole}
+            Public GeM feed
           </Text>
           <Text style={[styles.profileDept, { color: colors.textSecondary }]}>
-            Department of Expenditure • MoF
+            Official account data is not connected
           </Text>
         </View>
 
@@ -100,8 +81,8 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
             <Text style={styles.menuIconEmoji}>📊</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Work</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Track bids, checklists and local documents</Text>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Document preparation</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Prepare files for a live public bid</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
         </Pressable>
@@ -122,7 +103,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
 
         <Pressable
           style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => Alert.alert('Saved Items', 'You have 4 bookmarked bids and 2 saved products.')}
+          onPress={() => Alert.alert('Saved items', 'Saved-item persistence is not connected yet.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.warningTint }]}>
             <Text style={styles.menuIconEmoji}>★</Text>
@@ -136,7 +117,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
 
         <Pressable
           style={styles.menuItem}
-          onPress={() => Alert.alert('Notifications', 'No pending corrigenda or urgent bid deadlines.')}
+          onPress={() => Alert.alert('Notifications', 'Refresh the public feed from the Bids tab. Account notifications require GeM integration.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
             <Text style={styles.menuIconEmoji}>🔔</Text>
@@ -157,14 +138,14 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Pressable
           style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
-          onPress={handleSwitchRole}
+          onPress={() => Alert.alert('Account connection', 'Role and account details will appear after an approved GeM integration is available.')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
             <Text style={styles.menuIconEmoji}>🔄</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Switch Role</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Currently: {currentRole}</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>No authenticated GeM account</Text>
           </View>
           <StatusBadge label="SWITCH" tone="neutral" />
         </Pressable>
@@ -228,14 +209,13 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           <StatusBadge label={isDark ? 'DARK' : 'LIGHT'} tone="neutral" />
         </Pressable>
 
-        {/* Sign Out */}
-        <Pressable style={styles.menuItem} onPress={handleSignOut}>
+        <Pressable style={styles.menuItem} onPress={() => Alert.alert('Account connection', 'There is no app session to sign out of. GeM authentication happens on the official portal.')}>
           <View style={[styles.menuIconBox, { backgroundColor: colors.dangerTint }]}>
             <Text style={styles.menuIconEmoji}>🚪</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.danger, fontWeight: '700' }]}>Sign Out</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Log out of active session</Text>
+            <Text style={[styles.menuTitle, { color: colors.danger, fontWeight: '700' }]}>Official account session</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Managed by GeM, not this app</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.danger }]}>›</Text>
         </Pressable>

@@ -42,16 +42,10 @@ import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { MyWorkScreen } from './screens/MyWorkScreen';
-import { SupabaseClient } from './services/SupabaseClient';
-import { WorkspaceStorage } from './services/WorkspaceStorage';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network.ts';
-import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type {
   DeconstructedBidDoc,
-  MarketPulseStats,
-  ParticipatedBid,
-  UserAgentProfile,
 } from './types/index';
 import type { MarketplaceCategory } from './services/MarketplaceService';
 
@@ -72,14 +66,13 @@ const MainAppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
   const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
   const [bids, setBids] = useState<DeconstructedBidDoc[]>([]);
-  const [userProfile, setUserProfile] = useState<UserAgentProfile>(MOCK_USER_PROFILE);
-  const [marketPulse, setMarketPulse] = useState<MarketPulseStats>(MOCK_MARKET_PULSE);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
 
   // Quick lookup modal
   const [showLookupModal, setShowLookupModal] = useState<boolean>(false);
   const [lookupInput, setLookupInput] = useState<string>('');
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
+  const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
 
   // Hardware Back Button Navigation Stack Manager
   useEffect(() => {
@@ -152,28 +145,9 @@ const MainAppContent: React.FC = () => {
         return;
       }
 
-      // 2. Calibrate and retrieve live synchronized portal bids
-      const serviceBids = GeMLiveSyncService.getLiveBids();
-      if (serviceBids && serviceBids.length > 0) {
-        setBids(serviceBids);
-      } else {
-        setBids([]);
-      }
-
-      // 3. Gracefully fetch profile and market pulse without cascading failures
-      try {
-        const profile = await SupabaseClient.getVendorProfile('usr-agent-001');
-        if (profile) setUserProfile(profile);
-      } catch {
-        // Safe profile default preserved
-      }
-
-      try {
-        const pulse = await SupabaseClient.getMarketPulse();
-        if (pulse) setMarketPulse(pulse);
-      } catch {
-        // Safe pulse default preserved
-      }
+      // 2. Fetch the current public bid listing from GeM. No fixture fallback is used.
+      await GeMLiveSyncService.syncFromPortal();
+      setBids(GeMLiveSyncService.getLiveBids());
     } catch {
       setBids([]);
     } finally {
@@ -204,15 +178,15 @@ const MainAppContent: React.FC = () => {
     if (found) {
       setSelectedBid(found);
     } else {
-      const fallbackBid = bids[0] || GeMLiveSyncService.getLiveBids()[0];
-      if (fallbackBid) {
-        setSelectedBid({
-          ...fallbackBid,
-          bidNumber: lookupInput.trim().toUpperCase(),
-        });
-      }
+      Alert.alert('Bid not found', 'That bid is not present in the latest public GeM feed. Refresh and try again.');
     }
   }, [bids, lookupInput]);
+
+  const openPreparation = useCallback((bid: DeconstructedBidDoc) => {
+    setSelectedBid(null);
+    setPreparationBidNumber(bid.bidNumber);
+    setSubScreen('PORTFOLIO');
+  }, []);
 
   const handleHomeNavigate = (target: string) => {
     if (target === 'MARKET') {
@@ -374,9 +348,9 @@ const MainAppContent: React.FC = () => {
               >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
-              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>My Work</Text>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Document preparation</Text>
             </View>
-            <MyWorkScreen availableBids={bids} />
+            <MyWorkScreen availableBids={bids} initialBidNumber={preparationBidNumber} />
           </View>
         )}
         {subScreen === 'REG_BUYER' && (
@@ -410,7 +384,6 @@ const MainAppContent: React.FC = () => {
             {activeTab === 'BIDS' && (
               <BidsHubScreen
                 bids={bids}
-                userProfile={userProfile}
                 onSyncLive={loadData}
                 isSyncing={isSyncing}
                 onInspectBid={(bid) => setSelectedBid(bid)}
@@ -537,23 +510,9 @@ const MainAppContent: React.FC = () => {
       {selectedBid && (
         <BidInspectorScreen
           bid={selectedBid}
-          userProfile={userProfile}
           visible={true}
           onClose={() => setSelectedBid(null)}
-          onAddToParticipated={(bid) => {
-            const participatedRecord: ParticipatedBid = {
-              bidNumber: bid.bidNumber,
-              itemTitle: bid.title,
-              department: bid.department,
-              quotedPriceInr: bid.estimatedBidValueInr || 2500000,
-              expectedL1BenchmarkInr: Math.round((bid.estimatedBidValueInr || 2500000) * 0.88),
-              submittedAtUtc: new Date().toISOString(),
-              stage: 'TECHNICAL_EVALUATION',
-              currentRank: 1,
-              corrigendumCount: 0,
-            };
-            void WorkspaceStorage.savePortfolioRecord(participatedRecord);
-          }}
+          onPrepareDocuments={openPreparation}
         />
       )}
     </SafeAreaView>

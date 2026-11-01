@@ -8,11 +8,11 @@ interface DataNoticeProps {
 
 /**
  * A consistent boundary between the companion app and official portal data.
- * The app can show local fixtures or synced records, but it must not imply
- * that either source is authoritative without an official portal check.
+ * The app can show public feed records and local preparation metadata, but it
+ * must not imply that either source includes private account data.
  */
 export const DataNotice: React.FC<DataNoticeProps> = ({
-  children = 'Public discovery view · Records may be sample or synced. Verify current status on the official portal before acting.',
+  children = 'Public discovery view · Verify current status and requirements on the official GeM portal before acting.',
 }) => {
   const { colors } = useTheme();
 

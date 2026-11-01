@@ -116,23 +116,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <Text style={[styles.heroTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
           Transparent. Efficient. Inclusive.
         </Text>
-        <Text style={[styles.heroDescription, { color: colors.textSecondary, fontSize: 13 * fontMultiplier }]}>
-          Connecting 1.5 Lakh+ government buyers with 60 Lakh+ verified sellers and MSMEs across India.
+          <Text style={[styles.heroDescription, { color: colors.textSecondary, fontSize: 13 * fontMultiplier }]}>
+          Browse the current public GeM feed, inspect tender documents, and prepare your response before continuing on the official portal.
         </Text>
         <View style={[styles.heroStatsRow, { borderTopColor: colors.borderSubtle }]}>
           <View style={styles.heroStatItem}>
-            <Text style={[styles.heroStatNum, { color: colors.primary }]}>45,000+</Text>
-            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Active Bids</Text>
+            <Text style={[styles.heroStatNum, { color: colors.primary }]}>{bids.length}</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Loaded now</Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
-            <Text style={[styles.heroStatNum, { color: colors.emerald }]}>₹4.5L Cr</Text>
-            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Transacted</Text>
+            <Text style={[styles.heroStatNum, { color: colors.emerald }]}>Public</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Feed only</Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
-            <Text style={[styles.heroStatNum, { color: colors.saffron }]}>10-Day</Text>
-            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>CRAC SLA</Text>
+            <Text style={[styles.heroStatNum, { color: colors.saffron }]}>GeM</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Submit there</Text>
           </View>
         </View>
       </View>
@@ -141,11 +141,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <View style={[styles.workspaceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.workspaceCopy}>
           <Text style={[styles.workspaceEyebrow, { color: colors.primary }]}>YOUR WORKSPACE</Text>
-          <Text style={[styles.workspaceTitle, { color: colors.textPrimary }]}>Track bids and prepare documents</Text>
-          <Text style={[styles.workspaceSubtitle, { color: colors.textSecondary }]}>Keep previous bids, local attachments and preflight checklists together.</Text>
+          <Text style={[styles.workspaceTitle, { color: colors.textPrimary }]}>Prepare documents for a live bid</Text>
+          <Text style={[styles.workspaceSubtitle, { color: colors.textSecondary }]}>Choose a public opportunity, assemble local files, and continue on GeM when ready.</Text>
         </View>
         <PrimaryButton
-          label="Open My Work"
+          label="Open preparation"
           onPress={() => (onOpenMyWork ? onOpenMyWork() : onNavigateTab('MORE'))}
           style={styles.workspaceButton}
         />
@@ -297,7 +297,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <View style={styles.oppMetaCol}>
                 <Text style={[styles.oppMetaLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
                 <Text style={[styles.oppMetaVal, { color: colors.primary }]}>
-                  {formatLakhs(bid.estimatedBidValueInr || 2500000)}
+                  {bid.publishedFields?.estimatedValue === false ? 'Not published' : formatLakhs(bid.estimatedBidValueInr)}
                 </Text>
               </View>
               <View style={styles.oppMetaCol}>

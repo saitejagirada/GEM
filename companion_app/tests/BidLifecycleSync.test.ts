@@ -144,7 +144,7 @@ describe('BidLifecycleSync & Authentic GeM Website Mirroring', () => {
     const foundClosed = closed.find((b) => b.bidNumber === 'GEM/2026/B/TEST_EXPIRED_202');
     assert.ok(foundClosed !== undefined);
     assert.strictEqual(foundClosed?.lifecycleStatus, 'CLOSED');
-    assert.ok(foundClosed?.evaluationStage !== undefined);
+    assert.equal(foundClosed?.evaluationStage, undefined);
   });
 
   it('routes cancelled bids strictly to the Cancelled category', () => {

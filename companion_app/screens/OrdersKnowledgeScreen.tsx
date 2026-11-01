@@ -23,10 +23,8 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { MOCK_ACCEPTED_ORDERS, DYNAMIC_ACCEPTED_ORDERS } from '../fixtures/mockData';
 import { PortalApiClient } from '../services/PortalApiClient';
 import { isNetworkOnline } from '../utils/network.ts';
-import { SupabaseClient } from '../services/SupabaseClient';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
@@ -36,7 +34,7 @@ import {
   SecondaryButton,
   FilterBottomSheetModal,
 } from '../components/SharedUI';
-import { formatInr, formatDateSafe } from '../utils/formatters';
+import { formatInr } from '../utils/formatters';
 import type { AcceptedOrder } from '../types/index';
 
 export const OrdersKnowledgeScreen: React.FC = () => {
@@ -295,10 +293,15 @@ export const OrdersKnowledgeScreen: React.FC = () => {
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>📑</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No contracts found</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Account contracts are not connected</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Try clearing search terms or selecting &quot;All Contracts&quot;.
+                Public contract discovery cannot show your private executed orders, CRAC status, PFMS details, or payment history. Sign in on GeM to view those records.
               </Text>
+              <PrimaryButton
+                label="Open official GeM contracts ↗"
+                onPress={openContractsPortal}
+                style={{ marginTop: 16 }}
+              />
             </View>
           )
         }

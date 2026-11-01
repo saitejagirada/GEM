@@ -1,10 +1,9 @@
 /**
- * GeM Auctions Hub Screen - High-Performance Live Auctions & Forward Auctions
- * Conforms to Screen 4 of the GeM Mobile UI Specification:
- * - SegmentedTabs: Live reverse auctions, Forward auctions, Closed
- * - SearchField: "Search auction ID, item or department"
- * - Compact auction cards with live decrement indicators
- * - Seamless detail transition into ReverseAuctionScreen
+ * Public GeM auction discovery.
+ *
+ * The public listing can show live auction records, but it does not expose a
+ * seller's rank, quoted price, bid history, or authenticated bid placement.
+ * Those actions stay on the official GeM portal.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,16 +12,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
-  Alert,
   Linking,
-  Pressable,
   BackHandler,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import type { ForwardAuctionLot, AuctionItem, DeconstructedBidDoc } from '../types/index';
-import { MOCK_FORWARD_AUCTIONS } from '../fixtures/mockData';
+import type { ForwardAuctionLot, DeconstructedBidDoc } from '../types/index';
 import { PortalApiClient } from '../services/PortalApiClient';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { isNetworkOnline } from '../utils/network.ts';
@@ -35,67 +30,55 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '../components/SharedUI';
-import { formatInr } from '../utils/formatters';
 
-type TabMode = 'Live Reverse' | 'Forward e-Scrap' | 'Closed';
+type TabMode = 'Live Reverse' | 'Forward e-Scrap';
 
-export type ReverseAuctionDetailItem = AuctionItem & {
+export interface ReverseAuctionDetailItem {
+  id: string;
+  contractNumber: string;
+  title: string;
+  category: string;
+  buyerOrganization: string;
+  closingTimeUtc: string;
   originalBidNumber?: string;
   department?: string;
   totalQuantity?: number;
   closingDateLabel?: string;
-};
+  docUrl: string;
+  publishedQuantity: boolean;
+}
 
-const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc, index: number): ReverseAuctionDetailItem => {
-  const estValue = bid.estimatedBidValueInr || 3500000;
-  const l1DiscountRatio = 0.84 + ((index * 3) % 10) * 0.01;
-  const currentLowestBid = Math.round(estValue * l1DiscountRatio);
+const getClosingLabel = (closingTimeUtc: string): string => {
+  const closingDate = new Date(closingTimeUtc);
+  if (Number.isNaN(closingDate.getTime())) return 'Closing time not published';
 
-  let minimumDecrement = 10000;
-  if (estValue >= 5000000) minimumDecrement = 50000;
-  else if (estValue >= 2000000) minimumDecrement = 25000;
-  else if (estValue >= 1000000) minimumDecrement = 15000;
-
-  const sellerRank = (index % 3) + 1;
-  const sellerCurrentBid = sellerRank === 1
-    ? currentLowestBid
-    : currentLowestBid + minimumDecrement * (sellerRank - 1);
-
-  const closingDate = bid.closingTimeUtc ? new Date(bid.closingTimeUtc) : new Date(Date.now() + 4 * 3600000);
   const diffMs = Math.max(0, closingDate.getTime() - Date.now());
   const diffHours = Math.floor(diffMs / 3600000);
   const diffMins = Math.floor((diffMs % 3600000) / 60000);
-  const closingDateLabel = diffHours > 0
-    ? `Ends in ${diffHours}h ${diffMins}m`
-    : `⚡ Critical: ${diffMins}m remaining`;
+  return diffHours > 0 ? `Ends in ${diffHours}h ${diffMins}m` : `Ends in ${diffMins}m`;
+};
 
-  const totalQuantity = (bid.boqItems && bid.boqItems.length > 0 && bid.boqItems[0].quantity)
-    ? bid.boqItems[0].quantity
-    : 100;
+const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc): ReverseAuctionDetailItem => {
+  const totalQuantity = bid.boqItems?.[0]?.quantity;
 
   return {
-    id: `ra-${bid.b_id || (45100 + index)}`,
-    contractNumber: `GEM/2026/RA/${bid.b_id || (45100 + index)}`,
+    id: `ra-${bid.b_id || bid.bidNumber}`,
+    contractNumber: bid.bidNumber,
     originalBidNumber: bid.bidNumber,
     title: bid.title,
-    category: bid.categoryDomain || 'Goods & Services',
+    category: bid.categoryDomain || 'Category not published',
     department: bid.department,
-    buyerOrganization: bid.ministry || 'Government of India',
+    buyerOrganization: bid.ministry,
     totalQuantity,
     closingTimeUtc: bid.closingTimeUtc,
-    closingDateLabel,
-    currentLowestBid,
-    sellerRank,
-    sellerCurrentBid,
-    minimumDecrement,
-    autoExtensionMinutes: 10,
-    isExtended: index % 4 === 0,
+    closingDateLabel: getClosingLabel(bid.closingTimeUtc),
+    docUrl: bid.docUrl,
+    publishedQuantity: bid.publishedFields?.quantity ?? totalQuantity !== undefined,
   };
 };
 
 export const AuctionsHubScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
-
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>([]);
@@ -116,20 +99,14 @@ export const AuctionsHubScreen: React.FC = () => {
         return;
       }
 
+      await GeMLiveSyncService.syncFromPortal();
       const liveDocs = GeMLiveSyncService.getReverseAuctions();
-      if (liveDocs && liveDocs.length > 0) {
-        setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
-        setIsOffline(false);
-      } else {
-        setReverseAuctions([]);
-        setIsOffline(true);
-      }
-      const lots = await PortalApiClient.getForwardAuctions();
-      if (lots && lots.length > 0) {
-        setForwardLots(lots);
-      } else {
-        setForwardLots([]);
-      }
+      setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
+      setIsOffline(false);
+
+      // This optional backend may provide a public forward-auction feed. An
+      // empty response is intentional; no local lots are used as a fallback.
+      setForwardLots(await PortalApiClient.getForwardAuctions());
     } catch {
       setReverseAuctions([]);
       setForwardLots([]);
@@ -144,84 +121,50 @@ export const AuctionsHubScreen: React.FC = () => {
     loadLiveAuctions();
   }, [loadLiveAuctions]);
 
-  // BackHandler to exit reverse auction room back to catalog instead of closing app
   useEffect(() => {
     if (!selectedRa) return;
-
     const onBackPress = () => {
       setSelectedRa(null);
       return true;
     };
-
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
   }, [selectedRa]);
 
-  const handleIncrementForwardBid = (lotId: string) => {
-    setForwardLots((prev) =>
-      prev.map((lot) => {
-        if (lot.id === lotId) {
-          const nextBid = lot.currentHighestBidInr + lot.minimumIncrementInr;
-          Alert.alert(
-            'Forward Bid Placed',
-            `Submitted bid of ₹${formatInr(nextBid)} on ${lot.auctionNumber}. You are now the highest bidder.`
-          );
-          return { ...lot, currentHighestBidInr: nextBid };
-        }
-        return lot;
-      })
-    );
-  };
-
   const filteredReverseAuctions = useMemo(() => {
     if (!searchQuery.trim()) return reverseAuctions;
     const q = searchQuery.toLowerCase().trim();
-    return reverseAuctions.filter(
-      (ra) =>
-        ra.contractNumber.toLowerCase().includes(q) ||
-        (ra.originalBidNumber && ra.originalBidNumber.toLowerCase().includes(q)) ||
-        ra.title.toLowerCase().includes(q) ||
-        (ra.department && ra.department.toLowerCase().includes(q))
+    return reverseAuctions.filter((ra) =>
+      [ra.contractNumber, ra.originalBidNumber, ra.title, ra.department, ra.buyerOrganization]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q))
     );
   }, [reverseAuctions, searchQuery]);
 
   const filteredForwardLots = useMemo(() => {
     if (!searchQuery.trim()) return forwardLots;
     const q = searchQuery.toLowerCase().trim();
-    return forwardLots.filter(
-      (lot) =>
-        lot.auctionNumber.toLowerCase().includes(q) ||
-        lot.title.toLowerCase().includes(q) ||
-        lot.department.toLowerCase().includes(q)
+    return forwardLots.filter((lot) =>
+      [lot.auctionNumber, lot.title, lot.department, lot.locationYard]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q))
     );
   }, [forwardLots, searchQuery]);
 
-  // If user selected a specific reverse auction, render the full Screen 4 detail
   if (selectedRa) {
-    return (
-      <ReverseAuctionScreen
-        auction={selectedRa}
-        onBack={() => setSelectedRa(null)}
-      />
-    );
+    return <ReverseAuctionScreen auction={selectedRa} onBack={() => setSelectedRa(null)} />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Top Controls */}
       <View style={styles.topSection}>
         <SegmentedTabs
-          options={['Live Reverse', 'Forward e-Scrap', 'Closed']}
+          options={['Live Reverse', 'Forward e-Scrap']}
           selected={activeTab}
           onSelect={(tab) => setActiveTab(tab as TabMode)}
-          counts={{
-            'Live Reverse': reverseAuctions.length,
-            'Forward e-Scrap': forwardLots.length,
-            Closed: 18,
-          }}
+          counts={{ 'Live Reverse': reverseAuctions.length, 'Forward e-Scrap': forwardLots.length }}
           style={{ marginBottom: 12 }}
         />
-
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -245,171 +188,70 @@ export const AuctionsHubScreen: React.FC = () => {
           isLoading ? (
             <View style={styles.emptyContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>
-                Connecting to GeM Portal...
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Fetching live reverse auctions and L1 price floors.
-              </Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary, marginTop: 16 }]}>Connecting to GeM Portal...</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Fetching current public reverse-auction records.</Text>
             </View>
           ) : isOffline ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>📡</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No Live Auctions Available (Offline)</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Unable to connect to GeM reverse auctions. Please check your internet connection and try again.
-              </Text>
-              <PrimaryButton
-                label="Retry Connection"
-                onPress={loadLiveAuctions}
-                style={{ marginTop: 14 }}
-              />
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Public auction feed unavailable</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Check your internet connection and try again. No demo auction data is shown.</Text>
+              <PrimaryButton label="Retry connection" onPress={loadLiveAuctions} style={{ marginTop: 14 }} />
             </View>
           ) : filteredReverseAuctions.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>⚡</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No active reverse auctions found</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Try adjusting your search query or check back during active trading hours.
-              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Try another search or refresh the public GeM feed.</Text>
             </View>
           ) : (
-            <View>
-              {filteredReverseAuctions.map((ra) => (
-                <View
-                  key={ra.id}
-                  style={[
-                    styles.auctionCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View style={styles.cardHeaderRow}>
-                    <StatusBadge label="LIVE RA" tone="success" dot />
-                    <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>
-                      {ra.contractNumber}
-                    </Text>
-                    <Text style={[styles.closingText, { color: colors.warning }]}>
-                      {ra.closingDateLabel}
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-                    numberOfLines={2}
-                  >
-                    {ra.title}
-                  </Text>
-
-                  <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {ra.department}
-                  </Text>
-
-                  <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-                    <View style={styles.metaCol}>
-                      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CURRENT LOWEST (L1)</Text>
-                      <Text style={[styles.metaValue, { color: colors.primary }]}>
-                        {formatInr(ra.currentLowestBid)}
-                      </Text>
-                    </View>
-                    <View style={styles.metaCol}>
-                      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MIN DECREMENT</Text>
-                      <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
-                        ₹{formatInr(ra.minimumDecrement)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <PrimaryButton
-                    label="Enter Decrement Room"
-                    onPress={() => setSelectedRa(ra)}
-                    style={{ marginTop: 10 }}
-                  />
+            filteredReverseAuctions.map((ra) => (
+              <View key={ra.id} style={[styles.auctionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.cardHeaderRow}>
+                  <StatusBadge label="LIVE RA" tone="success" dot />
+                  <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>{ra.contractNumber}</Text>
+                  <Text style={[styles.closingText, { color: colors.warning }]}>{ra.closingDateLabel}</Text>
                 </View>
-              ))}
-            </View>
+                <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]} numberOfLines={2}>{ra.title}</Text>
+                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>{ra.department} • {ra.buyerOrganization}</Text>
+                <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+                  <View style={styles.metaCol}>
+                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>PUBLIC SOURCE</Text>
+                    <Text style={[styles.metaValue, { color: colors.primary }]}>GeM live feed</Text>
+                  </View>
+                  <View style={styles.metaCol}>
+                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+                    <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{ra.publishedQuantity && ra.totalQuantity !== undefined ? ra.totalQuantity.toLocaleString() : 'Not published'}</Text>
+                  </View>
+                </View>
+                <PrimaryButton label="Review public auction" onPress={() => setSelectedRa(ra)} style={{ marginTop: 10 }} />
+              </View>
+            ))
           )
         )}
 
         {activeTab === 'Forward e-Scrap' && (
-          <View>
-            <View style={[styles.infoBanner, { backgroundColor: colors.surfaceSubtle }]}>
-              <Text style={[styles.infoBannerText, { color: colors.textSecondary }]}>
-                🏛️ Official GeM Forward e-Auctions for condemned vehicles, obsolete electronics, and surplus scrap materials.
-              </Text>
+          filteredForwardLots.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>↗</Text>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No public forward-auction records loaded</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>This app does not seed auction lots or simulate bid placement. Use the official portal for current lots and authenticated bidding.</Text>
+              <SecondaryButton label="Open official forward auctions ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 14 }} />
             </View>
-
-            {forwardLots.map((lot) => (
-              <View
-                key={lot.id}
-                style={[
-                  styles.auctionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
+          ) : (
+            filteredForwardLots.map((lot) => (
+              <View key={lot.id} style={[styles.auctionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.cardHeaderRow}>
                   <StatusBadge label={lot.category} tone="orange" />
-                  <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>
-                    {lot.auctionNumber}
-                  </Text>
+                  <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>{lot.auctionNumber}</Text>
                 </View>
-
-                <Text
-                  style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-                  numberOfLines={2}
-                >
-                  {lot.title}
-                </Text>
-
-                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  Location: {lot.locationYard} • {lot.department}
-                </Text>
-
-                <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-                  <View style={styles.metaCol}>
-                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CURRENT HIGHEST BID</Text>
-                    <Text style={[styles.metaValue, { color: colors.emerald }]}>
-                      {formatInr(lot.currentHighestBidInr)}
-                    </Text>
-                  </View>
-                  <View style={styles.metaCol}>
-                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>MIN INCREMENT</Text>
-                    <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
-                      +₹{formatInr(lot.minimumIncrementInr)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardActionsRow}>
-                  <SecondaryButton
-                    label="Official Portal ↗"
-                    onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')}
-                    style={{ flex: 1, marginRight: 8 }}
-                  />
-                  <PrimaryButton
-                    label={`Bid +₹${formatInr(lot.minimumIncrementInr)}`}
-                    onPress={() => handleIncrementForwardBid(lot.id)}
-                    style={{ flex: 1.4 }}
-                  />
-                </View>
+                <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]} numberOfLines={2}>{lot.title}</Text>
+                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>Location: {lot.locationYard} • {lot.department}</Text>
+                <Text style={[styles.publicNote, { color: colors.textSecondary }]}>Prices, rank, and bid placement are available only in the official authenticated auction session.</Text>
+                <SecondaryButton label="Open official portal ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 10 }} />
               </View>
-            ))}
-          </View>
-        )}
-
-        {activeTab === 'Closed' && (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📜</Text>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Historical Auction Archives</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              All completed reverse and forward auctions with finalized L1 commercial comparative statements are archived.
-            </Text>
-          </View>
+            ))
+          )
         )}
       </ScrollView>
     </View>
@@ -417,99 +259,22 @@ export const AuctionsHubScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  topSection: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
-    paddingBottom: 8,
-  },
-  listContent: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
-    paddingTop: 4,
-    paddingBottom: 40,
-  },
-  auctionCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 14,
-    marginBottom: 12,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  auctionNumber: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  closingText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  auctionTitle: {
-    fontWeight: '700',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  deptText: {
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  metaGrid: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    justifyContent: 'space-between',
-  },
-  metaCol: {
-    flex: 1,
-  },
-  metaLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    marginBottom: 2,
-  },
-  metaValue: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  cardActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  infoBanner: {
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-  },
-  infoBannerText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 50,
-  },
-  emptyEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    maxWidth: 280,
-    lineHeight: 18,
-  },
+  container: { flex: 1 },
+  topSection: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 8 },
+  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 4, paddingBottom: 40 },
+  auctionCard: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: DESIGN_TOKENS.borderWidth, padding: 14, marginBottom: 12 },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  auctionNumber: { fontSize: 12, fontWeight: '600' },
+  closingText: { fontSize: 11, fontWeight: '700' },
+  auctionTitle: { fontWeight: '700', marginBottom: 4, lineHeight: 18 },
+  deptText: { fontSize: 12, marginBottom: 10 },
+  metaGrid: { flexDirection: 'row', borderRadius: 8, padding: 10, marginBottom: 8, justifyContent: 'space-between' },
+  metaCol: { flex: 1 },
+  metaLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 2 },
+  metaValue: { fontSize: 13, fontWeight: '700' },
+  publicNote: { fontSize: 12, lineHeight: 17 },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
+  emptyEmoji: { fontSize: 32, marginBottom: 8 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
+  emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18 },
 });

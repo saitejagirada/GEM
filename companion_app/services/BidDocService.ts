@@ -23,26 +23,36 @@ export class BidDocService {
     deliveryPeriodLabel: string;
     consigneeCountLabel: string;
   } {
-    const estValue = bid.estimatedBidValueInr
+    const estValue = bid.estimatedBidValueInr !== undefined && bid.estimatedBidValueInr > 0
       ? `₹${(bid.estimatedBidValueInr / 100000).toFixed(1)} Lakhs`
-      : 'Unstated Budget';
+      : 'Not published';
 
     const emd =
-      bid.emdAmountInr === 0
+      bid.emdAmountInr === undefined
+        ? 'Not published'
+        : bid.emdAmountInr === 0
         ? '₹0 (Free)'
         : `₹${(bid.emdAmountInr / 1000).toFixed(0)}k ${bid.isEmdExemptForMse ? '(MSE Exempt)' : ''}`.trim();
 
     const turnover =
-      bid.minAnnualTurnoverInr === 0
-        ? 'No Min Required'
+      bid.minAnnualTurnoverInr === undefined
+        ? 'Not published'
+        : bid.minAnnualTurnoverInr === 0
+        ? 'No minimum published'
         : `₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)} Lakhs`;
 
     const experience =
-      bid.yearsExperienceRequired === 0 ? 'No Exp Required' : `${bid.yearsExperienceRequired} Years`;
+      bid.yearsExperienceRequired === undefined
+        ? 'Not published'
+        : bid.yearsExperienceRequired === 0
+          ? 'No experience published'
+          : `${bid.yearsExperienceRequired} Years`;
 
-    const delivery = `${bid?.deliveryPeriodDays || 30} Days`;
+    const delivery = bid?.deliveryPeriodDays === undefined ? 'Not published' : `${bid.deliveryPeriodDays} Days`;
     const consigneesArr = Array.isArray(bid?.consignees) ? bid.consignees : [];
-    const consignees = `${consigneesArr.length} Destination${consigneesArr.length === 1 ? '' : 's'}`;
+    const consignees = consigneesArr.length > 0
+      ? `${consigneesArr.length} Destination${consigneesArr.length === 1 ? '' : 's'}`
+      : 'Not published';
 
     return {
       estimatedValueLabel: estValue,

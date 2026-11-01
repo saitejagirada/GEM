@@ -44,6 +44,7 @@ export class PortalDocService {
   public static isSafeGemUrl(url: string): boolean {
     return (
       url.startsWith('https://bidplus.gem.gov.in') ||
+      url.startsWith('https://bidplus-global.gem.gov.in') ||
       url.startsWith('https://gem.gov.in')
     );
   }

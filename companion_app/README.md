@@ -14,16 +14,17 @@
 3. **Domain Models & Contracts** (`types/index.ts`):
    - End-to-end TypeScript interfaces covering Bids, Invoices, CRAC inspections, and PFMS payment milestones.
 
-## Phase 1: My Work Workspace
+## Public live bids and document preparation
 
-The app now includes a local productivity workspace opened from Home or More:
+The app now starts from the current public GeM bid listing and a preparation workspace opened from Home or More:
 
-- Locally tracked bid records with Active / Awarded / All filters.
+- Live public bid rows fetched from GeM's public listing endpoint.
+- No seeded bid portfolio, invented deadlines, guessed values, or fake eligibility verdicts.
 - Bid-linked document preparation using the device document picker.
-- Local checklist preflight against any available bid requirements.
-- Explicit handoff to the official GeM bid page or marketplace for login, 2FA, upload, and final submission.
+- A checklist only when requirements are actually present in the record; otherwise the UI directs the user to the official bid document.
+- Explicit handoff to the official GeM bid page for login, MFA, upload, and final submission.
 
-Phase 1 did not store GeM credentials, OTPs, session cookies, or claim that a local attachment was uploaded. Phase 2 adds app-private persistence for preparation copies while keeping the same boundary.
+The app does not store GeM credentials, OTPs, session cookies, private bid history, or claim that a local attachment was uploaded.
 
 ## Phase 2: Persistent Local Preparation
 
@@ -31,20 +32,19 @@ Phase 2 keeps the productivity layer useful after the app is closed:
 
 - Selected files are copied into the app-private document directory when native storage is available.
 - File metadata and bid links are persisted locally with AsyncStorage.
-- Bids added from the inspector are restored as local tracking records when My Work opens again.
+- Preparation files remain linked to the selected live bid on this device.
 - The workspace labels each file as saved on device or session-only, so storage failures are visible.
 - Users can remove individual files or clear all local preparation copies from My Work.
 
 This is still a preparation workspace, not an official GeM account mirror or upload channel. Local files are not encrypted by this feature and should be handled as sensitive business documents; credentials, OTPs, and session cookies are never stored.
 
-## Phase 3: Official GeM Handoff
+## Official GeM Handoff
 
 Phase 3 adds a controlled bridge to the real GeM workflow:
 
 - My Work records which bid and local documents were prepared when the user opens the official GeM portal.
 - The user completes GeM login, MFA, document upload, and final submission in the official portal.
-- The user can record “I submitted on official GeM” as a local reminder after returning to the app.
-- The UI labels that note as user-reported and never treats it as verified GeM status.
+- The handoff record only records that the official bid page was opened; it does not verify submission.
 
 Direct authenticated GeM uploads remain behind an approved GeM API/SSO integration contract. The app does not automate MFA, capture portal cookies, replay browser sessions, or claim that a document reached GeM.
 

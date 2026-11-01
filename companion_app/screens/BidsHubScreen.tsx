@@ -19,13 +19,10 @@ import {
   Alert,
   Linking,
   RefreshControl,
-  Pressable,
   BackHandler,
   ActivityIndicator,
 } from 'react-native';
-import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
-import { UserAgentService } from '../services/UserAgentService';
-import { BidDocService } from '../services/BidDocService';
+import type { DeconstructedBidDoc } from '../types/index';
 import { PortalDocService } from '../services/PortalDocService';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { BidInspectorScreen } from './BidInspectorScreen';
@@ -37,16 +34,14 @@ import {
   StatusBadge,
   PrimaryButton,
   SecondaryButton,
-  MetricBox,
   FilterBottomSheetModal,
 } from '../components/SharedUI';
 import { formatLakhs, formatDateSafe } from '../utils/formatters';
 
-export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed';
+export type GeMStatusTab = 'Ongoing' | 'Live RA';
 
 interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
-  userProfile: UserAgentProfile;
   initialFilter?: string;
   onSyncLive?: () => Promise<void> | void;
   isSyncing?: boolean;
@@ -55,7 +50,6 @@ interface BidsHubScreenProps {
 
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
-  userProfile,
   onSyncLive,
   isSyncing = false,
   onInspectBid,
@@ -65,7 +59,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   const [activeStatusTab, setActiveStatusTab] = useState<GeMStatusTab>('Ongoing');
   const [activeTypeChip, setActiveTypeChip] = useState<'All' | 'Goods' | 'Services'>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [savedBidNumbers, setSavedBidNumbers] = useState<Set<string>>(new Set());
   const [inspectingBid, setInspectingBid] = useState<DeconstructedBidDoc | null>(null);
 
   // Bottom Sheet Filter State
@@ -95,21 +88,18 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   const counts = useMemo(() => {
     let ongoing = 0;
     let liveRa = 0;
-    let closed = 0;
 
     bids.forEach((bid) => {
       const status = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
       const isRa = bid.isRa || bid.type === 'RA' || status === 'BID_TO_RA';
       if (isRa) {
         liveRa++;
-      } else if (status === 'CLOSED' || status === 'AWARDED' || status === 'CANCELLED') {
-        closed++;
       } else {
         ongoing++;
       }
     });
 
-    return { Ongoing: ongoing, 'Live RA': liveRa, Closed: closed };
+    return { Ongoing: ongoing, 'Live RA': liveRa };
   }, [bids]);
 
   // Filtered Bids Query
@@ -121,8 +111,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       // 1. Status Tab filter
       if (activeStatusTab === 'Live RA') {
         if (!isRa) return false;
-      } else if (activeStatusTab === 'Closed') {
-        if (status !== 'CLOSED' && status !== 'AWARDED' && status !== 'CANCELLED') return false;
       } else {
         // Ongoing
         if (isRa || status === 'CLOSED' || status === 'AWARDED' || status === 'CANCELLED') return false;
@@ -154,15 +142,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
     });
   }, [bids, activeStatusTab, activeTypeChip, filterMseOnly, filterMinValLakhs, searchQuery]);
 
-  const toggleSaveBid = (bidNumber: string) => {
-    setSavedBidNumbers((prev) => {
-      const next = new Set(prev);
-      if (next.has(bidNumber)) next.delete(bidNumber);
-      else next.add(bidNumber);
-      return next;
-    });
-  };
-
   const handleOpenDoc = useCallback((bidNumber: string, docUrl?: string) => {
     const verifiedUrl = PortalDocService.getOfficialDocUrl(bidNumber, docUrl);
     Linking.openURL(verifiedUrl).catch(() => {
@@ -180,12 +159,10 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   // Render individual bid card
   const renderBidCard = ({ item }: { item: DeconstructedBidDoc }) => {
-    const isSaved = savedBidNumbers.has(item.bidNumber);
     const isService = item.type === 'SERVICE';
     const isRa = item.isRa || item.type === 'RA' || item.lifecycleStatus === 'BID_TO_RA';
-    const match = UserAgentService.evaluateBidMatch(item, userProfile);
-    const estVal = item.estimatedBidValueInr || 2500000;
-    const boqCount = item.boqItems?.length || 1;
+    const estVal = item.estimatedBidValueInr;
+    const boqCount = item.boqItems?.length || 0;
 
     return (
       <View
@@ -208,16 +185,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               {item.bidNumber}
             </Text>
           </View>
-          <Pressable
-            onPress={() => toggleSaveBid(item.bidNumber)}
-            hitSlop={8}
-            style={styles.bookmarkBtn}
-            accessibilityLabel="Bookmark bid"
-          >
-            <Text style={[styles.bookmarkIcon, { color: isSaved ? colors.primary : colors.textMuted }]}>
-              {isSaved ? '★' : '☆'}
-            </Text>
-          </Pressable>
         </View>
 
         {/* Bid Title */}
@@ -237,12 +204,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
           <View style={styles.metricItem}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-            <Text style={[styles.metricValue, { color: colors.primary }]}>{formatLakhs(estVal)}</Text>
+            <Text style={[styles.metricValue, { color: colors.primary }]}>
+              {item.publishedFields?.estimatedValue === false ? 'Not published' : formatLakhs(estVal)}
+            </Text>
           </View>
           <View style={styles.metricItem}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY / SCOPE</Text>
             <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
-              {boqCount} {boqCount === 1 ? 'Package' : 'Line Items'}
+              {boqCount > 0 ? `${boqCount} ${boqCount === 1 ? 'Package' : 'Line Items'}` : 'Not published'}
             </Text>
           </View>
           <View style={styles.metricItem}>
@@ -259,7 +228,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
                 { color: item.isEmdExemptForMse ? colors.success : colors.warning },
               ]}
             >
-              {item.isEmdExemptForMse ? '100% Exempt' : 'EMD Applicable'}
+              {item.isEmdExemptForMse === undefined ? 'Not published' : item.isEmdExemptForMse ? 'MSE exempt' : 'Applicable'}
             </Text>
           </View>
         </View>
@@ -283,10 +252,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 1. Status Tabs: Ongoing (100) | Live RA (12) | Closed */}
+      <View style={[styles.liveNotice, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.border }]}>
+        <Text style={[styles.liveNoticeLabel, { color: colors.success }]}>LIVE PUBLIC FEED</Text>
+        <Text style={[styles.liveNoticeText, { color: colors.textSecondary }]}>Current published GeM bids. Account-specific submissions are not included.</Text>
+      </View>
+      {/* 1. Status Tabs: current ongoing public bids and live RAs */}
       <View style={styles.topSection}>
         <SegmentedTabs
-          options={['Ongoing', 'Live RA', 'Closed']}
+          options={['Ongoing', 'Live RA']}
           selected={activeStatusTab}
           onSelect={(tab) => setActiveStatusTab(tab as GeMStatusTab)}
           counts={counts}
@@ -450,7 +423,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       {inspectingBid && (
         <BidInspectorScreen
           bid={inspectingBid}
-          userProfile={userProfile}
           visible={true}
           onClose={() => setInspectingBid(null)}
         />
@@ -467,6 +439,13 @@ const styles = StyleSheet.create({
     padding: DESIGN_TOKENS.pagePaddingMobile,
     paddingBottom: 8,
   },
+  liveNotice: {
+    paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+  },
+  liveNoticeLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  liveNoticeText: { fontSize: 10.5, lineHeight: 14, marginTop: 2 },
   filterChipRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -496,12 +475,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 8,
-  },
-  bookmarkBtn: {
-    padding: 4,
-  },
-  bookmarkIcon: {
-    fontSize: 18,
   },
   bidTitle: {
     fontWeight: '700',
