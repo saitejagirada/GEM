@@ -23,4 +23,36 @@ describe('PortalDocService', () => {
     const url = PortalDocService.resolvePdfUrl('GEM-NO-NUM', '');
     assert.strictEqual(url, 'https://bidplus.gem.gov.in/all-bids');
   });
+
+  it('builds one official in-app document from the public bid record', () => {
+    const documents = PortalDocService.getOfficialDocuments({
+      bidNumber: 'GEM/2026/B/8124130',
+      title: 'Published bid',
+      department: 'Department',
+      ministry: 'Ministry',
+      type: 'PRODUCT',
+      closingTimeUtc: '2026-12-01T00:00:00.000Z',
+      docUrl: 'https://bidplus.gem.gov.in/showbidDocument/8124130',
+      relatedDocuments: [{
+        id: 'specification',
+        label: 'Technical specification',
+        kind: 'SPECIFICATION',
+        url: 'https://bidplus-global.gem.gov.in/specification/8124130',
+        source: 'PUBLIC_GEM_RECORD',
+      }, {
+        id: 'unsafe',
+        label: 'Unverified attachment',
+        kind: 'OTHER',
+        url: 'https://example.invalid/specification.pdf',
+        source: 'PUBLIC_GEM_RECORD',
+      }],
+    });
+
+    assert.deepStrictEqual(documents.map((document) => document.id), ['bid-document', 'specification']);
+  });
+
+  it('rejects lookalike domains from official document links', () => {
+    assert.strictEqual(PortalDocService.isSafeGemUrl('https://bidplus.gem.gov.in.evil.example/document.pdf'), false);
+    assert.strictEqual(PortalDocService.isSafeGemUrl('https://bidplus.gem.gov.in/document.pdf'), true);
+  });
 });

@@ -20,7 +20,7 @@ A high-performance mobile companion application and automated ingestion pipeline
 ### 2. PhonePe-Clean Mobile Companion (`companion_app`)
 - **Signature Aesthetics**: Crisp `#FFFFFF` background, subtle `#F1F3F6` dividers, and `#5F259F` signature purple accent.
 - **Instant Category Filtering**: Horizontal quick-filter chips (`All`, `Defence`, `Railways`, `Medical`, `Power`, `Electronics`) for one-tap tender filtering.
-- **Direct GeM Document Opener**: Dual action cards featuring both **Inspect Zero-PDF ➔** and **GeM Doc 📄** (direct links to official portal documents via `Linking.openURL`).
+- **Official GeM Document Viewer**: Bid PDFs open in a large native in-app reader; verified specification/BOQ/corrigendum attachments can appear as tabs in the same reader when the official feed exposes them.
 - **5 Bottom Navigation Hubs**:
   1. `HOME`: PhonePe transaction-style procurement hub, active pulse stats, and live tender feed.
   2. `SEARCH`: Full-text tender lookup across titles, departments, and tender numbers.

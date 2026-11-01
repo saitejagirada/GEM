@@ -215,6 +215,16 @@ export interface ServiceContractDetails {
   minimumWageCompliance?: boolean;
 }
 
+export type OfficialBidDocumentKind = 'BID' | 'SPECIFICATION' | 'CORRIGENDUM' | 'BOQ' | 'OTHER';
+
+export interface OfficialBidDocument {
+  id: string;
+  label: string;
+  kind: OfficialBidDocumentKind;
+  url: string;
+  source: 'PUBLIC_GEM_FEED' | 'PUBLIC_GEM_RECORD';
+}
+
 export interface DeconstructedBidDoc {
   bidNumber: string;
   title: string;
@@ -243,6 +253,8 @@ export interface DeconstructedBidDoc {
   requiredDocuments?: string[];
   closingTimeUtc: string;
   docUrl: string;
+  /** Separate official attachments only when GeM exposes a verified URL for them. */
+  relatedDocuments?: OfficialBidDocument[];
   /** Indicates which fields were actually present in the public GeM feed. */
   publishedFields?: {
     estimatedValue: boolean;

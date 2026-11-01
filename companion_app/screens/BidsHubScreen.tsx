@@ -16,16 +16,14 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
-  Alert,
-  Linking,
   RefreshControl,
   BackHandler,
   ActivityIndicator,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
-import { PortalDocService } from '../services/PortalDocService';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { BidInspectorScreen } from './BidInspectorScreen';
+import { BidDocumentViewer } from './BidDocumentViewer';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
@@ -60,6 +58,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   const [activeTypeChip, setActiveTypeChip] = useState<'All' | 'Goods' | 'Services'>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [inspectingBid, setInspectingBid] = useState<DeconstructedBidDoc | null>(null);
+  const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
 
   // Bottom Sheet Filter State
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
@@ -69,6 +68,10 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   // Hardware BackHandler to close inspector modal or filter sheet
   useEffect(() => {
     const handleBack = () => {
+      if (documentBid) {
+        setDocumentBid(null);
+        return true;
+      }
       if (inspectingBid) {
         setInspectingBid(null);
         return true;
@@ -82,7 +85,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
     const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
     return () => sub.remove();
-  }, [inspectingBid, showFilterModal]);
+  }, [documentBid, inspectingBid, showFilterModal]);
 
   // Status Tab Counts
   const counts = useMemo(() => {
@@ -142,11 +145,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
     });
   }, [bids, activeStatusTab, activeTypeChip, filterMseOnly, filterMinValLakhs, searchQuery]);
 
-  const handleOpenDoc = useCallback((bidNumber: string, docUrl?: string) => {
-    const verifiedUrl = PortalDocService.getOfficialDocUrl(bidNumber, docUrl);
-    Linking.openURL(verifiedUrl).catch(() => {
-      Alert.alert('Bid Document', `Download URL: ${verifiedUrl}`);
-    });
+  const handleOpenDoc = useCallback((bid: DeconstructedBidDoc) => {
+    setDocumentBid(bid);
   }, []);
 
   const handleInspect = (bid: DeconstructedBidDoc) => {
@@ -236,8 +236,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         {/* Actions: View Bid Details + PDF download */}
         <View style={styles.cardActionsRow}>
           <SecondaryButton
-            label="PDF Doc ↗"
-            onPress={() => handleOpenDoc(item.bidNumber, item.docUrl)}
+            label="View PDF"
+            onPress={() => handleOpenDoc(item)}
             style={{ flex: 1, marginRight: 8 }}
           />
           <PrimaryButton
@@ -425,6 +425,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           bid={inspectingBid}
           visible={true}
           onClose={() => setInspectingBid(null)}
+        />
+      )}
+
+      {documentBid && (
+        <BidDocumentViewer
+          bid={documentBid}
+          visible={true}
+          onClose={() => setDocumentBid(null)}
         />
       )}
     </View>

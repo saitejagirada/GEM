@@ -11,8 +11,10 @@
    - Bid-linked local folders, file picker, checklist review, and storage state.
    - Keeps business documents on the device until the user chooses to continue on GeM.
    - Optional bid-PDF details scan runs on the device only, stores a small extracted summary, and deletes its temporary PDF copy.
+   - Opens official bid PDFs in the large native in-app viewer instead of sending read-only document viewing to Chrome.
+   - Shows verified specification, BOQ, or corrigendum attachments in the same viewer when GeM supplies separate official URLs.
 3. **Official portal workspace** (`screens/OfficialPortalScreen.tsx`):
-   - Opens official GeM login and public pages through the device browser.
+   - Opens official GeM login and authenticated workspace handoff through the device browser.
    - Keeps credentials, OTPs, cookies, private history, and final submission inside GeM.
 
 ## Public live bids and document preparation
@@ -24,6 +26,8 @@ The app now starts from the current public GeM bid listing and a preparation wor
 - Bid-linked document preparation using the device document picker.
 - A checklist only when requirements are actually present in the record; otherwise the UI directs the user to the official bid document.
 - Explicit handoff to the official GeM bid page for login, MFA, upload, and final submission.
+- Read-only bid-document viewing stays inside the app; the separate official GeM handoff remains external for login, MFA, upload, and submission.
+- The public feed currently exposes the main bid PDF but not separate specification/corrigendum URLs for every record. The viewer does not invent those links; when GeM publishes them, they can be shown as tabs in the same window.
 - The PDF details scanner is user-triggered and bounded to 12 MB; it reads a PDF text layer locally and does not send documents to a server.
 
 The app does not store GeM credentials, OTPs, session cookies, private bid history, or claim that a local attachment was uploaded.

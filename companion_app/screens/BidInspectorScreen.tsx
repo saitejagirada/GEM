@@ -8,13 +8,13 @@ import {
   Modal,
   Alert,
   Share,
-  Linking,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { LocalPdfScanner, type LocalPdfScanResult } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
+import { BidDocumentViewer } from './BidDocumentViewer';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -32,10 +32,14 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
   const [isScanningPdf, setIsScanningPdf] = useState(false);
+  const [documentViewerVisible, setDocumentViewerVisible] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
 
   useEffect(() => {
     setCheckedDocs({});
     setPdfScan(null);
+    setDocumentViewerVisible(false);
+    setSelectedDocumentId(undefined);
     if (!bid) return;
 
     const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
@@ -78,23 +82,16 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     Alert.alert('Document preparation', 'Choose this bid from the document preparation workspace.');
   };
 
-  const handleOpenDoc = () => {
-    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
-    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
+  const officialDocuments = PortalDocService.getOfficialDocuments(bid);
+
+  const handleOpenDoc = (documentId = officialDocuments[0]?.id) => {
+    const targetDocument = officialDocuments.find((document) => document.id === documentId) || officialDocuments[0];
+    if (!targetDocument || !PortalDocService.isSafeGemUrl(targetDocument.url)) {
       Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
       return;
     }
-    Linking.canOpenURL(targetUrl)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(targetUrl);
-        } else {
-          Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${targetUrl}`);
-        }
-      })
-      .catch(() => {
-        Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${targetUrl}`);
-      });
+    setSelectedDocumentId(targetDocument.id);
+    setDocumentViewerVisible(true);
   };
 
   const handleScanPdfOnDevice = async () => {
@@ -188,7 +185,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     : `${diffHours}h ${diffMins}m remaining`;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+    <>
+      <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={styles.container}>
         {/* Top Header Bar (GeM Ashoka Navy) */}
         <View style={styles.headerBar}>
@@ -319,6 +317,41 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             </View>
           </View>
 
+          {/* Official bid PDF and verified attachments */}
+          <View style={styles.card}>
+            <View style={styles.pdfScanHeader}>
+              <Text style={styles.sectionHeading}>Official bid documents</Text>
+              <Text style={styles.pdfScanBadge}>GeM SOURCE</Text>
+            </View>
+            <Text style={styles.notPublishedText}>
+              Read the official document in this app. Published specifications and ATC sections are shown inside the main PDF; separate attachments appear only when GeM provides a verified document link.
+            </Text>
+            {officialDocuments.map((document) => (
+              <TouchableOpacity
+                key={document.id}
+                style={styles.officialDocumentRow}
+                onPress={() => handleOpenDoc(document.id)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.officialDocumentIcon}>
+                  <Text style={styles.officialDocumentIconText}>{document.kind === 'BID' ? 'PDF' : 'DOC'}</Text>
+                </View>
+                <View style={styles.officialDocumentCopy}>
+                  <Text style={styles.officialDocumentTitle}>{document.label}</Text>
+                  <Text style={styles.officialDocumentSubtitle}>
+                    {document.kind === 'BID' ? 'Published bid, specifications and ATC sections when included' : 'Verified GeM attachment'}
+                  </Text>
+                </View>
+                <Text style={styles.officialDocumentAction}>View</Text>
+              </TouchableOpacity>
+            ))}
+            {officialDocuments.length === 1 ? (
+              <Text style={styles.documentAvailabilityNote}>
+                The current public GeM feed does not expose separate specification or corrigendum URLs for this bid.
+              </Text>
+            ) : null}
+          </View>
+
           {/* Optional, bounded, device-only PDF analysis */}
           <View style={styles.card}>
             <View style={styles.pdfScanHeader}>
@@ -443,14 +476,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.officialLinkBtn}
-            onPress={handleOpenDoc}
+            onPress={() => handleOpenDoc()}
             activeOpacity={0.8}
           >
-            <Text style={styles.officialLinkText}>Open GeM ↗</Text>
+            <Text style={styles.officialLinkText}>View bid PDF</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+      </Modal>
+      <BidDocumentViewer
+        bid={bid}
+        visible={documentViewerVisible}
+        initialDocumentId={selectedDocumentId}
+        onClose={() => setDocumentViewerVisible(false)}
+      />
+    </>
   );
 };
 
@@ -585,6 +625,14 @@ const styles = StyleSheet.create({
   checkRatio: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
   pdfScanHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   pdfScanBadge: { color: '#0B4F71', fontSize: 9, fontWeight: '800', letterSpacing: 0.7 },
+  officialDocumentRow: { flexDirection: 'row', alignItems: 'center', minHeight: 58, borderTopWidth: 1, borderTopColor: '#EEF1F4', paddingVertical: 9 },
+  officialDocumentIcon: { width: 38, height: 38, borderRadius: 9, backgroundColor: '#EAF4F8', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  officialDocumentIconText: { color: '#0B5577', fontSize: 10, fontWeight: '900' },
+  officialDocumentCopy: { flex: 1, marginRight: 8 },
+  officialDocumentTitle: { color: '#1F2937', fontSize: 12, fontWeight: '800' },
+  officialDocumentSubtitle: { color: '#6B7280', fontSize: 10, lineHeight: 14, marginTop: 2 },
+  officialDocumentAction: { color: '#0B5577', fontSize: 12, fontWeight: '900' },
+  documentAvailabilityNote: { color: '#6B7280', fontSize: 10, lineHeight: 15, borderTopWidth: 1, borderTopColor: '#EEF1F4', paddingTop: 9, marginTop: 2 },
   pdfScanButton: { minHeight: 44, borderRadius: 6, backgroundColor: '#0B4F71', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, marginTop: 14 },
   pdfScanButtonDisabled: { opacity: 0.6 },
   pdfScanButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },

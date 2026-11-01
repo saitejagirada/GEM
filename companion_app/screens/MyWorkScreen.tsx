@@ -21,10 +21,10 @@ import {
   SegmentedTabs,
   StatusBadge,
 } from '../components/SharedUI';
-import { PortalDocService } from '../services/PortalDocService';
 import { WorkspaceService } from '../services/WorkspaceService';
 import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { formatDateSafe } from '../utils/formatters';
+import { BidDocumentViewer } from './BidDocumentViewer';
 
 type PreparationSection = 'LIVE' | 'DOCUMENTS';
 
@@ -42,6 +42,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
   const [selectedBidNumber, setSelectedBidNumber] = useState(initialBidNumber || availableBids[0]?.bidNumber || '');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
 
   const selectedBid = useMemo(
     () => availableBids.find((bid) => bid.bidNumber === selectedBidNumber),
@@ -92,10 +93,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
 
   const openOfficialBid = useCallback((bid?: DeconstructedBidDoc) => {
     if (!bid) return;
-    const target = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
-    Linking.openURL(target).catch(() => {
-      Alert.alert('Open official GeM bid', 'The official bid document could not be opened on this device.');
-    });
+    setDocumentBid(bid);
   }, []);
 
   const openOfficialPortal = useCallback(async () => {
@@ -105,8 +103,14 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
       linkedDocuments.map((document) => document.id)
     );
     setHandoffs((current) => WorkspaceStorage.mergeHandoffs([...current, handoff]));
-    openOfficialBid(selectedBid);
-  }, [linkedDocuments, openOfficialBid, selectedBid]);
+    if (onOpenOfficialPortal) {
+      onOpenOfficialPortal();
+      return;
+    }
+    Linking.openURL('https://ui.gem.gov.in/login').catch(() => {
+      Alert.alert('Open official GeM workspace', 'The official GeM login page could not be opened on this device.');
+    });
+  }, [linkedDocuments, onOpenOfficialPortal, selectedBid]);
 
   const pickDocuments = useCallback(async () => {
     if (!selectedBid) {
@@ -318,12 +322,17 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
                 </View>
                 <Text style={[styles.nextStepText, { color: colors.textSecondary }]}>This app does not receive your GeM password, OTP, session cookie, or official submission confirmation.</Text>
                 <PrimaryButton label="Open official GeM bid" onPress={openOfficialPortal} style={styles.fullButton} />
-                <SecondaryButton label="Open official GeM workspace" onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : Linking.openURL('https://ui.gem.gov.in/login'))} style={styles.fullButton} />
+                <SecondaryButton label="View bid document in app" onPress={() => openOfficialBid(selectedBid)} style={styles.fullButton} />
               </View>
             ) : null}
           </View>
         )}
       </ScrollView>
+      <BidDocumentViewer
+        bid={documentBid}
+        visible={!!documentBid}
+        onClose={() => setDocumentBid(null)}
+      />
     </SafeAreaView>
   );
 };
