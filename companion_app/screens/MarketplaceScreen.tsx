@@ -20,7 +20,7 @@
  *    - Hardware Android BackHandler + header back button gracefully returns to Category Explorer
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -101,6 +101,7 @@ export const MarketplaceScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hasMorePages, setHasMorePages] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const requestSequence = useRef(0);
 
   // Android hardware back handler: navigate back to Categories view without exiting
   useEffect(() => {
@@ -136,17 +137,6 @@ export const MarketplaceScreen: React.FC = () => {
     return () => sub.remove();
   }, [orderPlacedRef, showCartModal, selectedItem, selectedService, showFilterModal, browseView]);
 
-  // Subscribe to real-time live product updates from portal/crawler
-  useEffect(() => {
-    const unsubscribe = MarketplaceService.subscribeToProductUpdates((latestItems) => {
-      if (latestItems && latestItems.length > 0) {
-        setItemsList(latestItems);
-        setIsLoading(false);
-      }
-    });
-    return unsubscribe;
-  }, []);
-
   // Dynamic available subcategories for the selected category
   const availableSubcategories = useMemo(() => {
     const filtered = OFFICIAL_GEM_SUBCATEGORIES.filter(
@@ -155,13 +145,19 @@ export const MarketplaceScreen: React.FC = () => {
         selectedCategory.toLowerCase().includes(s.category.toLowerCase()) ||
         s.name.toLowerCase().includes(selectedCategory.toLowerCase())
     );
-    return filtered.length > 0 ? filtered : OFFICIAL_GEM_SUBCATEGORIES.slice(0, 6);
+    return filtered;
   }, [selectedCategory]);
 
   // Load products for the active subcategory/category from mkp.gem.gov.in
   const loadLiveProducts = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setIsRefreshing(true);
+    setIsLoading(true);
+    setIsOffline(false);
+    setItemsList([]);
+    setCatalogSource('EMPTY');
     setCurrentPage(1);
+    setHasMorePages(false);
     try {
       const stream = await MarketplaceService.fetchLiveCategoryStream({
         type: 'PRODUCT',
@@ -171,6 +167,7 @@ export const MarketplaceScreen: React.FC = () => {
         query: searchQuery,
         page: 1,
       });
+      if (requestId !== requestSequence.current) return;
       if (stream.items && stream.items.length > 0) {
         setItemsList(stream.items);
         setHasMorePages(stream.hasMore);
@@ -183,18 +180,22 @@ export const MarketplaceScreen: React.FC = () => {
         setIsOffline(true);
       }
     } catch {
+      if (requestId !== requestSequence.current) return;
       setItemsList([]);
       setHasMorePages(false);
       setIsOffline(true);
     } finally {
-      setIsRefreshing(false);
-      setIsLoading(false);
+      if (requestId === requestSequence.current) {
+        setIsRefreshing(false);
+        setIsLoading(false);
+      }
     }
   }, [selectedCategory, selectedSubcategorySlug, selectedSubcategoryName, searchQuery]);
 
   // Infinite scroll load more
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || !hasMorePages || isOffline) return;
+    const requestId = requestSequence.current;
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
     try {
@@ -206,6 +207,7 @@ export const MarketplaceScreen: React.FC = () => {
         query: searchQuery,
         page: nextPage,
       });
+      if (requestId !== requestSequence.current) return;
       if (stream.items && stream.items.length > 0) {
         setItemsList((prev) => {
           const map = new Map<string, MarketplaceItem>();
@@ -220,6 +222,7 @@ export const MarketplaceScreen: React.FC = () => {
         setHasMorePages(false);
       }
     } catch {
+      if (requestId !== requestSequence.current) return;
       setHasMorePages(false);
     } finally {
       setIsLoadingMore(false);
@@ -236,13 +239,16 @@ export const MarketplaceScreen: React.FC = () => {
   // Quick category selection action: transitions to 2-column product grid
   const handleSelectCategory = (catName: string, subSlug?: string, subName?: string) => {
     setSelectedCategory(catName);
+    const firstCategoryMatch = OFFICIAL_GEM_SUBCATEGORIES.find(
+      (s) => s.category.toLowerCase() === catName.toLowerCase()
+    );
     const targetSlug =
       subSlug ||
-      OFFICIAL_GEM_SUBCATEGORIES.find((s) => s.category.toLowerCase() === catName.toLowerCase())?.slug ||
-      'computers-entry-level-computer-cpu/search';
+      firstCategoryMatch?.slug ||
+      '';
     const targetName =
       subName ||
-      OFFICIAL_GEM_SUBCATEGORIES.find((s) => s.category.toLowerCase() === catName.toLowerCase())?.name ||
+      firstCategoryMatch?.name ||
       catName;
     setSelectedSubcategorySlug(targetSlug);
     setSelectedSubcategoryName(targetName);

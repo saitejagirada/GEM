@@ -10,6 +10,7 @@
 2. **Document preparation** (`screens/MyWorkScreen.tsx`):
    - Bid-linked local folders, file picker, checklist review, and storage state.
    - Keeps business documents on the device until the user chooses to continue on GeM.
+   - Optional bid-PDF details scan runs on the device only, stores a small extracted summary, and deletes its temporary PDF copy.
 3. **Official portal workspace** (`screens/OfficialPortalScreen.tsx`):
    - Opens official GeM login and public pages through the device browser.
    - Keeps credentials, OTPs, cookies, private history, and final submission inside GeM.
@@ -23,6 +24,7 @@ The app now starts from the current public GeM bid listing and a preparation wor
 - Bid-linked document preparation using the device document picker.
 - A checklist only when requirements are actually present in the record; otherwise the UI directs the user to the official bid document.
 - Explicit handoff to the official GeM bid page for login, MFA, upload, and final submission.
+- The PDF details scanner is user-triggered and bounded to 12 MB; it reads a PDF text layer locally and does not send documents to a server.
 
 The app does not store GeM credentials, OTPs, session cookies, private bid history, or claim that a local attachment was uploaded.
 

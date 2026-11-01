@@ -33,6 +33,9 @@ export interface MarketplaceItem {
   id: string;
   title: string;
   category: string;
+  /** Present only when the item came from a scoped live subcategory request. */
+  subcategorySlug?: string;
+  subcategoryName?: string;
   type: 'PRODUCT' | 'SERVICE';
   l1PriceInr: number;
   mrpInr?: number;
@@ -67,6 +70,12 @@ export interface MarketplaceFilter {
 }
 
 export type MarketplaceStreamSource = 'LIVE_PORTAL' | 'CACHED_CATALOG' | 'EMPTY';
+
+interface MarketplacePageCache {
+  items: MarketplaceItem[];
+  hasMore: boolean;
+  page: number;
+}
 
 export const OFFICIAL_PRODUCT_CATEGORIES: MarketplaceCategory[] = [
   {
@@ -316,6 +325,14 @@ export class MarketplaceService {
     ...MOCK_MARKETPLACE_ITEMS,
     ...LIVE_PORTAL_PRODUCTS.filter((p) => !MOCK_MARKETPLACE_ITEMS.some((m) => m.id === p.id)),
   ];
+  /**
+   * Page-scoped cache for successful live requests. The old global catalog was
+   * useful for cart calculations but unsafe for rendering: a failed request
+   * for page 2 of one category could return every item previously seen in a
+   * different category. Keep the global catalog for compatibility, but only
+   * use this exact request cache as a UI fallback.
+   */
+  private static livePageCache: Map<string, MarketplacePageCache> = new Map();
   private static listeners: Set<(items: MarketplaceItem[]) => void> = new Set();
 
   /**
@@ -358,6 +375,36 @@ export class MarketplaceService {
     }
   }
 
+  private static getStreamCacheKey(filter: MarketplaceFilter | undefined, page: number): string {
+    return [
+      filter?.type || 'PRODUCT',
+      filter?.category || '',
+      filter?.subcategorySlug || '',
+      filter?.subcategoryName || '',
+      filter?.query?.trim().toLowerCase() || '',
+      page,
+    ].join('|');
+  }
+
+  private static cacheStreamPage(
+    filter: MarketplaceFilter | undefined,
+    result: { items: MarketplaceItem[]; hasMore: boolean; page: number }
+  ): void {
+    this.livePageCache.set(this.getStreamCacheKey(filter, result.page), {
+      items: [...result.items],
+      hasMore: result.hasMore,
+      page: result.page,
+    });
+  }
+
+  private static getCachedStreamPage(
+    filter: MarketplaceFilter | undefined,
+    page: number
+  ): MarketplacePageCache | undefined {
+    const cached = this.livePageCache.get(this.getStreamCacheKey(filter, page));
+    return cached ? { ...cached, items: [...cached.items] } : undefined;
+  }
+
   /**
    * Filters marketplace catalog by type, category, outlet store, and keyword search.
    */
@@ -392,6 +439,17 @@ export class MarketplaceService {
       );
     }
 
+    // A subcategory request must never be satisfied by an unscoped item from
+    // another category or another subcategory. Live crawler results are tagged
+    // before entering the catalog; older bundled records are intentionally not
+    // treated as a match here.
+    if (filter?.subcategorySlug) {
+      items = items.filter((item) => item.subcategorySlug === filter.subcategorySlug);
+    } else if (filter?.subcategoryName) {
+      const subcategoryName = filter.subcategoryName.toLowerCase().trim();
+      items = items.filter((item) => item.subcategoryName?.toLowerCase().trim() === subcategoryName);
+    }
+
     return items;
   }
 
@@ -413,20 +471,35 @@ export class MarketplaceService {
     source: MarketplaceStreamSource;
   }> {
     const page = filter?.page || 1;
+    const cachedPage = () => this.getCachedStreamPage(filter, page);
 
-    // 1. Direct real-time keyword search if query is provided
+    // 1. Direct real-time keyword search if query is provided. A search
+    // failure must remain empty; falling through to the default computer slug
+    // is what caused unrelated computer products to appear on later pages.
     if (filter?.query && filter.query.trim()) {
       try {
         const searchRes = await GeMClientCrawler.searchLiveProducts(filter.query.trim(), page);
         if (searchRes.items && searchRes.items.length > 0) {
-          this.ingestLiveProducts(searchRes.items);
-          return { ...searchRes, source: 'LIVE_PORTAL' };
+          const scopedItems = searchRes.items.map((item) => ({
+            ...item,
+            subcategorySlug: undefined,
+            subcategoryName: undefined,
+          }));
+          this.ingestLiveProducts(scopedItems);
+          const result = { ...searchRes, items: scopedItems };
+          this.cacheStreamPage(filter, result);
+          return { ...result, source: 'LIVE_PORTAL' };
         }
       } catch {}
+
+      const cached = cachedPage();
+      return cached
+        ? { ...cached, source: 'CACHED_CATALOG' }
+        : { items: [], hasMore: false, page, source: 'EMPTY' };
     }
 
     // 2. Direct real-time category crawl from mkp.gem.gov.in
-    let slug = 'computers-entry-level-computer-cpu/search'; // Official GeM desktop computers
+    let slug: string | undefined;
     if (filter?.subcategorySlug) {
       slug = filter.subcategorySlug;
     } else if (filter?.category && filter.category !== 'All Categories' && filter.category !== 'ALL') {
@@ -439,34 +512,55 @@ export class MarketplaceService {
       if (match) {
         slug = match.slug;
       }
+    } else if (!filter?.category) {
+      // Preserve the legacy no-filter call used by the service API, but never
+      // use this default for an explicit category or subcategory request.
+      slug = 'computers-entry-level-computer-cpu/search';
     }
 
-    try {
-      const crawlRes = await GeMClientCrawler.fetchCategoryPage(slug, page);
-      if (crawlRes.items && crawlRes.items.length > 0) {
-        this.ingestLiveProducts(crawlRes.items);
-        return { ...crawlRes, source: 'LIVE_PORTAL' };
-      }
-    } catch {}
-
-    // Some GeM category slugs change over time. Retry with the visible
-    // category name before falling back to the local public catalog.
-    const categorySearch = filter?.subcategoryName || filter?.category;
-    if (categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
+    if (slug) {
       try {
-        const searchRes = await GeMClientCrawler.searchLiveProducts(categorySearch, page);
-        if (searchRes.items && searchRes.items.length > 0) {
-          this.ingestLiveProducts(searchRes.items);
-          return { ...searchRes, source: 'LIVE_PORTAL' };
+        const crawlRes = await GeMClientCrawler.fetchCategoryPage(slug, page);
+        if (crawlRes.items && crawlRes.items.length > 0) {
+          const scopedItems = crawlRes.items.map((item) => ({
+            ...item,
+            subcategorySlug: filter?.subcategorySlug || slug,
+            subcategoryName: filter?.subcategoryName || filter?.category,
+          }));
+          this.ingestLiveProducts(scopedItems);
+          const result = { ...crawlRes, items: scopedItems };
+          this.cacheStreamPage(filter, result);
+          return { ...result, source: 'LIVE_PORTAL' };
         }
       } catch {}
     }
 
-    // 3. Graceful fallback: preserve category discovery from the last synced
-    // public catalog instead of making every non-IT category look empty.
-    const cachedItems = this.getItems(filter);
-    if (cachedItems.length > 0) {
-      return { items: cachedItems, hasMore: false, page, source: 'CACHED_CATALOG' };
+    // Only perform the category-name retry when the caller did not already
+    // provide a concrete subcategory URL. A concrete URL returning no data is
+    // a real empty/error result, not permission to search a different domain.
+    const categorySearch = filter?.subcategorySlug ? undefined : filter?.subcategoryName || filter?.category;
+    if (categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
+      try {
+        const searchRes = await GeMClientCrawler.searchLiveProducts(categorySearch, page);
+        if (searchRes.items && searchRes.items.length > 0) {
+          const scopedItems = searchRes.items.map((item) => ({
+            ...item,
+            subcategorySlug: undefined,
+            subcategoryName: filter?.subcategoryName,
+          }));
+          this.ingestLiveProducts(scopedItems);
+          const result = { ...searchRes, items: scopedItems };
+          this.cacheStreamPage(filter, result);
+          return { ...result, source: 'LIVE_PORTAL' };
+        }
+      } catch {}
+    }
+
+    // 3. Graceful fallback: return only the exact category/subcategory/query
+    // page previously fetched on this device.
+    const cached = cachedPage();
+    if (cached) {
+      return { ...cached, source: 'CACHED_CATALOG' };
     }
 
     return { items: [], hasMore: false, page, source: 'EMPTY' };

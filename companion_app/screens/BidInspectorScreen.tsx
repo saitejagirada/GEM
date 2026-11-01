@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
+import { LocalPdfScanner, type LocalPdfScanResult } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
 
@@ -28,6 +29,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   onClose,
   onPrepareDocuments,
 }) => {
+  const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
+  const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
+  const [isScanningPdf, setIsScanningPdf] = useState(false);
+
+  useEffect(() => {
+    setCheckedDocs({});
+    setPdfScan(null);
+    if (!bid) return;
+
+    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
+    LocalPdfScanner.getCachedScan(bid.bidNumber, targetUrl).then((cached) => {
+      if (cached) setPdfScan(cached);
+    });
+  }, [bid?.bidNumber, bid?.docUrl]);
+
   if (!bid) return null;
 
   const fundamentals = BidDocService.getFundamentalsSummary(bid);
@@ -36,8 +52,6 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const requiredDocuments = Array.isArray(bid.requiredDocuments) ? bid.requiredDocuments : [];
   const boqItems = Array.isArray(bid.boqItems) ? bid.boqItems : [];
   const consignees = Array.isArray(bid.consignees) ? bid.consignees : [];
-
-  const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
 
   const toggleDoc = (docName: string) => {
     setCheckedDocs((prev) => ({
@@ -82,6 +96,49 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         Alert.alert('Official GeM Portal', `Bid: ${bid.bidNumber}\n\nDocument Link:\n${targetUrl}`);
       });
   };
+
+  const handleScanPdfOnDevice = async () => {
+    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
+    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
+      Alert.alert('Security Notice', 'The bid document is not from a verified official GeM domain.');
+      return;
+    }
+
+    setIsScanningPdf(true);
+    try {
+      const result = await LocalPdfScanner.scanOfficialBidPdf(bid.bidNumber, targetUrl);
+      setPdfScan(result);
+      if (result.status === 'NO_TEXT_LAYER') {
+        Alert.alert('No readable text layer', result.note);
+      } else if (result.status === 'TOO_LARGE') {
+        Alert.alert('PDF is large', result.note);
+      } else if (result.status === 'UNAVAILABLE' || result.status === 'ERROR') {
+        Alert.alert('Could not scan PDF', result.note);
+      }
+    } finally {
+      setIsScanningPdf(false);
+    }
+  };
+
+  const pdfFieldRows: Array<[string, string | number | undefined]> = [
+    ['Bid number', pdfScan?.details.bidNumber],
+    ['Title', pdfScan?.details.title],
+    ['Department', pdfScan?.details.department],
+    ['Ministry', pdfScan?.details.ministry],
+    ['Closing date', pdfScan?.details.closingDate],
+    [
+      'Estimated value',
+      pdfScan?.details.estimatedValueInr !== undefined
+        ? `₹${pdfScan.details.estimatedValueInr.toLocaleString('en-IN')}`
+        : undefined,
+    ],
+    [
+      'EMD amount',
+      pdfScan?.details.emdAmountInr !== undefined
+        ? `₹${pdfScan.details.emdAmountInr.toLocaleString('en-IN')}`
+        : undefined,
+    ],
+  ];
 
   const renderTypeBadge = () => {
     if (bid.isRa || bid.type === 'RA') {
@@ -260,6 +317,45 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 <Text style={styles.cellValueSecondary}>{bid.splittingRatio || 'Not published'}</Text>
               </View>
             </View>
+          </View>
+
+          {/* Optional, bounded, device-only PDF analysis */}
+          <View style={styles.card}>
+            <View style={styles.pdfScanHeader}>
+              <Text style={styles.sectionHeading}>PDF details on this device</Text>
+              <Text style={styles.pdfScanBadge}>DEVICE ONLY</Text>
+            </View>
+            <Text style={styles.notPublishedText}>
+              Scan the official bid PDF only when needed. The raw file is processed on this device, removed after scanning, and never uploaded by the companion.
+            </Text>
+            <TouchableOpacity
+              style={[styles.pdfScanButton, isScanningPdf && styles.pdfScanButtonDisabled]}
+              onPress={handleScanPdfOnDevice}
+              disabled={isScanningPdf}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.pdfScanButtonText}>
+                {isScanningPdf ? 'Scanning on device…' : pdfScan ? 'Scan again on device' : 'Scan bid PDF on device'}
+              </Text>
+            </TouchableOpacity>
+            {pdfScan ? (
+              <View style={styles.pdfScanResult}>
+                <Text style={styles.pdfScanStatus}>
+                  {pdfScan.status === 'EXTRACTED'
+                    ? `Read ${pdfScan.textLength.toLocaleString('en-IN')} characters locally`
+                    : pdfScan.status.replace(/_/g, ' ')}
+                </Text>
+                {pdfFieldRows
+                  .filter(([, value]) => value !== undefined && value !== '')
+                  .map(([label, value]) => (
+                    <View key={label} style={styles.pdfFieldRow}>
+                      <Text style={styles.pdfFieldLabel}>{label}</Text>
+                      <Text style={styles.pdfFieldValue}>{String(value)}</Text>
+                    </View>
+                  ))}
+                <Text style={styles.pdfScanNote}>{pdfScan.note}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Risk Factors Assessment */}
@@ -487,6 +583,17 @@ const styles = StyleSheet.create({
   consigneeQty: { color: '#374151', fontSize: 12, fontWeight: '800', marginTop: 2 },
   checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   checkRatio: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
+  pdfScanHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  pdfScanBadge: { color: '#0B4F71', fontSize: 9, fontWeight: '800', letterSpacing: 0.7 },
+  pdfScanButton: { minHeight: 44, borderRadius: 6, backgroundColor: '#0B4F71', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, marginTop: 14 },
+  pdfScanButtonDisabled: { opacity: 0.6 },
+  pdfScanButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  pdfScanResult: { borderTopWidth: 1, borderTopColor: '#D6DDE3', marginTop: 14, paddingTop: 12 },
+  pdfScanStatus: { color: '#047857', fontSize: 11, fontWeight: '800', marginBottom: 6 },
+  pdfFieldRow: { flexDirection: 'row', gap: 8, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#EEF1F4' },
+  pdfFieldLabel: { width: 104, color: '#6B7280', fontSize: 11, fontWeight: '700' },
+  pdfFieldValue: { flex: 1, color: '#1F2937', fontSize: 11, lineHeight: 16 },
+  pdfScanNote: { color: '#6B7280', fontSize: 10, lineHeight: 15, marginTop: 9 },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',

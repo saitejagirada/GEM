@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { MarketplaceService } from '../services/MarketplaceService.ts';
+import { GeMClientCrawler } from '../services/GeMClientCrawler.ts';
 
 describe('MarketplaceService', () => {
   it('retrieves official 9 product categories and verified service categories', () => {
@@ -96,6 +97,55 @@ describe('MarketplaceService', () => {
     // fetchLiveProducts returns products when network is accessible or empty when offline
     const liveItems = await MarketplaceService.fetchLiveProducts();
     assert.ok(Array.isArray(liveItems));
+  });
+
+  it('does not reuse page-one products when a scoped page-two request is empty', async () => {
+    const originalFetchCategoryPage = GeMClientCrawler.fetchCategoryPage;
+    const pageOneItem = {
+      id: 'gem-scoped-page-one',
+      title: 'Steel tube from page one',
+      category: 'Pipes & Fittings',
+      type: 'PRODUCT' as const,
+      l1PriceInr: 1000,
+      priceUnit: 'per Unit',
+      minOrderQty: 1,
+      oemBrand: 'Test supplier',
+      rating: 0,
+      totalOrders: 0,
+      specSummary: {},
+      procurementModes: ['DIRECT_PURCHASE' as const],
+      msePreference: false,
+      makeInIndiaPercent: 0,
+      isAvailableOnGeM: true,
+    };
+
+    GeMClientCrawler.fetchCategoryPage = async (_slug, page) =>
+      page === 1
+        ? { items: [pageOneItem], hasMore: true, page }
+        : { items: [], hasMore: false, page };
+
+    try {
+      const firstPage = await MarketplaceService.fetchLiveCategoryStream({
+        type: 'PRODUCT',
+        category: 'Pipes & Fittings',
+        subcategorySlug: 'test-steel-tubes/search',
+        subcategoryName: 'Steel Tubes & Fittings',
+        page: 1,
+      });
+      const secondPage = await MarketplaceService.fetchLiveCategoryStream({
+        type: 'PRODUCT',
+        category: 'Pipes & Fittings',
+        subcategorySlug: 'test-steel-tubes/search',
+        subcategoryName: 'Steel Tubes & Fittings',
+        page: 2,
+      });
+
+      assert.equal(firstPage.items.length, 1);
+      assert.equal(secondPage.items.length, 0);
+      assert.equal(secondPage.source, 'EMPTY');
+    } finally {
+      GeMClientCrawler.fetchCategoryPage = originalFetchCategoryPage;
+    }
   });
 
   it('subscribes to live product updates and dynamically ingests new seller products', () => {
