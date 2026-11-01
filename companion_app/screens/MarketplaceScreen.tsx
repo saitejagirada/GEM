@@ -6,7 +6,7 @@
  *    - Search bar with instant category & subcategory autocomplete
  *    - Direct "Search all live products for '{query}'" jump
  *    - [ Products ] and [ Services ] segmented tabs matching mkp.gem.gov.in
- *    - 9 Official Product Domains (IT, Automobiles, Furniture, Medical, Stationery, etc.)
+ *    - Curated public product domains (IT, Automobiles, Furniture, Medical, Stationery, etc.)
  *    - 20 Trending & 10 Emerging Services from official GeM portal taxonomy
  *    - Quick subcategory pills on each category card
  * 2. 2-Column Product Grid View (browseView === 'products'):
@@ -43,6 +43,7 @@ import {
   OFFICIAL_TRENDING_SERVICES,
   OFFICIAL_EMERGING_SERVICES,
   type GeMServiceItem,
+  type MarketplaceStreamSource,
 } from '../services/MarketplaceService';
 import { OFFICIAL_GEM_SUBCATEGORIES, type GeMSubcategoryConfig } from '../services/GeMClientCrawler';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
@@ -94,6 +95,7 @@ export const MarketplaceScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOffline, setIsOffline] = useState<boolean>(false);
+  const [catalogSource, setCatalogSource] = useState<MarketplaceStreamSource>('EMPTY');
 
   // Infinite scroll pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -165,16 +167,19 @@ export const MarketplaceScreen: React.FC = () => {
         type: 'PRODUCT',
         category: selectedCategory,
         subcategorySlug: selectedSubcategorySlug,
+        subcategoryName: selectedSubcategoryName,
         query: searchQuery,
         page: 1,
       });
       if (stream.items && stream.items.length > 0) {
         setItemsList(stream.items);
         setHasMorePages(stream.hasMore);
-        setIsOffline(false);
+        setCatalogSource(stream.source);
+        setIsOffline(stream.source === 'EMPTY');
       } else {
         setItemsList([]);
         setHasMorePages(false);
+        setCatalogSource('EMPTY');
         setIsOffline(true);
       }
     } catch {
@@ -185,7 +190,7 @@ export const MarketplaceScreen: React.FC = () => {
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, [selectedCategory, selectedSubcategorySlug, searchQuery]);
+  }, [selectedCategory, selectedSubcategorySlug, selectedSubcategoryName, searchQuery]);
 
   // Infinite scroll load more
   const handleLoadMore = useCallback(async () => {
@@ -197,6 +202,7 @@ export const MarketplaceScreen: React.FC = () => {
         type: 'PRODUCT',
         category: selectedCategory,
         subcategorySlug: selectedSubcategorySlug,
+        subcategoryName: selectedSubcategoryName,
         query: searchQuery,
         page: nextPage,
       });
@@ -209,6 +215,7 @@ export const MarketplaceScreen: React.FC = () => {
         });
         setCurrentPage(nextPage);
         setHasMorePages(stream.hasMore);
+        setCatalogSource(stream.source);
       } else {
         setHasMorePages(false);
       }
@@ -217,7 +224,7 @@ export const MarketplaceScreen: React.FC = () => {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMorePages, isOffline, currentPage, selectedCategory, selectedSubcategorySlug, searchQuery]);
+  }, [isLoadingMore, hasMorePages, isOffline, currentPage, selectedCategory, selectedSubcategorySlug, selectedSubcategoryName, searchQuery]);
 
   // Trigger live products when switching to products view or changing subcategory
   useEffect(() => {
@@ -565,7 +572,12 @@ export const MarketplaceScreen: React.FC = () => {
             {selectedSubcategoryName || selectedCategory}
           </Text>
           <Text style={[styles.navSubTitle, { color: colors.textSecondary }]}>
-            {filteredProducts.length}{hasMorePages ? '+' : ''} Live GeM Sellers
+            {filteredProducts.length}{hasMorePages ? '+' : ''}{' '}
+            {catalogSource === 'LIVE_PORTAL'
+              ? 'Live GeM Sellers'
+              : catalogSource === 'CACHED_CATALOG'
+                ? 'Cached public listings · verify on GeM'
+                : 'Public listings'}
           </Text>
         </View>
 
@@ -713,7 +725,7 @@ export const MarketplaceScreen: React.FC = () => {
         <View>
           <SectionHeader
             title="Popular Product Categories"
-            subtitle="Explore official GeM procurement categories with live seller listings"
+            subtitle="Explore configured GeM domains with live or cached public listings"
           />
 
           <View style={styles.categories2ColGrid}>
@@ -786,7 +798,7 @@ export const MarketplaceScreen: React.FC = () => {
           {/* Trending Services */}
           <SectionHeader
             title="Trending Services"
-            subtitle="Official GeM public procurement services with pre-negotiated SLAs"
+            subtitle="Configured GeM service domains; verify current availability on the official portal"
           />
           <View style={styles.servicesGrid}>
             {filteredTrendingServices.map((srv) => (

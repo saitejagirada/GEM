@@ -1,7 +1,7 @@
 /**
  * GeM Official Marketplace Catalog Service
  * Reverse-engineered from https://mkp.gem.gov.in and https://gem.gov.in.
- * Provides the full public procurement product & services taxonomy:
+ * Provides curated public procurement product & service entry points:
  * - 9 Popular Product Categories (IT, Automobiles, Furniture, Medical, Stationery, etc.)
  * - Trending & Emerging Services (Security, Manpower, Cabs, Cloud, AMC, Drones)
  * - GeM Outlet Stores (Saras Ajeevika, ODOP, Startup Runway, Womaniya, Millets)
@@ -55,6 +55,18 @@ export interface MarketplaceItem {
   inStock?: boolean;
   stockCount?: number;
 }
+
+export interface MarketplaceFilter {
+  type?: 'PRODUCT' | 'SERVICE' | 'ALL';
+  category?: string;
+  outletStore?: string;
+  query?: string;
+  page?: number;
+  subcategorySlug?: string;
+  subcategoryName?: string;
+}
+
+export type MarketplaceStreamSource = 'LIVE_PORTAL' | 'CACHED_CATALOG' | 'EMPTY';
 
 export const OFFICIAL_PRODUCT_CATEGORIES: MarketplaceCategory[] = [
   {
@@ -349,12 +361,7 @@ export class MarketplaceService {
   /**
    * Filters marketplace catalog by type, category, outlet store, and keyword search.
    */
-  public static getItems(filter?: {
-    type?: 'PRODUCT' | 'SERVICE' | 'ALL';
-    category?: string;
-    outletStore?: string;
-    query?: string;
-  }): MarketplaceItem[] {
+  public static getItems(filter?: MarketplaceFilter): MarketplaceItem[] {
     let items = [...this.liveCatalog];
 
     if (filter?.type && filter.type !== 'ALL') {
@@ -403,6 +410,7 @@ export class MarketplaceService {
     items: MarketplaceItem[];
     hasMore: boolean;
     page: number;
+    source: MarketplaceStreamSource;
   }> {
     const page = filter?.page || 1;
 
@@ -412,7 +420,7 @@ export class MarketplaceService {
         const searchRes = await GeMClientCrawler.searchLiveProducts(filter.query.trim(), page);
         if (searchRes.items && searchRes.items.length > 0) {
           this.ingestLiveProducts(searchRes.items);
-          return searchRes;
+          return { ...searchRes, source: 'LIVE_PORTAL' };
         }
       } catch {}
     }
@@ -437,21 +445,31 @@ export class MarketplaceService {
       const crawlRes = await GeMClientCrawler.fetchCategoryPage(slug, page);
       if (crawlRes.items && crawlRes.items.length > 0) {
         this.ingestLiveProducts(crawlRes.items);
-        return crawlRes;
+        return { ...crawlRes, source: 'LIVE_PORTAL' };
       }
     } catch {}
 
-    // 3. Fallback: Check network connectivity
-    const online = await isNetworkOnline();
-    if (!online) {
-      return { items: [], hasMore: false, page };
+    // Some GeM category slugs change over time. Retry with the visible
+    // category name before falling back to the local public catalog.
+    const categorySearch = filter?.subcategoryName || filter?.category;
+    if (categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
+      try {
+        const searchRes = await GeMClientCrawler.searchLiveProducts(categorySearch, page);
+        if (searchRes.items && searchRes.items.length > 0) {
+          this.ingestLiveProducts(searchRes.items);
+          return { ...searchRes, source: 'LIVE_PORTAL' };
+        }
+      } catch {}
     }
 
-    return {
-      items: this.getItems(filter),
-      hasMore: false,
-      page,
-    };
+    // 3. Graceful fallback: preserve category discovery from the last synced
+    // public catalog instead of making every non-IT category look empty.
+    const cachedItems = this.getItems(filter);
+    if (cachedItems.length > 0) {
+      return { items: cachedItems, hasMore: false, page, source: 'CACHED_CATALOG' };
+    }
+
+    return { items: [], hasMore: false, page, source: 'EMPTY' };
   }
 
   /**

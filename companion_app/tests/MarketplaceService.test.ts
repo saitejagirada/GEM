@@ -26,6 +26,23 @@ describe('MarketplaceService', () => {
     assert.ok(searchHits.every((i) => i.title.toLowerCase().includes('dugong') || i.oemBrand.toLowerCase().includes('dugong')));
   });
 
+  it('keeps cached public listings available across the non-IT product domains', () => {
+    for (const category of [
+      'Automobiles',
+      'Furniture',
+      'Medical Products',
+      'Stationery Items',
+      'Electrical Appliances',
+      'Electronic Equipments',
+      'Textile Products',
+    ]) {
+      assert.ok(
+        MarketplaceService.getItems({ category }).length > 0,
+        `Expected cached listings for ${category}`
+      );
+    }
+  });
+
   it('filters items belonging to special outlet stores (Saras / ODOP / Startup Runway)', () => {
     const outlets = MarketplaceService.getOutletStores();
     assert.ok(outlets.some((o) => o.id === 'saras-ajeevika'));

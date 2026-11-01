@@ -18,7 +18,7 @@
 
 The app now includes a local productivity workspace opened from Home or More:
 
-- Previous bid records with Active / Awarded / All filters.
+- Locally tracked bid records with Active / Awarded / All filters.
 - Bid-linked document preparation using the device document picker.
 - Local checklist preflight against any available bid requirements.
 - Explicit handoff to the official GeM bid page or marketplace for login, 2FA, upload, and final submission.

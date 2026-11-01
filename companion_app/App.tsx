@@ -46,7 +46,6 @@ import { SupabaseClient } from './services/SupabaseClient';
 import { WorkspaceStorage } from './services/WorkspaceStorage';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network.ts';
-import { PortalApiClient } from './services/PortalApiClient';
 import { MOCK_USER_PROFILE, MOCK_MARKET_PULSE } from './fixtures/mockData';
 import type {
   DeconstructedBidDoc,
@@ -553,15 +552,6 @@ const MainAppContent: React.FC = () => {
               currentRank: 1,
               corrigendumCount: 0,
             };
-            PortalApiClient.addToPortfolio(bid);
-            void SupabaseClient.savePortfolioItem({
-              user_id: 'usr-agent-001',
-              bid_number: participatedRecord.bidNumber,
-              status: participatedRecord.stage,
-              quoted_l1: participatedRecord.quotedPriceInr,
-              expected_l1_benchmark: participatedRecord.expectedL1BenchmarkInr,
-              current_rank: participatedRecord.currentRank,
-            });
             void WorkspaceStorage.savePortfolioRecord(participatedRecord);
           }}
         />

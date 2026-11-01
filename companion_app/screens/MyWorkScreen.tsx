@@ -26,9 +26,7 @@ import {
   SegmentedTabs,
   StatusBadge,
 } from '../components/SharedUI';
-import { PortalApiClient } from '../services/PortalApiClient';
 import { PortalDocService } from '../services/PortalDocService';
-import { SupabaseClient } from '../services/SupabaseClient';
 import { WorkspaceService } from '../services/WorkspaceService';
 import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { formatDateSafe, formatInr } from '../utils/formatters';
@@ -54,26 +52,11 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
   const loadPortfolio = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [remoteRecords, vendorRecords, localRecords] = await Promise.all([
-        PortalApiClient.getPortfolio(),
-        SupabaseClient.getVendorPortfolio('usr-agent-001'),
-        WorkspaceStorage.loadPortfolio(),
-      ]);
-      const records = WorkspaceStorage.mergePortfolioRecords([
-        ...remoteRecords,
-        ...vendorRecords,
-        ...localRecords,
-      ]);
+      const records = await WorkspaceStorage.loadPortfolio();
       setPortfolio(records);
       setSelectedBidNumber((current) => current || records[0]?.bidNumber || '');
     } catch {
-      const [fallback, localRecords] = await Promise.all([
-        SupabaseClient.getVendorPortfolio('usr-agent-001'),
-        WorkspaceStorage.loadPortfolio(),
-      ]);
-      const records = WorkspaceStorage.mergePortfolioRecords([...fallback, ...localRecords]);
-      setPortfolio(records);
-      setSelectedBidNumber((current) => current || records[0]?.bidNumber || '');
+      setPortfolio([]);
     } finally {
       setIsRefreshing(false);
     }
@@ -138,6 +121,12 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
       Alert.alert('Open official GeM portal', 'The official marketplace could not be opened on this device.');
     });
   }, [linkedDocuments, selectedBidNumber]);
+
+  const openOfficialLogin = useCallback(() => {
+    Linking.openURL('https://ui.gem.gov.in/login').catch(() => {
+      Alert.alert('Open official GeM sign-in', 'The official GeM sign-in page could not be opened on this device.');
+    });
+  }, []);
 
   const markUserReportedSubmitted = useCallback(async () => {
     if (!selectedBidNumber) {
@@ -324,18 +313,31 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
           My work
         </Text>
         <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-          Keep submissions, checklists and supporting files together before you continue on GeM.
+          Keep local bid records, checklists and supporting files together before you continue on GeM.
         </Text>
+
+        <View style={[styles.authCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.authEyebrow, { color: colors.primary }]}>PRIVATE ACCOUNT DATA</Text>
+          <Text style={[styles.authTitle, { color: colors.textPrimary }]}>GeM sign-in is not connected</Text>
+          <Text style={[styles.authText, { color: colors.textSecondary }]}>
+            These records come from public/demo data and your local tracking. To see your actual GeM bid history, sign in on the official portal. This app does not receive your password or OTP.
+          </Text>
+          <SecondaryButton
+            label="Open official GeM sign-in"
+            onPress={openOfficialLogin}
+            style={styles.fullButton}
+          />
+        </View>
 
         <View style={[styles.summaryCard, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
           <Text style={[styles.summaryEyebrow, { color: colors.textInverse }]}>LOCAL WORKSPACE</Text>
           <Text style={[styles.summaryTitle, { color: colors.textInverse }]}>
-            {activeBids.length} active bid{activeBids.length === 1 ? '' : 's'} to follow
+            {activeBids.length} tracked active bid{activeBids.length === 1 ? '' : 's'}
           </Text>
           <View style={styles.summaryMetrics}>
             <View style={styles.summaryMetric}>
               <Text style={[styles.summaryMetricValue, { color: colors.textInverse }]}>{portfolio.length}</Text>
-              <Text style={[styles.summaryMetricLabel, { color: colors.textInverse }]}>records</Text>
+              <Text style={[styles.summaryMetricLabel, { color: colors.textInverse }]}>tracked records</Text>
             </View>
             <View style={styles.summaryMetric}>
               <Text style={[styles.summaryMetricValue, { color: colors.textInverse }]}>{awardedBids.length}</Text>
@@ -349,16 +351,16 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
         </View>
 
         <SegmentedTabs
-          options={['My bids', 'Documents']}
-          selected={section === 'BIDS' ? 'My bids' : 'Documents'}
-          onSelect={(value) => setSection(value === 'My bids' ? 'BIDS' : 'DOCUMENTS')}
+          options={['Tracked bids', 'Documents']}
+          selected={section === 'BIDS' ? 'Tracked bids' : 'Documents'}
+          onSelect={(value) => setSection(value === 'Tracked bids' ? 'BIDS' : 'DOCUMENTS')}
           style={styles.mainTabs}
         />
 
         {section === 'BIDS' ? (
           <View>
             <SectionHeader
-              title="Previous bids"
+              title="Tracked bid records"
               actionLabel="Refresh"
               onAction={loadPortfolio}
             />
@@ -379,7 +381,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids }) => 
               <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No records in this view</Text>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  Add a bid from the bid inspector to start tracking it in your local workspace.
+                  Add a public bid from the bid inspector to start tracking it in this local workspace.
                 </Text>
               </View>
             )}
@@ -532,6 +534,15 @@ const styles = StyleSheet.create({
   content: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 40 },
   pageTitle: { fontWeight: '800', letterSpacing: -0.4, marginTop: 8 },
   pageSubtitle: { fontSize: 13, lineHeight: 19, marginTop: 4, marginBottom: 16 },
+  authCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 14,
+    marginBottom: 16,
+  },
+  authEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  authTitle: { fontSize: 15, fontWeight: '800', marginTop: 4 },
+  authText: { fontSize: 11.5, lineHeight: 17, marginTop: 5, marginBottom: 8 },
   summaryCard: {
     borderRadius: DESIGN_TOKENS.cardRadius,
     borderWidth: DESIGN_TOKENS.borderWidth,
