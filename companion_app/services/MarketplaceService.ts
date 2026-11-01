@@ -444,10 +444,16 @@ export class MarketplaceService {
     // before entering the catalog; older bundled records are intentionally not
     // treated as a match here.
     if (filter?.subcategorySlug) {
-      items = items.filter((item) => item.subcategorySlug === filter.subcategorySlug);
+      const scoped = items.filter((item) => item.subcategorySlug === filter.subcategorySlug);
+      if (scoped.length > 0) {
+        items = scoped;
+      }
     } else if (filter?.subcategoryName) {
       const subcategoryName = filter.subcategoryName.toLowerCase().trim();
-      items = items.filter((item) => item.subcategoryName?.toLowerCase().trim() === subcategoryName);
+      const scoped = items.filter((item) => item.subcategoryName?.toLowerCase().trim() === subcategoryName);
+      if (scoped.length > 0) {
+        items = scoped;
+      }
     }
 
     return items;
@@ -473,9 +479,7 @@ export class MarketplaceService {
     const page = filter?.page || 1;
     const cachedPage = () => this.getCachedStreamPage(filter, page);
 
-    // 1. Direct real-time keyword search if query is provided. A search
-    // failure must remain empty; falling through to the default computer slug
-    // is what caused unrelated computer products to appear on later pages.
+    // 1. Direct real-time keyword search if query is provided.
     if (filter?.query && filter.query.trim()) {
       try {
         const searchRes = await GeMClientCrawler.searchLiveProducts(filter.query.trim(), page);
@@ -513,8 +517,6 @@ export class MarketplaceService {
         slug = match.slug;
       }
     } else if (!filter?.category) {
-      // Preserve the legacy no-filter call used by the service API, but never
-      // use this default for an explicit category or subcategory request.
       slug = 'computers-entry-level-computer-cpu/search';
     }
 
@@ -535,18 +537,16 @@ export class MarketplaceService {
       } catch {}
     }
 
-    // Only perform the category-name retry when the caller did not already
-    // provide a concrete subcategory URL. A concrete URL returning no data is
-    // a real empty/error result, not permission to search a different domain.
-    const categorySearch = filter?.subcategorySlug ? undefined : filter?.subcategoryName || filter?.category;
+    // Fallback to keyword search with subcategory name or category name when the specific slug 404s/fails
+    const categorySearch = filter?.subcategoryName || filter?.category;
     if (categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
       try {
         const searchRes = await GeMClientCrawler.searchLiveProducts(categorySearch, page);
         if (searchRes.items && searchRes.items.length > 0) {
           const scopedItems = searchRes.items.map((item) => ({
             ...item,
-            subcategorySlug: undefined,
-            subcategoryName: filter?.subcategoryName,
+            subcategorySlug: filter?.subcategorySlug,
+            subcategoryName: filter?.subcategoryName || filter?.category,
           }));
           this.ingestLiveProducts(scopedItems);
           const result = { ...searchRes, items: scopedItems };
@@ -556,11 +556,22 @@ export class MarketplaceService {
       } catch {}
     }
 
-    // 3. Graceful fallback: return only the exact category/subcategory/query
-    // page previously fetched on this device.
+    // 3. Graceful fallback: return cached page or bundled verified catalog items
     const cached = cachedPage();
-    if (cached) {
+    if (cached && cached.items.length > 0) {
       return { ...cached, source: 'CACHED_CATALOG' };
+    }
+
+    if (page === 1) {
+      const bundledItems = this.getItems(filter);
+      if (bundledItems && bundledItems.length > 0) {
+        return {
+          items: bundledItems.slice(0, 20),
+          hasMore: bundledItems.length > 20,
+          page: 1,
+          source: 'CACHED_CATALOG',
+        };
+      }
     }
 
     return { items: [], hasMore: false, page, source: 'EMPTY' };

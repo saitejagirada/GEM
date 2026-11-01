@@ -838,7 +838,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-39414418655",
     "title": "PODDAR TRADERS  PODDAR TRADERS Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 5500.0,
@@ -872,7 +872,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-83728131786",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -906,7 +906,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-69198386989",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -940,7 +940,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-25270436911",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -974,7 +974,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-39989527018",
     "title": "LP Low back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -1008,7 +1008,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-65631271727",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -1042,7 +1042,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-60425807502",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -1076,7 +1076,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-45942852950",
     "title": "LP Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -1110,7 +1110,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-44446125783",
     "title": "NAMYA  APPLE FURNITURE Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 10000.0,
@@ -1144,7 +1144,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-1219056710",
     "title": "NAMYA  APPLE FURNITURE Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 12000.0,
@@ -1178,7 +1178,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-48179092968",
     "title": "SAGAR SHREE FURNITURE Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 45080.0,
@@ -1212,7 +1212,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
   {
     "id": "gem-live-5116877-67013453357",
     "title": "SAGAR SHREE FURNITURE Mid back Revolving Chair of Adjustable height with Wheels",
-    "category": "Office Furniture",
+    "category": "Furniture",
     "type": "PRODUCT",
     "l1PriceInr": 2500.0,
     "mrpInr": 45080.0,
@@ -2073,7 +2073,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "oemBrand": "Tata Motors Fleet Solutions",
     "rating": 4.9,
     "totalOrders": 1400,
-    "imageUrl": "https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=500&auto=format&fit=crop&q=80",
+    "imageUrl": "https://assets-mkpbg.gem.gov.in/img/othe/7450162/a9/e7/tata_ace_ev.png.999x150x150.jpg",
     "productUrl": "https://mkp.gem.gov.in/automobiles/tata-ace-ev",
     "etaDelivery": "7-14 Days Fleet Handover",
     "badge": "Green Energy EV",
@@ -2106,7 +2106,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "oemBrand": "BPL Medical Technologies",
     "rating": 4.9,
     "totalOrders": 8400,
-    "imageUrl": "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=500&auto=format&fit=crop&q=80",
+    "imageUrl": "https://assets-mkpbg.gem.gov.in/img/othe/7450162/a9/e7/icu_monitor.png.999x150x150.jpg",
     "productUrl": "https://mkp.gem.gov.in/medical/icu-multipara-monitor",
     "etaDelivery": "⚡ 24-48 Hours Express",
     "badge": "NABH Approved",
@@ -2140,7 +2140,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "oemBrand": "Havells India Ltd",
     "rating": 4.8,
     "totalOrders": 180000,
-    "imageUrl": "https://images.unsplash.com/photo-1565814636199-ae8133055c1c?w=500&auto=format&fit=crop&q=80",
+    "imageUrl": "https://assets-mkpbg.gem.gov.in/img/othe/7450162/a9/e7/led_batten.png.999x150x150.jpg",
     "productUrl": "https://mkp.gem.gov.in/electrical/havells-led-batten",
     "etaDelivery": "⚡ 24h Express Delivery",
     "badge": "BEE 5-Star Rated",
@@ -2160,72 +2160,6 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "isAvailableOnGeM": true
   },
   {
-    "id": "gem-live-chem-001",
-    "title": "Dettol Hospital-Grade Disinfectant Floor Cleaner Liquid 5 Litres",
-    "category": "Chemical & Cleaning",
-    "type": "PRODUCT",
-    "l1PriceInr": 840.0,
-    "mrpInr": 1250.0,
-    "discountPercent": 33,
-    "priceUnit": "per Canister",
-    "unitText": "5 Litre Heavy-Duty Canister",
-    "minOrderQty": 2,
-    "oemBrand": "Reckitt Benckiser Professional",
-    "rating": 4.9,
-    "totalOrders": 78000,
-    "imageUrl": "https://images.unsplash.com/photo-1584813470613-5b1c1cad3d69?w=500&auto=format&fit=crop&q=80",
-    "productUrl": "https://mkp.gem.gov.in/cleaning/dettol-hospital-grade",
-    "etaDelivery": "⚡ Same Day / 24h Dispatch",
-    "badge": "Disinfection SLA",
-    "inStock": true,
-    "stockCount": 2800,
-    "specSummary": {
-      "Efficacy": "Kills 99.99% germs and viruses in 60 seconds",
-      "Application": "Hospitals, Govt Offices, Laboratories"
-    },
-    "procurementModes": [
-      "DIRECT_PURCHASE",
-      "L1_COMPARISON"
-    ],
-    "msePreference": true,
-    "makeInIndiaPercent": 100,
-    "isAvailableOnGeM": true
-  },
-  {
-    "id": "gem-live-mach-001",
-    "title": "Kirloskar Heavy-Duty Submersible Sewage & Dewatering Pump 5 HP",
-    "category": "Industrial Machineries",
-    "type": "PRODUCT",
-    "l1PriceInr": 62000.0,
-    "mrpInr": 85000.0,
-    "discountPercent": 27,
-    "priceUnit": "per Pump",
-    "unitText": "1 Complete Submersible Monobloc Pump Unit",
-    "minOrderQty": 1,
-    "oemBrand": "Kirloskar Brothers Limited",
-    "rating": 4.8,
-    "totalOrders": 5200,
-    "imageUrl": "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=80",
-    "productUrl": "https://mkp.gem.gov.in/machinery/kirloskar-submersible-pump",
-    "etaDelivery": "⚡ 3-5 Days Onsite Delivery",
-    "badge": "ISO 9001 Certified",
-    "inStock": true,
-    "stockCount": 120,
-    "specSummary": {
-      "Head": "Up to 30 Meters",
-      "Discharge": "800 LPM Capacity",
-      "Impeller": "Non-Clog Cast Iron Impeller"
-    },
-    "procurementModes": [
-      "DIRECT_PURCHASE",
-      "L1_COMPARISON",
-      "BID"
-    ],
-    "msePreference": true,
-    "makeInIndiaPercent": 95,
-    "isAvailableOnGeM": true
-  },
-  {
     "id": "gem-live-elec-002",
     "title": "Voltas 1.5 Ton 5-Star Adjustable Inverter Split Air Conditioner",
     "category": "Electronic Equipments",
@@ -2239,7 +2173,7 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "oemBrand": "Voltas Tata Enterprise",
     "rating": 4.8,
     "totalOrders": 21000,
-    "imageUrl": "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=500&auto=format&fit=crop&q=80",
+    "imageUrl": "https://assets-mkpbg.gem.gov.in/img/othe/7450162/a9/e7/split_ac.png.999x150x150.jpg",
     "productUrl": "https://mkp.gem.gov.in/electronics/voltas-inverter-split-ac",
     "etaDelivery": "⚡ 3-5 Days Free Standard Installation",
     "badge": "BEE 5-Star Inverter",
@@ -2260,3 +2194,4 @@ export const LIVE_PORTAL_PRODUCTS: MarketplaceItem[] = [
     "isAvailableOnGeM": true
   }
 ];
+

@@ -307,7 +307,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <View style={styles.oppMetaCol}>
                 <Text style={[styles.oppMetaLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
                 <Text style={[styles.oppMetaVal, { color: colors.primary }]}>
-                  {bid.publishedFields?.estimatedValue === false ? 'Not published' : formatLakhs(bid.estimatedBidValueInr)}
+                  {bid.estimatedBidValueInr === undefined || bid.publishedFields?.estimatedValue === false
+                    ? 'Not published'
+                    : formatLakhs(bid.estimatedBidValueInr)}
                 </Text>
               </View>
               <View style={styles.oppMetaCol}>
@@ -513,7 +515,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 14,
-    fontWeight: '650',
+    fontWeight: '600',
     marginBottom: 2,
   },
   categoryDesc: {
@@ -601,7 +603,7 @@ const styles = StyleSheet.create({
   },
   helpTitle: {
     fontSize: 14,
-    fontWeight: '750',
+    fontWeight: '700',
     marginBottom: 4,
   },
   helpSubtitle: {

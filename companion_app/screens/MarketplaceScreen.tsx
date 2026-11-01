@@ -57,6 +57,7 @@ import {
   SectionHeader,
 } from '../components/SharedUI';
 import { formatInr } from '../utils/formatters';
+import { isNetworkOnline } from '../utils/network';
 
 export const MarketplaceScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
@@ -172,18 +173,20 @@ export const MarketplaceScreen: React.FC = () => {
         setItemsList(stream.items);
         setHasMorePages(stream.hasMore);
         setCatalogSource(stream.source);
-        setIsOffline(stream.source === 'EMPTY');
+        setIsOffline(false);
       } else {
+        const online = await isNetworkOnline();
         setItemsList([]);
         setHasMorePages(false);
         setCatalogSource('EMPTY');
-        setIsOffline(true);
+        setIsOffline(!online);
       }
     } catch {
       if (requestId !== requestSequence.current) return;
+      const online = await isNetworkOnline();
       setItemsList([]);
       setHasMorePages(false);
-      setIsOffline(true);
+      setIsOffline(!online);
     } finally {
       if (requestId === requestSequence.current) {
         setIsRefreshing(false);
@@ -775,10 +778,17 @@ export const MarketplaceScreen: React.FC = () => {
                         delayPressIn={0}
                         unstable_pressDelay={0}
                         onPress={() => {
-                          const matchingSub = OFFICIAL_GEM_SUBCATEGORIES.find(
-                            (s) => s.name.toLowerCase() === subName.toLowerCase() || subName.toLowerCase().includes(s.name.toLowerCase())
-                          );
-                          handleSelectCategory(cat.name, matchingSub?.slug, subName);
+                          const pillLower = subName.toLowerCase();
+                          const matchingSub = OFFICIAL_GEM_SUBCATEGORIES.find((s) => {
+                            const sLower = s.name.toLowerCase();
+                            return (
+                              sLower === pillLower ||
+                              pillLower.includes(sLower) ||
+                              sLower.includes(pillLower) ||
+                              pillLower.split(/\s+/).some((w) => w.length > 3 && sLower.includes(w))
+                            );
+                          });
+                          handleSelectCategory(cat.name, matchingSub?.slug, matchingSub?.name || subName);
                         }}
                       >
                         <Text style={[styles.subtagText, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -1203,7 +1213,7 @@ export const MarketplaceScreen: React.FC = () => {
                     {formatInr(selectedItem.l1PriceInr)}
                   </Text>
                   <Text style={[styles.modalUnit, { color: colors.textSecondary }]}>
-                    {selectedItem.unitText || `per ${selectedItem.priceUnit}`} (Min Order: {selectedItem.minOrderQty})
+                    {selectedItem.unitText || (selectedItem.priceUnit ? `per ${selectedItem.priceUnit}` : 'per Unit')} (Min Order: {selectedItem.minOrderQty ?? 1})
                   </Text>
                 </View>
 
@@ -1221,10 +1231,10 @@ export const MarketplaceScreen: React.FC = () => {
                   Procurement Compliance
                 </Text>
                 <Text style={[styles.complianceText, { color: colors.textSecondary }]}>
-                  • Make in India Local Content: {selectedItem.makeInIndiaPercent}%{'\n'}
+                  • Make in India Local Content: {selectedItem.makeInIndiaPercent !== undefined ? `${selectedItem.makeInIndiaPercent}%` : 'As per tender'}{'\n'}
                   • MSE Exemption Privileges: {selectedItem.msePreference ? 'Eligible for 100% EMD Waiver' : 'Standard Guarantee'}{'\n'}
-                  • Verified OEM Brand: {selectedItem.oemBrand}{'\n'}
-                  • Permitted Modes: {selectedItem.procurementModes.join(', ')}
+                  • Verified OEM Brand: {selectedItem.oemBrand || 'Verified Seller'}{'\n'}
+                  • Permitted Modes: {(selectedItem.procurementModes || ['DIRECT_PURCHASE']).join(', ')}
                 </Text>
               </ScrollView>
 

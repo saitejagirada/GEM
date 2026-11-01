@@ -186,7 +186,7 @@ export const MyWorkScreen: React.FC<MyWorkScreenProps> = ({ availableBids, initi
       </View>
       <Text style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>{bid.title}</Text>
       <Text style={[styles.bidDepartment, { color: colors.textSecondary }]}>
-        {bid.department} · {bid.ministry}
+        {[bid.department, bid.ministry].filter(Boolean).join(' · ') || 'Department unstated'}
       </Text>
       <View style={[styles.liveMeta, { backgroundColor: colors.surfaceSubtle }]}>
         <View style={styles.metaCell}>

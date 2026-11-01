@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
   },
   benefitTitle: {
     fontSize: 13,
-    fontWeight: '750',
+    fontWeight: '700',
     marginBottom: 4,
   },
   benefitDesc: {

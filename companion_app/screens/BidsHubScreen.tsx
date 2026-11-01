@@ -135,9 +135,9 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       // 5. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesBid = bid.bidNumber.toLowerCase().includes(q);
-        const matchesTitle = bid.title.toLowerCase().includes(q);
-        const matchesDept = bid.department.toLowerCase().includes(q);
+        const matchesBid = (bid.bidNumber || '').toLowerCase().includes(q);
+        const matchesTitle = (bid.title || '').toLowerCase().includes(q);
+        const matchesDept = (bid.department || '').toLowerCase().includes(q);
         if (!matchesBid && !matchesTitle && !matchesDept) return false;
       }
 
@@ -197,7 +197,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
         {/* Buyer Department */}
         <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
-          {item.department} • {item.ministry}
+          {[item.department, item.ministry].filter(Boolean).join(' • ') || 'Department not published'}
         </Text>
 
         {/* 2x2 Glanceable Metrics Grid */}
@@ -205,7 +205,9 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           <View style={styles.metricItem}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
             <Text style={[styles.metricValue, { color: colors.primary }]}>
-              {item.publishedFields?.estimatedValue === false ? 'Not published' : formatLakhs(estVal)}
+              {estVal === undefined || item.publishedFields?.estimatedValue === false
+                ? 'Not published'
+                : formatLakhs(estVal)}
             </Text>
           </View>
           <View style={styles.metricItem}>
@@ -225,7 +227,14 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             <Text
               style={[
                 styles.metricValue,
-                { color: item.isEmdExemptForMse ? colors.success : colors.warning },
+                {
+                  color:
+                    item.isEmdExemptForMse === undefined
+                      ? colors.textMuted
+                      : item.isEmdExemptForMse
+                      ? colors.success
+                      : colors.warning,
+                },
               ]}
             >
               {item.isEmdExemptForMse === undefined ? 'Not published' : item.isEmdExemptForMse ? 'MSE exempt' : 'Applicable'}

@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryName: {
-    fontWeight: '650',
+    fontWeight: '600',
     marginBottom: 3,
   },
   subText: {

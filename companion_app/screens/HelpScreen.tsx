@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   resTitle: {
-    fontWeight: '650',
+    fontWeight: '600',
     marginBottom: 3,
   },
   resDesc: {

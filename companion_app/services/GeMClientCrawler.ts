@@ -41,7 +41,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'laptops-notebooks',
     name: 'Laptops & Notebooks',
     category: 'IT Products',
-    slug: 'computers-entry-and-mid-level-laptop-notebook/search',
+    slug: 'entry-mid-level-laptop-notebook/search',
     priceUnit: 'per Laptop',
     defaultEta: '⚡ 24-48 Hours Express',
   },
@@ -197,7 +197,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'domestic-refrigerators',
     name: 'Domestic Refrigerators',
     category: 'Electronic Equipments',
-    slug: 'refrigerators/search',
+    slug: 'domestic-refrigerators-version-2/search',
     priceUnit: 'per Refrigerator',
     defaultEta: '⚡ 3-5 Days Delivery',
   },
@@ -207,7 +207,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'cotton-bed-sheets',
     name: 'Handloom Cotton Bed Sheets',
     category: 'Textile Products',
-    slug: 'bedsheets/search',
+    slug: 'handloom-cotton-bed-sheets-v2-per-745/search',
     priceUnit: 'per Set of 2',
     defaultEta: '⚡ 2-4 Days Express',
   },
@@ -215,7 +215,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'cotton-towels',
     name: 'Cotton Towels (IS 7056)',
     category: 'Textile Products',
-    slug: 'towels/search',
+    slug: 'cotton-towels-as-per-is-7056/search',
     priceUnit: 'per Pack of 6',
     defaultEta: '⚡ 24-48 Hours Express',
   },
@@ -295,17 +295,27 @@ export class GeMClientCrawler {
       clearTimeout(timer);
 
       if (!resp.ok) {
+        const config = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.slug.includes(cleanSlug));
+        if (config?.name) {
+          return await this.searchLiveProducts(config.name, page, timeoutMs);
+        }
         return { items: [], hasMore: false, page };
       }
 
       const html = await resp.text();
       const config = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.slug.includes(cleanSlug)) || {
+        id: 'generic',
+        name: cleanSlug.replace(/-/g, ' '),
         category: 'IT Products',
+        slug: cleanSlug,
         priceUnit: 'per Unit',
         defaultEta: '⚡ 2-4 Days Delivery',
       };
 
       const items = this.parseGeMHtml(html, config.category, config.priceUnit, config.defaultEta);
+      if (items.length === 0 && config.name) {
+        return await this.searchLiveProducts(config.name, page, timeoutMs);
+      }
       const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
 
       return { items, hasMore, page };

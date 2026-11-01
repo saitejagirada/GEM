@@ -87,7 +87,9 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ auct
           <StatusBadge label="REVERSE AUCTION" tone="warning" />
         </View>
         <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>{auction.title}</Text>
-        <Text style={[styles.deptText, { color: colors.textSecondary }]}>{auction.department} • {auction.buyerOrganization}</Text>
+        <Text style={[styles.deptText, { color: colors.textSecondary }]}>
+          {[auction.department, auction.buyerOrganization].filter(Boolean).join(' • ') || 'Department unstated'}
+        </Text>
         {auction.originalBidNumber && (
           <Text style={[styles.origBidLink, { color: colors.textSecondary }]}>Public bid record: {auction.originalBidNumber}</Text>
         )}
@@ -134,11 +136,11 @@ const styles = StyleSheet.create({
   navTitle: { fontWeight: '700' },
   liveStatusBanner: { borderRadius: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  liveStatusText: { fontSize: 13, fontWeight: '750', flex: 1 },
+  liveStatusText: { fontSize: 13, fontWeight: '700', flex: 1 },
   liveUpdatedText: { fontSize: 11 },
   card: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: DESIGN_TOKENS.borderWidth, padding: 14, marginBottom: 14 },
   summaryTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  auctionNumber: { fontSize: 13, fontWeight: '700' },
+  auctionNumber: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   auctionTitle: { fontWeight: '700', marginBottom: 4, lineHeight: 20 },
   deptText: { fontSize: 12, marginBottom: 6 },
   origBidLink: { fontSize: 12, fontWeight: '600' },

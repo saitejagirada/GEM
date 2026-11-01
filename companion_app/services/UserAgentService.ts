@@ -106,7 +106,13 @@ export class UserAgentService {
       verdictSummary = warnings.length > 0 ? warnings.join('. ') : 'Good category match with delivery in target region.';
     } else {
       verdictTag = 'DISQUALIFIED';
-      verdictSummary = `Disqualified: Organization turnover (₹${(safeProfile.annualTurnoverInr / 100000).toFixed(1)}L) is below mandatory threshold of ₹${((bid?.minAnnualTurnoverInr || 0) / 100000).toFixed(1)}L.`;
+      if (bid?.minAnnualTurnoverInr && bid.minAnnualTurnoverInr > 0) {
+        verdictSummary = `Disqualified: Organization turnover (₹${(safeProfile.annualTurnoverInr / 100000).toFixed(1)}L) is below mandatory threshold of ₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)}L.`;
+      } else if (bid?.yearsExperienceRequired && bid.yearsExperienceRequired > 0) {
+        verdictSummary = `Disqualified: Requires ${bid.yearsExperienceRequired} years past experience in public procurement.`;
+      } else {
+        verdictSummary = 'Not eligible based on mandatory technical or eligibility requirements.';
+      }
     }
 
     // Expected Winning Bid Range (typically 82% to 94% of estimated bid value)

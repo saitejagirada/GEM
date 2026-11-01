@@ -213,7 +213,9 @@ export const AuctionsHubScreen: React.FC = () => {
                   <Text style={[styles.closingText, { color: colors.warning }]}>{ra.closingDateLabel}</Text>
                 </View>
                 <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]} numberOfLines={2}>{ra.title}</Text>
-                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>{ra.department} • {ra.buyerOrganization}</Text>
+                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {[ra.department, ra.buyerOrganization].filter(Boolean).join(' • ') || 'Department unstated'}
+                </Text>
                 <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.metaCol}>
                     <Text style={[styles.metaLabel, { color: colors.textMuted }]}>PUBLIC SOURCE</Text>
@@ -246,7 +248,9 @@ export const AuctionsHubScreen: React.FC = () => {
                   <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>{lot.auctionNumber}</Text>
                 </View>
                 <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]} numberOfLines={2}>{lot.title}</Text>
-                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>Location: {lot.locationYard} • {lot.department}</Text>
+                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  Location: {[lot.locationYard, lot.department].filter(Boolean).join(' • ') || 'Yard unstated'}
+                </Text>
                 <Text style={[styles.publicNote, { color: colors.textSecondary }]}>Prices, rank, and bid placement are available only in the official authenticated auction session.</Text>
                 <SecondaryButton label="Open official portal ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 10 }} />
               </View>

@@ -84,24 +84,25 @@ export const OrdersKnowledgeScreen: React.FC = () => {
       if (activeFilter === 'CRAC' && order.cracStatus !== 'CRAC_ACCEPTED' && order.cracStatus !== 'PAYMENT_DISBURSED') {
         return false;
       }
-      if (activeFilter === 'DEFENCE' && !order.ministry.toLowerCase().includes('defence')) {
+      const ministryLower = (order.ministry || '').toLowerCase();
+      if (activeFilter === 'DEFENCE' && !ministryLower.includes('defence')) {
         return false;
       }
-      if (activeFilter === 'RAILWAYS' && !order.ministry.toLowerCase().includes('railway')) {
+      if (activeFilter === 'RAILWAYS' && !ministryLower.includes('railway')) {
         return false;
       }
-      if (activeFilter === 'HEALTH' && !order.ministry.toLowerCase().includes('health')) {
+      if (activeFilter === 'HEALTH' && !ministryLower.includes('health')) {
         return false;
       }
-      if (activeFilter === 'SPACE' && !order.ministry.toLowerCase().includes('space')) {
+      if (activeFilter === 'SPACE' && !ministryLower.includes('space')) {
         return false;
       }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesContract = order.contractNumber.toLowerCase().includes(q);
-        const matchesTitle = order.title.toLowerCase().includes(q);
-        const matchesDept = order.buyerDepartment.toLowerCase().includes(q);
+        const matchesContract = (order.contractNumber || '').toLowerCase().includes(q);
+        const matchesTitle = (order.title || '').toLowerCase().includes(q);
+        const matchesDept = (order.buyerDepartment || '').toLowerCase().includes(q);
         const matchesUtr = (order.pfmsUtrNumber || '').toLowerCase().includes(q);
         if (!matchesContract && !matchesTitle && !matchesDept && !matchesUtr) return false;
       }
@@ -376,7 +377,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
                   <View style={styles.detailRow}>
                     <Text style={[styles.detailKey, { color: colors.textSecondary }]}>Quantity Delivered:</Text>
                     <Text style={[styles.detailValBold, { color: colors.textPrimary }]}>
-                      {selectedOrder.quantity.toLocaleString()} Units
+                      {(selectedOrder.quantity ?? 0).toLocaleString()} Units
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
   },
   contractNumber: {
     fontSize: 12,
-    fontWeight: '650',
+    fontWeight: '600',
   },
   contractTitle: {
     fontWeight: '700',
@@ -541,7 +542,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 15,
     fontWeight: '700',
-    maxWidth: 280,
+    flex: 1,
   },
   modalCloseText: {
     fontSize: 16,

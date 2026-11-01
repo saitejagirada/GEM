@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   profileName: {
-    fontWeight: '750',
+    fontWeight: '700',
     marginBottom: 2,
   },
   profileRole: {
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 13,
-    fontWeight: '650',
+    fontWeight: '600',
     marginBottom: 2,
   },
   menuSub: {

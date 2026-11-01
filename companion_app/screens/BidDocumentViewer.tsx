@@ -12,6 +12,7 @@ import {
 import Pdf from 'react-native-pdf';
 import type { DeconstructedBidDoc, OfficialBidDocument } from '../types/index';
 import { PortalDocService } from '../services/PortalDocService';
+import { useTheme } from '../theme/ThemeContext';
 
 interface BidDocumentViewerProps {
   bid: DeconstructedBidDoc | null;
@@ -26,6 +27,7 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   initialDocumentId,
   onClose,
 }) => {
+  const { colors } = useTheme();
   const documents = useMemo(
     () => (bid ? PortalDocService.getOfficialDocuments(bid) : []),
     [bid]
@@ -60,7 +62,7 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.headerButton} hitSlop={8} accessibilityLabel="Close document viewer">
             <Text style={styles.headerButtonText}>‹</Text>
@@ -75,19 +77,23 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
         </View>
 
         {documents.length > 1 ? (
-          <View style={styles.documentPickerPanel}>
-            <Text style={styles.documentPickerLabel}>Documents published with this bid</Text>
+          <View style={[styles.documentPickerPanel, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <Text style={[styles.documentPickerLabel, { color: colors.textSecondary }]}>Documents published with this bid</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.documentPickerRow}>
               {documents.map((document) => (
                 <Pressable
                   key={document.id}
                   onPress={() => selectDocument(document)}
-                  style={[styles.documentChip, selectedDocument.id === document.id && styles.documentChipActive]}
+                  style={[
+                    styles.documentChip,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    selectedDocument.id === document.id && [styles.documentChipActive, { borderColor: colors.primary, backgroundColor: colors.primaryTint }],
+                  ]}
                 >
-                  <Text style={[styles.documentChipKind, selectedDocument.id === document.id && styles.documentChipTextActive]}>
+                  <Text style={[styles.documentChipKind, { color: colors.textSecondary }, selectedDocument.id === document.id && { color: colors.primary }]}>
                     {document.kind}
                   </Text>
-                  <Text style={[styles.documentChipLabel, selectedDocument.id === document.id && styles.documentChipTextActive]} numberOfLines={1}>
+                  <Text style={[styles.documentChipLabel, { color: colors.textPrimary }, selectedDocument.id === document.id && { color: colors.primary }]} numberOfLines={1}>
                     {document.label}
                   </Text>
                 </Pressable>
@@ -96,10 +102,10 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
           </View>
         ) : null}
 
-        <View style={styles.viewerHeading}>
+        <View style={[styles.viewerHeading, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View style={styles.viewerHeadingCopy}>
-            <Text style={styles.viewerTitle}>{selectedDocument.label}</Text>
-            <Text style={styles.viewerSubtitle}>
+            <Text style={[styles.viewerTitle, { color: colors.textPrimary }]}>{selectedDocument.label}</Text>
+            <Text style={[styles.viewerSubtitle, { color: colors.textSecondary }]}>
               {documents.length === 1
                 ? 'Published specifications and ATC sections, when present, are inside this official bid PDF.'
                 : `${selectedDocument.kind === 'BID' ? 'Published specifications and ATC sections may be inside this file.' : 'Official attachment'} · GeM source`}
@@ -164,7 +170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 10,
   },
-  headerButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#315D7D', alignItems: 'center', justifyContent: 'center' },
+  headerButton: { minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: '#315D7D', alignItems: 'center', justifyContent: 'center' },
   headerButtonText: { color: '#FFFFFF', fontSize: 36, lineHeight: 38, fontWeight: '300', marginTop: -4 },
   headerCopy: { flex: 1 },
   headerTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },

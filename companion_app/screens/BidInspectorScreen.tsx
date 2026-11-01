@@ -8,12 +8,14 @@ import {
   Modal,
   Alert,
   Share,
+  SafeAreaView,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { LocalPdfScanner, type LocalPdfScanResult } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
+import { useTheme } from '../theme/ThemeContext';
 import { BidDocumentViewer } from './BidDocumentViewer';
 
 interface BidInspectorScreenProps {
@@ -29,6 +31,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   onClose,
   onPrepareDocuments,
 }) => {
+  const { colors, isDark } = useTheme();
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
   const [isScanningPdf, setIsScanningPdf] = useState(false);
@@ -67,10 +70,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `GeM Bid Summary: ${bid.bidNumber}\n${bid.title}\nEst Value: ${fundamentals.estimatedValueLabel}\nEMD: ${fundamentals.emdLabel}\nClosing: ${formatDateSafe(bid.closingTimeUtc)}`,
+        message: `GeM Bid Summary: ${bid.bidNumber || 'N/A'}\n${bid.title || 'Untitled Bid'}\nEst Value: ${fundamentals.estimatedValueLabel}\nEMD: ${fundamentals.emdLabel}\nClosing: ${formatDateSafe(bid.closingTimeUtc)}`,
       });
     } catch {
-      Alert.alert('Share', `Sharing summary for ${bid.bidNumber}`);
+      Alert.alert('Share', `Sharing summary for ${bid.bidNumber || 'bid'}`);
     }
   };
 
@@ -177,60 +180,64 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
   // Dynamic closing remaining calculation
   const closingDate = bid.closingTimeUtc ? new Date(bid.closingTimeUtc) : new Date(Date.now() + 86400000 * 3);
-  const diffMs = Math.max(0, closingDate.getTime() - Date.now());
+  const isValidDate = !isNaN(closingDate.getTime());
+  const diffMs = isValidDate ? Math.max(0, closingDate.getTime() - Date.now()) : 0;
   const diffHours = Math.floor(diffMs / 3600000);
   const diffMins = Math.floor((diffMs % 3600000) / 60000);
-  const remainingLabel = diffHours > 48
+  const remainingLabel = !isValidDate
+    ? 'Closing date on portal'
+    : diffHours > 48
     ? `${Math.floor(diffHours / 24)}d ${diffHours % 24}h remaining`
     : `${diffHours}h ${diffMins}m remaining`;
 
   return (
     <>
       <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <View style={styles.container}>
-        {/* Top Header Bar (GeM Ashoka Navy) */}
-        <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close details">
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerBidNum}>{bid.bidNumber}</Text>
-            <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
-          </View>
-          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} accessibilityLabel="Share summary">
-            <Text style={styles.shareBtnText}>↗</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-          {/* Bid Closing Cutoff & Freeze Protection Banner */}
-          <View style={styles.cutoffBanner}>
-            <View style={styles.cutoffLeft}>
-              <Text style={styles.cutoffIcon}>C</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cutoffTitle}>Closing: {formatDateSafe(bid.closingTimeUtc)}</Text>
-                <Text style={styles.cutoffSubtitle}>{remainingLabel} • GeM portal freezes in final 15 mins</Text>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Top Header Bar (GeM Ashoka Navy) */}
+            <View style={styles.headerBar}>
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close details">
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+              <View style={styles.headerCenter}>
+                <Text style={styles.headerBidNum}>{bid.bidNumber}</Text>
+                <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
               </View>
+              <TouchableOpacity style={styles.shareBtn} onPress={handleShare} accessibilityLabel="Share summary">
+                <Text style={styles.shareBtnText}>↗</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.cutoffBadge}>
-              <Text style={styles.cutoffBadgeText}>SUBMIT EARLY</Text>
-            </View>
-          </View>
 
-          {/* Tender Title & Ministry */}
-          <View style={styles.card}>
-            <View style={styles.cardHeaderBadges}>
-              {renderTypeBadge()}
-              {bid.categoryDomain ? (
-                <View style={styles.domainBadge}>
-                  <Text style={styles.domainBadgeText}>{bid.categoryDomain}</Text>
+            <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+              {/* Bid Closing Cutoff & Freeze Protection Banner */}
+              <View style={styles.cutoffBanner}>
+                <View style={styles.cutoffLeft}>
+                  <Text style={styles.cutoffIcon}>C</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cutoffTitle}>Closing: {formatDateSafe(bid.closingTimeUtc)}</Text>
+                    <Text style={styles.cutoffSubtitle}>{remainingLabel} • GeM portal freezes in final 15 mins</Text>
+                  </View>
                 </View>
-              ) : null}
-            </View>
-            <Text style={styles.deptBadge}>{bid.department}</Text>
-            <Text style={styles.bidTitle}>{bid.title}</Text>
-            <Text style={styles.ministryText}>{bid.ministry}</Text>
-          </View>
+                <View style={styles.cutoffBadge}>
+                  <Text style={styles.cutoffBadgeText}>SUBMIT EARLY</Text>
+                </View>
+              </View>
+
+              {/* Tender Title & Ministry */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.cardHeaderBadges}>
+                  {renderTypeBadge()}
+                  {bid.categoryDomain ? (
+                    <View style={styles.domainBadge}>
+                      <Text style={styles.domainBadgeText}>{bid.categoryDomain}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {bid.department ? <Text style={styles.deptBadge}>{bid.department}</Text> : null}
+                <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>{bid.title || 'Untitled Bid'}</Text>
+                {bid.ministry ? <Text style={[styles.ministryText, { color: colors.textSecondary }]}>{bid.ministry}</Text> : null}
+              </View>
 
           {/* Service Contract Terms & SLA Standards */}
           {(bid.serviceDetails || bid.type === 'SERVICE') && (
@@ -411,7 +418,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 <View style={styles.boqTopRow}>
                   <Text style={styles.boqItemTitle}>{item.itemTitle}</Text>
                   <Text style={styles.boqQtyBadge}>
-                    {item.quantity} {item.unit}
+                    {item.quantity !== undefined ? `${item.quantity} ${item.unit || 'Units'}` : 'Quantity unstated'}
                   </Text>
                 </View>
                 {item.specsSummary ? <Text style={styles.boqSpecsText}>{item.specsSummary}</Text> : null}
@@ -429,8 +436,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   <Text style={styles.consigneeOfficer}>{c.reportingOfficer || 'Consignee Officer'}</Text>
                 </View>
                 <View style={styles.consigneeRight}>
-                  <Text style={styles.stateBadge}>{c.state} ({c.pincode})</Text>
-                  <Text style={styles.consigneeQty}>{c.quantity} Units</Text>
+                  <Text style={styles.stateBadge}>{c.state || 'India'}{c.pincode ? ` (${c.pincode})` : ''}</Text>
+                  <Text style={styles.consigneeQty}>{c.quantity !== undefined ? `${c.quantity} Units` : 'Scope not published'}</Text>
                 </View>
               </View>
             )) : <Text style={styles.notPublishedText}>Consignee locations are not included in the public listing.</Text>}
@@ -483,6 +490,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+      </SafeAreaView>
       </Modal>
       <BidDocumentViewer
         bid={bid}
