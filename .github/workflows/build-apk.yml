@@ -59,6 +59,16 @@ jobs:
         run: |
           npx expo prebuild --platform android --clean --no-install --non-interactive
 
+      - name: Configure Maven Central fallback mirror
+        working-directory: companion_app/android
+        run: |
+          # Maven Central intermittently returns 403 to hosted runners. Keep the
+          # canonical repository as a fallback, but resolve first through its
+          # alternate official endpoint for both Expo plugins and app libraries.
+          for gradle_file in settings.gradle build.gradle; do
+            sed -i 's#mavenCentral()#maven { url "https://repo1.maven.org/maven2" }\n        mavenCentral()#g' "$gradle_file"
+          done
+
       - name: Bundle Offline JavaScript into Android Assets
         working-directory: companion_app
         run: |
