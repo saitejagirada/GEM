@@ -142,6 +142,8 @@ export interface AcceptedOrder {
   pfmsUtrNumber?: string;
 }
 
+export type MsmeCategory = 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE' | 'STARTUP';
+
 export interface UserAgentProfile {
   id: string;
   organizationName: string;

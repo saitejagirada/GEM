@@ -120,7 +120,6 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
           <Pressable
             key={option}
             onPress={() => onSelect(option)}
-            delayPressIn={0}
             unstable_pressDelay={0}
             hitSlop={6}
             android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
@@ -179,7 +178,6 @@ export const CompactChip: React.FC<CompactChipProps> = ({
   return (
     <Pressable
       onPress={onPress}
-      delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={6}
       android_ripple={{ color: 'rgba(0, 0, 0, 0.06)', borderless: false }}
@@ -285,7 +283,6 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={8}
       android_ripple={{ color: 'rgba(255, 255, 255, 0.25)', borderless: false }}
@@ -329,7 +326,6 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      delayPressIn={0}
       unstable_pressDelay={0}
       hitSlop={8}
       android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
@@ -361,56 +357,11 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
 };
 
 // -----------------------------------------------------------------------------
-// 6. MetricBox (2x2 Grid Cell)
-// -----------------------------------------------------------------------------
-export interface MetricBoxProps {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  style?: object;
-}
-
-export const MetricBox: React.FC<MetricBoxProps> = ({
-  label,
-  value,
-  highlight = false,
-  style,
-}) => {
-  const { colors, fontMultiplier } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.metricBox,
-        {
-          backgroundColor: highlight ? colors.primaryTint : colors.surfaceSubtle,
-          borderColor: highlight ? colors.primary : colors.border,
-        },
-        style,
-      ]}
-    >
-      <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text
-        style={[
-          styles.metricValue,
-          {
-            color: highlight ? colors.primary : colors.textPrimary,
-            fontSize: 13 * fontMultiplier,
-          },
-        ]}
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-};
-
-// -----------------------------------------------------------------------------
-// 7. SectionHeader
+// 6. SectionHeader
 // -----------------------------------------------------------------------------
 export interface SectionHeaderProps {
   title: string;
+  subtitle?: string;
   actionLabel?: string;
   onAction?: () => void;
   style?: object;
@@ -418,6 +369,7 @@ export interface SectionHeaderProps {
 
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
   title,
+  subtitle,
   actionLabel,
   onAction,
   style,
@@ -425,32 +377,46 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   const { colors, fontMultiplier } = useTheme();
 
   return (
-    <View style={[styles.sectionHeaderRow, style]}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: colors.textPrimary,
-            fontSize: 16 * fontMultiplier,
-          },
-        ]}
-      >
-        {title}
-      </Text>
-      {actionLabel && onAction ? (
-        <Pressable onPress={onAction} hitSlop={8}>
-          <Text
-            style={[
-              styles.sectionActionText,
-              {
-                color: colors.primary,
-                fontSize: 13 * fontMultiplier,
-              },
-            ]}
-          >
-            {actionLabel}
-          </Text>
-        </Pressable>
+    <View style={style}>
+      <View style={styles.sectionHeaderRow}>
+        <Text
+          style={[
+            styles.sectionTitle,
+            {
+              color: colors.textPrimary,
+              fontSize: 16 * fontMultiplier,
+            },
+          ]}
+        >
+          {title}
+        </Text>
+        {actionLabel && onAction ? (
+          <Pressable onPress={onAction} hitSlop={8}>
+            <Text
+              style={[
+                styles.sectionActionText,
+                {
+                  color: colors.primary,
+                  fontSize: 13 * fontMultiplier,
+                },
+              ]}
+            >
+              {actionLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {subtitle ? (
+        <Text
+          style={{
+            color: colors.textSecondary,
+            fontSize: 12 * fontMultiplier,
+            marginTop: -6,
+            marginBottom: 10,
+          }}
+        >
+          {subtitle}
+        </Text>
       ) : null}
     </View>
   );
@@ -643,22 +609,6 @@ const styles = StyleSheet.create({
   },
   btnIcon: {
     marginRight: 6,
-  },
-  metricBox: {
-    flex: 1,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-  },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 2,
-  },
-  metricValue: {
-    fontWeight: '700',
   },
   sectionHeaderRow: {
     flexDirection: 'row',

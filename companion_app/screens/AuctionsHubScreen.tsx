@@ -20,7 +20,7 @@ import {
 import type { ForwardAuctionLot, DeconstructedBidDoc } from '../types/index';
 import { PortalApiClient } from '../services/PortalApiClient';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
-import { isNetworkOnline } from '../utils/network.ts';
+import { isNetworkOnline } from '../utils/network';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {

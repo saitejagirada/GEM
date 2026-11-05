@@ -24,7 +24,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { PortalApiClient } from '../services/PortalApiClient';
-import { isNetworkOnline } from '../utils/network.ts';
+import { isNetworkOnline } from '../utils/network';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,

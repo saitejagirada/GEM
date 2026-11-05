@@ -114,6 +114,11 @@ export class AuctionRoomClient {
         }
       };
 
+      if (!this.socket) {
+        reject(new Error('Auction socket is not connected'));
+        return;
+      }
+
       this.socket.addEventListener('message', handler);
       this.socket.send(JSON.stringify({ type: 'SUBMIT_BID', payload: request }));
     });

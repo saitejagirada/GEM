@@ -119,7 +119,7 @@ describe('MarketplaceService', () => {
       isAvailableOnGeM: true,
     };
 
-    GeMClientCrawler.fetchCategoryPage = async (_slug, page) =>
+    GeMClientCrawler.fetchCategoryPage = async (_slug, page = 1) =>
       page === 1
         ? { items: [pageOneItem], hasMore: true, page }
         : { items: [], hasMore: false, page };

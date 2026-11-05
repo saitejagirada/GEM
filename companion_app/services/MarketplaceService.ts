@@ -33,6 +33,7 @@ export interface MarketplaceItem {
   id: string;
   title: string;
   category: string;
+  productUrl?: string;
   /** Present only when the item came from a scoped live subcategory request. */
   subcategorySlug?: string;
   subcategoryName?: string;

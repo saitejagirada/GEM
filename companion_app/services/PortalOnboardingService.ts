@@ -30,8 +30,8 @@ export interface SellerOnboardingRequest {
   hasUdyamRegistration: boolean;
   udyamRegistrationNumber?: string;
   msmeTier: MsmeTier;
-  annualTurnoverInr: number;
-  isOem: boolean;
+  annualTurnoverInr?: number;
+  isOem?: boolean;
 }
 
 export interface OnboardingValidationResult {

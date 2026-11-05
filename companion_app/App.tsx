@@ -44,7 +44,7 @@ import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { MyWorkScreen } from './screens/MyWorkScreen';
 import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
-import { isNetworkOnline } from './utils/network.ts';
+import { isNetworkOnline } from './utils/network';
 import type {
   DeconstructedBidDoc,
 } from './types/index';
@@ -251,7 +251,6 @@ const MainAppContent: React.FC = () => {
         {/* Left: GeM Brand */}
         <Pressable
           style={styles.brandRow}
-          delayPressIn={0}
           unstable_pressDelay={0}
           hitSlop={8}
           onPress={() => {
@@ -279,7 +278,6 @@ const MainAppContent: React.FC = () => {
         <View style={styles.headerRightActions}>
           <Pressable
             style={styles.headerIconBtn}
-            delayPressIn={0}
             unstable_pressDelay={0}
             onPress={() => setShowLookupModal(true)}
             hitSlop={8}
@@ -290,7 +288,6 @@ const MainAppContent: React.FC = () => {
 
           <Pressable
             style={styles.headerIconBtn}
-            delayPressIn={0}
             unstable_pressDelay={0}
             onPress={() => Alert.alert('Notifications', 'Public feed refreshes are available from the Bids tab. Private GeM notifications remain inside the official portal.')}
             hitSlop={8}
@@ -301,7 +298,6 @@ const MainAppContent: React.FC = () => {
 
           <Pressable
             style={[styles.profileAvatar, { backgroundColor: colors.primary }]}
-            delayPressIn={0}
             unstable_pressDelay={0}
             onPress={() => {
               setActiveTab('MORE');
@@ -329,7 +325,6 @@ const MainAppContent: React.FC = () => {
             <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
               <Pressable
                 onPress={() => setSubScreen('NONE')}
-                delayPressIn={0}
                 unstable_pressDelay={0}
                 hitSlop={10}
                 style={styles.backBtn}
@@ -349,7 +344,6 @@ const MainAppContent: React.FC = () => {
             <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
               <Pressable
                 onPress={() => setSubScreen('NONE')}
-                delayPressIn={0}
                 unstable_pressDelay={0}
                 hitSlop={10}
                 style={styles.backBtn}
@@ -429,7 +423,6 @@ const MainAppContent: React.FC = () => {
           return (
             <Pressable
               key={item.id}
-              delayPressIn={0}
               unstable_pressDelay={0}
               android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
               onPress={() => {

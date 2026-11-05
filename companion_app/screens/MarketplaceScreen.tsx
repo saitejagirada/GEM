@@ -422,7 +422,6 @@ export const MarketplaceScreen: React.FC = () => {
             borderColor: colors.border,
           },
         ]}
-        delayPressIn={0}
         unstable_pressDelay={0}
         onPress={() => setSelectedItem(item)}
       >
@@ -512,7 +511,6 @@ export const MarketplaceScreen: React.FC = () => {
                     backgroundColor: colors.surface,
                   },
                 ]}
-                delayPressIn={0}
                 unstable_pressDelay={0}
                 hitSlop={6}
                 onPress={() => updateCartQty(item.id, 1)}
@@ -523,7 +521,6 @@ export const MarketplaceScreen: React.FC = () => {
               <View style={[styles.gridStepperBox, { backgroundColor: colors.primary }]}>
                 <Pressable
                   style={styles.gridStepperBtn}
-                  delayPressIn={0}
                   unstable_pressDelay={0}
                   hitSlop={6}
                   onPress={() => updateCartQty(item.id, -1)}
@@ -533,7 +530,6 @@ export const MarketplaceScreen: React.FC = () => {
                 <Text style={styles.gridStepperQty}>{qty}</Text>
                 <Pressable
                   style={styles.gridStepperBtn}
-                  delayPressIn={0}
                   unstable_pressDelay={0}
                   hitSlop={6}
                   onPress={() => updateCartQty(item.id, 1)}
@@ -545,7 +541,6 @@ export const MarketplaceScreen: React.FC = () => {
 
             <Pressable
               style={styles.gridSaveIconBtn}
-              delayPressIn={0}
               unstable_pressDelay={0}
               hitSlop={6}
               onPress={() => toggleSaveItem(item.id)}
@@ -567,7 +562,6 @@ export const MarketplaceScreen: React.FC = () => {
       <View style={styles.topNavBar}>
         <Pressable
           style={[styles.backToCatBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          delayPressIn={0}
           unstable_pressDelay={0}
           hitSlop={8}
           onPress={() => setBrowseView('categories')}
@@ -592,7 +586,6 @@ export const MarketplaceScreen: React.FC = () => {
 
         <Pressable
           style={[styles.filterActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          delayPressIn={0}
           unstable_pressDelay={0}
           hitSlop={8}
           onPress={() => setShowFilterModal(true)}
@@ -636,7 +629,6 @@ export const MarketplaceScreen: React.FC = () => {
       >
         <Pressable
           style={styles.gfrHeaderPressable}
-          delayPressIn={0}
           unstable_pressDelay={0}
           hitSlop={8}
           onPress={() => setIsGfrExpanded((prev) => !prev)}
@@ -705,7 +697,6 @@ export const MarketplaceScreen: React.FC = () => {
       {searchQuery.trim().length > 0 && (
         <Pressable
           style={[styles.directSearchBanner, { backgroundColor: colors.primary }]}
-          delayPressIn={0}
           unstable_pressDelay={0}
           onPress={handleDirectProductSearch}
         >
@@ -750,7 +741,6 @@ export const MarketplaceScreen: React.FC = () => {
                       borderColor: themeColors.border,
                     },
                   ]}
-                  delayPressIn={0}
                   unstable_pressDelay={0}
                   onPress={() => handleSelectCategory(cat.name)}
                 >
@@ -775,7 +765,6 @@ export const MarketplaceScreen: React.FC = () => {
                       <Pressable
                         key={subName}
                         style={[styles.subtagPill, { backgroundColor: colors.surfaceSubtle }]}
-                        delayPressIn={0}
                         unstable_pressDelay={0}
                         onPress={() => {
                           const pillLower = subName.toLowerCase();
@@ -821,7 +810,6 @@ export const MarketplaceScreen: React.FC = () => {
               <Pressable
                 key={srv.id}
                 style={[styles.serviceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                delayPressIn={0}
                 unstable_pressDelay={0}
                 onPress={() => setSelectedService(srv)}
               >
@@ -864,7 +852,6 @@ export const MarketplaceScreen: React.FC = () => {
               <Pressable
                 key={srv.id}
                 style={[styles.serviceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                delayPressIn={0}
                 unstable_pressDelay={0}
                 onPress={() => setSelectedService(srv)}
               >
@@ -995,7 +982,6 @@ export const MarketplaceScreen: React.FC = () => {
 
           <Pressable
             style={styles.cartBarActionBtn}
-            delayPressIn={0}
             unstable_pressDelay={0}
             hitSlop={8}
             onPress={() => setShowCartModal(true)}
@@ -1030,7 +1016,6 @@ export const MarketplaceScreen: React.FC = () => {
               <Pressable
                 onPress={() => setShowCartModal(false)}
                 hitSlop={10}
-                delayPressIn={0}
                 unstable_pressDelay={0}
               >
                 <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>
@@ -1056,7 +1041,6 @@ export const MarketplaceScreen: React.FC = () => {
                     <View style={[styles.stepperContainer, { backgroundColor: colors.primary }]}>
                       <Pressable
                         style={styles.stepperBtn}
-                        delayPressIn={0}
                         unstable_pressDelay={0}
                         hitSlop={6}
                         onPress={() => updateCartQty(item.id, -1)}
@@ -1066,7 +1050,6 @@ export const MarketplaceScreen: React.FC = () => {
                       <Text style={styles.stepperQtyText}>{qty}</Text>
                       <Pressable
                         style={styles.stepperBtn}
-                        delayPressIn={0}
                         unstable_pressDelay={0}
                         hitSlop={6}
                         onPress={() => updateCartQty(item.id, 1)}
@@ -1192,7 +1175,6 @@ export const MarketplaceScreen: React.FC = () => {
                 <Pressable
                   onPress={() => setSelectedItem(null)}
                   hitSlop={10}
-                  delayPressIn={0}
                   unstable_pressDelay={0}
                 >
                   <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>
@@ -1274,7 +1256,6 @@ export const MarketplaceScreen: React.FC = () => {
                 <Pressable
                   onPress={() => setSelectedService(null)}
                   hitSlop={10}
-                  delayPressIn={0}
                   unstable_pressDelay={0}
                 >
                   <Text style={[styles.modalCloseText, { color: colors.textMuted }]}>✕</Text>

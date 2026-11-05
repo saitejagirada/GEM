@@ -9,7 +9,7 @@ describe('PortalsDirectory & Sub-Domains Ecosystem Verification', () => {
       assert.ok(c.contractNumber.startsWith('GEMC-'));
       assert.ok(c.orderValueInr > 0);
       assert.ok(c.cracStatus.includes('ACCEPTED') || c.cracStatus.includes('PAYMENT'));
-      assert.ok(c.pfmsUtrNumber.length >= 10);
+      assert.ok(c.pfmsUtrNumber && c.pfmsUtrNumber.length >= 10);
     }
   });
 
