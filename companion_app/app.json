@@ -10,7 +10,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "gov.gem.companion"
+      "bundleIdentifier": "gov.gem.companion",
+      "buildNumber": "3",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Used to capture inspection evidence photos when preparing tender records.",
+        "NSPhotoLibraryUsageDescription": "Used to attach local photos and PDFs to your tender preparation workspace."
+      }
     },
     "android": {
       "versionCode": 3,

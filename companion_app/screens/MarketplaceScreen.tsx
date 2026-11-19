@@ -59,7 +59,19 @@ import {
 import { formatInr } from '../utils/formatters';
 import { isNetworkOnline } from '../utils/network';
 
-export const MarketplaceScreen: React.FC = () => {
+export interface MarketplaceScreenProps {
+  initialCategory?: string;
+  initialQuery?: string;
+  initialTypeTab?: 'Products' | 'Services';
+  navTrigger?: number;
+}
+
+export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
+  initialCategory,
+  initialQuery,
+  initialTypeTab,
+  navTrigger,
+}) => {
   const { colors, fontMultiplier } = useTheme();
 
   // Navigation mode: 'categories' (Amazon-style explorer) vs 'products' (2-column grid)
@@ -268,6 +280,38 @@ export const MarketplaceScreen: React.FC = () => {
     loadLiveProducts();
   };
 
+  // Apply external navigation intent from Home or Categories screen
+  useEffect(() => {
+    if (initialTypeTab) {
+      setActiveTypeTab(initialTypeTab);
+    }
+    if (initialQuery !== undefined && initialQuery.trim()) {
+      setSearchQuery(initialQuery.trim());
+      if (initialTypeTab !== 'Services') {
+        const matched = OFFICIAL_GEM_SUBCATEGORIES.find((s) =>
+          `${s.name} ${s.category} ${s.id}`.toLowerCase().includes(initialQuery.trim().toLowerCase())
+        );
+        if (matched) {
+          setSelectedCategory(matched.category);
+          setSelectedSubcategorySlug(matched.slug);
+          setSelectedSubcategoryName(matched.name);
+        }
+        setBrowseView('products');
+      } else {
+        setBrowseView('categories');
+      }
+      return;
+    }
+    if (initialCategory) {
+      if (initialTypeTab === 'Services') {
+        setBrowseView('categories');
+        setSearchQuery(initialCategory);
+      } else {
+        handleSelectCategory(initialCategory);
+      }
+    }
+  }, [initialCategory, initialQuery, initialTypeTab, navTrigger]);
+
   // Cart operations
   const updateCartQty = useCallback((id: string, delta: number) => {
     setCart((prev) => {
@@ -303,9 +347,15 @@ export const MarketplaceScreen: React.FC = () => {
   }, [totalCartPrice]);
 
   const handleOpenGemPortal = useCallback((item?: MarketplaceItem) => {
-    const targetUrl = item
-      ? `https://mkp.gem.gov.in/search?q=${encodeURIComponent(item.title)}`
-      : 'https://mkp.gem.gov.in';
+    const directUrl =
+      item?.productUrl && item.productUrl.startsWith('https://mkp.gem.gov.in/')
+        ? item.productUrl
+        : undefined;
+    const targetUrl =
+      directUrl ||
+      (item
+        ? `https://mkp.gem.gov.in/search?q=${encodeURIComponent(item.title)}`
+        : 'https://mkp.gem.gov.in');
     Linking.openURL(targetUrl).catch(() => {
       Alert.alert('GeM Portal', `Visit ${targetUrl} in your browser.`);
     });

@@ -18,9 +18,19 @@ import {
 import { formatLakhs, formatDateSafe } from '../utils/formatters';
 import type { DeconstructedBidDoc } from '../types/index';
 
+export interface HomeNavigateParams {
+  search?: string;
+  category?: string;
+  typeTab?: 'Products' | 'Services';
+}
+
 export interface HomeScreenProps {
   bids: DeconstructedBidDoc[];
-  onNavigateTab: (tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'CATEGORIES' | 'HELP' | 'MORE') => void;
+  totalPortalBids?: number;
+  onNavigateTab: (
+    tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'CATEGORIES' | 'HELP' | 'MORE',
+    params?: HomeNavigateParams
+  ) => void;
   onSelectBid: (bid: DeconstructedBidDoc) => void;
   onOpenMyWork?: () => void;
   onOpenOfficialPortal?: () => void;
@@ -29,14 +39,15 @@ export interface HomeScreenProps {
 const SEARCH_FILTER_PILLS = ['All', 'Products', 'Services', 'Bids', 'Contracts'];
 
 const POPULAR_CATEGORIES = [
-  { id: 'cat-it', name: 'Computers & IT', desc: 'Laptops, servers & peripherals', code: 'IT', color: '#0B4F71', tint: '#EAF2F6' },
-  { id: 'cat-med', name: 'Medical & Healthcare', desc: 'Hospital equipment & consumables', code: 'MED', color: '#0B7A3B', tint: '#E8F4EC' },
-  { id: 'cat-off', name: 'Office & Furniture', desc: 'Desks, chairs & stationery', code: 'OFF', color: '#9A5B00', tint: '#FFF4DF' },
-  { id: 'cat-veh', name: 'Vehicles & Fleet', desc: 'Vehicles and transport equipment', code: 'VEH', color: '#49627A', tint: '#EDF1F4' },
+  { id: 'cat-it', name: 'Computers & IT', marketCategory: 'IT Products', desc: 'Laptops, servers & peripherals', code: 'IT', color: '#0B4F71', tint: '#EAF2F6' },
+  { id: 'cat-med', name: 'Medical & Healthcare', marketCategory: 'Medical Products', desc: 'Hospital equipment & consumables', code: 'MED', color: '#0B7A3B', tint: '#E8F4EC' },
+  { id: 'cat-off', name: 'Office & Furniture', marketCategory: 'Furniture', desc: 'Desks, chairs & stationery', code: 'OFF', color: '#9A5B00', tint: '#FFF4DF' },
+  { id: 'cat-veh', name: 'Vehicles & Fleet', marketCategory: 'Automobiles', desc: 'Vehicles and transport equipment', code: 'VEH', color: '#49627A', tint: '#EDF1F4' },
 ];
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   bids,
+  totalPortalBids = 0,
   onNavigateTab,
   onSelectBid,
   onOpenMyWork,
@@ -49,14 +60,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const latestOpportunities = bids.slice(0, 3);
 
   const handleSearchSubmit = () => {
-    if (activeFilterPill === 'Bids') {
-      onNavigateTab('BIDS');
+    const q = searchQuery.trim();
+    const looksLikeBidNumber = /^GEM\/\d{4}\/[BR]\//i.test(q);
+    if (activeFilterPill === 'Bids' || looksLikeBidNumber) {
+      onNavigateTab('BIDS', { search: q });
     } else if (activeFilterPill === 'Contracts') {
-      onNavigateTab('ORDERS');
-    } else if (activeFilterPill === 'Auctions') {
-      onNavigateTab('AUCTIONS');
+      onNavigateTab('ORDERS', { search: q });
+    } else if (activeFilterPill === 'Services') {
+      onNavigateTab('MARKET', { search: q, typeTab: 'Services' });
     } else {
-      onNavigateTab('MARKET');
+      onNavigateTab('MARKET', { search: q, typeTab: 'Products' });
     }
   };
 
@@ -96,7 +109,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               key={pill}
               label={pill}
               selected={activeFilterPill === pill}
-              onPress={() => setActiveFilterPill(pill)}
+              onPress={() => {
+                setActiveFilterPill(pill);
+                const q = searchQuery.trim();
+                if (!q) return;
+                if (pill === 'Bids') onNavigateTab('BIDS', { search: q });
+                else if (pill === 'Contracts') onNavigateTab('ORDERS', { search: q });
+                else if (pill === 'Services') onNavigateTab('MARKET', { search: q, typeTab: 'Services' });
+                else if (pill === 'Products') onNavigateTab('MARKET', { search: q, typeTab: 'Products' });
+              }}
             />
           ))}
         </ScrollView>
@@ -124,13 +145,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </Text>
         <View style={[styles.heroStatsRow, { borderTopColor: colors.borderSubtle }]}>
           <View style={styles.heroStatItem}>
-            <Text style={[styles.heroStatNum, { color: colors.primary }]}>{bids.length}</Text>
-            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Loaded now</Text>
+            <Text style={[styles.heroStatNum, { color: colors.primary }]}>
+              {(totalPortalBids || bids.length).toLocaleString('en-IN')}
+            </Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Live on GeM</Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
-            <Text style={[styles.heroStatNum, { color: colors.emerald }]}>Public</Text>
-            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Feed only</Text>
+            <Text style={[styles.heroStatNum, { color: colors.emerald }]}>Direct</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Phone → GeM</Text>
           </View>
           <View style={styles.heroStatDivider} />
           <View style={styles.heroStatItem}>
@@ -239,7 +262,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   borderColor: colors.border,
                 },
               ]}
-              onPress={() => onNavigateTab('MARKET')}
+              onPress={() => onNavigateTab('MARKET', { category: cat.marketCategory, typeTab: 'Products' })}
             >
               <View style={[styles.categoryIconSquare, { backgroundColor: cat.tint }]}>
                 <Text style={[styles.categoryCode, { color: cat.color }]}>{cat.code}</Text>

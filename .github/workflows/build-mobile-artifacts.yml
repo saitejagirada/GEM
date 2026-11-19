@@ -1,0 +1,471 @@
+name: Build GeM Mobile Companion (iOS IPA + Android APK)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'companion_app/**'
+      - '.github/workflows/build-mobile-artifacts.yml'
+  workflow_dispatch:
+    inputs:
+      ios_export_method:
+        description: 'iOS export method (used only when Apple signing secrets are configured)'
+        required: false
+        default: 'ad-hoc'
+        type: choice
+        options:
+          - ad-hoc
+          - development
+          - app-store
+          - enterprise
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: mobile-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      CI: 1
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-disabled: true
+
+      - name: Install Dependencies
+        working-directory: companion_app
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck & Unit Tests
+        working-directory: companion_app
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Prebuild Android Native Files
+        working-directory: companion_app
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Configure Maven Central Fallback Mirror
+        working-directory: companion_app/android
+        run: |
+          for gradle_file in settings.gradle build.gradle; do
+            sed -i 's#mavenCentral()#maven { url "https://repo1.maven.org/maven2" }\n        mavenCentral()#g' "$gradle_file"
+          done
+
+      - name: Bundle Offline JavaScript into Android Assets
+        working-directory: companion_app
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx expo export:embed --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res || \
+            npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+          ls -lh android/app/src/main/assets/index.android.bundle
+
+      - name: Build Standalone Android APK with Gradle
+        working-directory: companion_app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" --no-daemon --stacktrace
+
+      - name: Stage Android APK
+        working-directory: companion_app
+        run: |
+          set -euo pipefail
+          mkdir -p dist-android
+          APK_FILE=$(find android/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' | head -n 1)
+          test -s "$APK_FILE"
+          cp "$APK_FILE" dist-android/gem-companion-android.apk
+          ls -lh dist-android/gem-companion-android.apk
+
+      - name: Upload Staging Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: _stage-android-apk
+          path: companion_app/dist-android/gem-companion-android.apk
+          retention-days: 1
+          compression-level: 0
+
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-15
+
+    env:
+      CI: 1
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect iOS Signing Configuration
+        id: ios-signing
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          if [ -n "$IOS_P12_BASE64" ] && [ -n "$IOS_P12_PASSWORD" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ] && [ -n "$IOS_TEAM_ID" ]; then
+            echo "mode=signed" >> "$GITHUB_OUTPUT"
+            echo "Apple signing secrets detected -> building signed IPA"
+          else
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+            echo "No Apple signing secrets detected -> building unsigned sideloadable IPA"
+          fi
+
+      - name: Select Compatible Xcode Version
+        run: |
+          echo "Installed Xcode versions:"
+          ls -d /Applications/Xcode*.app || true
+          for candidate in \
+            /Applications/Xcode_15.4.app \
+            /Applications/Xcode_16.0.app \
+            /Applications/Xcode_16.1.app \
+            /Applications/Xcode_16.2.app; do
+            if [ -d "$candidate" ]; then
+              echo "Selecting $candidate"
+              sudo xcode-select -s "$candidate/Contents/Developer"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Setup Node.js 22 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        working-directory: companion_app
+        run: npm install --legacy-peer-deps
+
+      - name: Prebuild iOS Native Files
+        working-directory: companion_app
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Configure Xcode Node Environment & Podfile Compatibility
+        working-directory: companion_app/ios
+        env:
+          IOS_SIGNING_MODE: ${{ steps.ios-signing.outputs.mode }}
+        run: |
+          echo "export NODE_BINARY=$(which node)" > .xcode.env.local
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          podfile = Path("Podfile")
+          text = podfile.read_text()
+          unsigned = os.environ.get("IOS_SIGNING_MODE", "unsigned") != "signed"
+
+          lines = [
+              "",
+              "    installer.pods_project.targets.each do |target|",
+              "      target.build_configurations.each do |config|",
+              "        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 13.4",
+              "          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'",
+              "        end",
+              "        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'",
+          ]
+          if unsigned:
+              lines.extend([
+                  "        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'",
+                  "        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'",
+                  "        config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''",
+              ])
+          lines.extend([
+              "      end",
+              "    end",
+              "",
+          ])
+          snippet = "\n".join(lines)
+
+          marker = "  end\n\n  post_integrate do |installer|"
+          idx = text.rfind(marker)
+          if idx != -1:
+              text = text[:idx] + snippet + text[idx:]
+              podfile.write_text(text)
+              print("Patched Podfile post_install successfully.")
+          else:
+              raise SystemExit("Error: Expected post_install marker not found in Podfile.")
+          PY
+          ruby -c Podfile
+
+      - name: Install CocoaPods Dependencies
+        working-directory: companion_app/ios
+        run: |
+          pod install --repo-update
+          # Guard fmt 9.1.0 consteval issue on Clang 17+ / Xcode 16.3+
+          FMT_CORE="Pods/fmt/include/fmt/core.h"
+          if [ -f "$FMT_CORE" ]; then
+            chmod u+w "$FMT_CORE"
+            sed -i '' 's/#  define FMT_USE_CONSTEVAL 1/#  define FMT_USE_CONSTEVAL 0/g' "$FMT_CORE"
+            sed -i '' 's/# define FMT_USE_CONSTEVAL 1/# define FMT_USE_CONSTEVAL 0/g' "$FMT_CORE"
+          fi
+
+      - name: Build Signed iOS IPA
+        if: steps.ios-signing.outputs.mode == 'signed'
+        working-directory: companion_app/ios
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_EXPORT_METHOD: ${{ inputs.ios_export_method || 'ad-hoc' }}
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          DIST_IOS_DIR="$(cd .. && pwd)/dist-ios"
+          mkdir -p "$DIST_IOS_DIR"
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/gem-signing.keychain-db"
+          KEYCHAIN_PASS="gem-ci-temp-pass"
+
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+
+          echo "$IOS_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          ARCHIVE_PATH="$PWD/build/${SCHEME}.xcarchive"
+          EXPORT_DIR="$PWD/build/export"
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            archive \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${IOS_EXPORT_METHOD}</string>
+            <key>teamID</key>
+            <string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>gov.gem.companion</key>
+              <string>${PROFILE_NAME}</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$EXPORT_DIR"
+
+          IPA_FILE=$(find "$EXPORT_DIR" -maxdepth 1 -name '*.ipa' | head -n 1)
+          test -s "$IPA_FILE"
+          cp "$IPA_FILE" "$DIST_IOS_DIR/gem-companion-ios.ipa"
+          echo "signed" > "$DIST_IOS_DIR/ios-signing-mode.txt"
+          ls -lh "$DIST_IOS_DIR/gem-companion-ios.ipa"
+
+      - name: Build Unsigned Sideloadable iOS IPA
+        if: steps.ios-signing.outputs.mode == 'unsigned'
+        working-directory: companion_app/ios
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          DIST_IOS_DIR="$(cd .. && pwd)/dist-ios"
+          OUTPUT_IPA="$DIST_IOS_DIR/gem-companion-ios.ipa"
+          ARCHIVE_PATH="$PWD/build/${SCHEME}.xcarchive"
+          STAGING_DIR="$PWD/build/ipa-staging"
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+          APP_PATH=$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -name '*.app' | head -n 1)
+          test -d "$APP_PATH"
+
+          # Verify JS bundle is embedded inside the .app; embed fallback if absent
+          if [ ! -f "$APP_PATH/main.jsbundle" ]; then
+            echo "main.jsbundle missing from archive; embedding via expo export:embed..."
+            (cd .. && npx expo export:embed --platform ios --dev false --entry-file index.js --bundle-output "$APP_PATH/main.jsbundle" --assets-dest "$APP_PATH")
+          fi
+          ls -lh "$APP_PATH/main.jsbundle"
+
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR/Payload" "$DIST_IOS_DIR"
+          cp -R "$APP_PATH" "$STAGING_DIR/Payload/"
+          (cd "$STAGING_DIR" && zip -r -y "$OUTPUT_IPA" Payload)
+          test -s "$OUTPUT_IPA"
+          echo "unsigned" > "$DIST_IOS_DIR/ios-signing-mode.txt"
+          ls -lh "$OUTPUT_IPA"
+
+      - name: Clean Up Temporary Keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/gem-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Upload Staging iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: _stage-ios-ipa
+          path: |
+            companion_app/dist-ios/gem-companion-ios.ipa
+            companion_app/dist-ios/ios-signing-mode.txt
+          retention-days: 1
+          compression-level: 0
+
+  package-release-artifact:
+    name: Package Combined iOS IPA + Android APK Artifact
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Android APK Staging Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: _stage-android-apk
+          path: release-bundle
+
+      - name: Download iOS IPA Staging Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: _stage-ios-ipa
+          path: release-bundle
+
+      - name: Verify Both Binaries & Generate Manifest
+        run: |
+          set -euo pipefail
+          test -s release-bundle/gem-companion-android.apk
+          test -s release-bundle/gem-companion-ios.ipa
+
+          IOS_MODE="unsigned"
+          if [ -f release-bundle/ios-signing-mode.txt ]; then
+            IOS_MODE=$(cat release-bundle/ios-signing-mode.txt)
+            rm -f release-bundle/ios-signing-mode.txt
+          fi
+
+          (cd release-bundle && sha256sum gem-companion-android.apk gem-companion-ios.ipa > SHA256SUMS.txt)
+
+          cat > release-bundle/INSTALL.txt <<EOF
+          GeM Mobile Companion — Cross-Platform Release Bundle
+          ====================================================
+
+          Files included in this download:
+          1. gem-companion-android.apk  -> Standalone Android APK (install directly on Android / Android Studio Emulator)
+          2. gem-companion-ios.ipa      -> iOS arm64 IPA (mode: ${IOS_MODE})
+          3. SHA256SUMS.txt             -> SHA-256 verification checksums
+
+          Installing on Android:
+          - Transfer gem-companion-android.apk to your device and install, or run:
+            adb install -r gem-companion-android.apk
+
+          Installing on iOS:
+          - If signed: install via Apple Configurator 2, Xcode Devices, or TestFlight/Ad-Hoc distribution.
+          - If unsigned: sideload onto your iPhone/iPad using AltStore, SideStore, Sideloadly, or TrollStore,
+            or add Apple signing secrets (IOS_P12_BASE64, IOS_P12_PASSWORD, IOS_PROVISIONING_PROFILE_BASE64,
+            IOS_TEAM_ID) in GitHub Repository Settings -> Secrets to produce a directly signed IPA.
+          EOF
+
+          APK_SIZE=$(du -h release-bundle/gem-companion-android.apk | cut -f1)
+          IPA_SIZE=$(du -h release-bundle/gem-companion-ios.ipa | cut -f1)
+
+          {
+            echo "## GeM Mobile Companion — Combined Download Ready"
+            echo ""
+            echo "Download the single artifact **\`gem-companion-ios-and-android\`** below — it contains both the iOS \`.ipa\` and Android \`.apk\`."
+            echo ""
+            echo "| Platform | File | Size | Mode |"
+            echo "| --- | --- | --- | --- |"
+            echo "| Android | \`gem-companion-android.apk\` | ${APK_SIZE} | Standalone APK |"
+            echo "| iOS | \`gem-companion-ios.ipa\` | ${IPA_SIZE} | ${IOS_MODE} IPA |"
+            echo ""
+            echo "### SHA-256 Checksums"
+            echo '```'
+            cat release-bundle/SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          ls -lh release-bundle/
+
+      - name: Upload Final Combined Artifact (iOS IPA + Android APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem-companion-ios-and-android
+          path: release-bundle/
+          retention-days: 30
+          compression-level: 0
+
+      - name: Clean Up Temporary Staging Artifacts
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = context.runId;
+            const res = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id });
+            for (const artifact of res.data.artifacts) {
+              if (artifact.name === '_stage-android-apk' || artifact.name === '_stage-ios-ipa') {
+                await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id });
+              }
+            }

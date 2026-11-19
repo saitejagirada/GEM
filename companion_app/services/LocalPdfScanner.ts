@@ -2,11 +2,12 @@
  * Device-only GeM bid PDF details scanner.
  *
  * This is deliberately opt-in and bounded. The companion downloads a public
- * PDF only when the user asks to scan it, extracts readable PDF text locally,
- * stores a small details record, and deletes the temporary PDF. No PDF bytes
- * or extracted text are sent to a companion server.
+ * PDF directly from bidplus.gem.gov.in only when the user asks to scan it,
+ * decompresses FlateDecode streams and ToUnicode CMaps locally in Hermes/Node,
+ * stores a small extracted summary, and never uploads PDF bytes or text to any server.
  */
 
+import type { DeconstructedBidDoc } from '../types/index.ts';
 import { GemPdfExtractor, type ExtractedGeMTenderDetails } from './GemPdfExtractor.ts';
 
 const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v1';
@@ -76,10 +77,29 @@ interface KeyValueStorage {
   setItem(key: string, value: string): Promise<void>;
 }
 
+function decodeBase64ToUint8Array(b64: string): Uint8Array {
+  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, '');
+  const lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const outLen = Math.floor((clean.length * 3) / 4) - (clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0);
+  const out = new Uint8Array(Math.max(0, outLen));
+  let p = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const a = lookup.indexOf(clean[i]);
+    const b = lookup.indexOf(clean[i + 1]);
+    const c = lookup.indexOf(clean[i + 2]);
+    const d = lookup.indexOf(clean[i + 3]);
+    const triplet = (a << 18) | (b << 12) | ((c > 0 ? c : 0) << 6) | (d > 0 ? d : 0);
+    if (p < outLen) out[p++] = (triplet >> 16) & 0xff;
+    if (p < outLen && clean[i + 2] !== '=') out[p++] = (triplet >> 8) & 0xff;
+    if (p < outLen && clean[i + 3] !== '=') out[p++] = triplet & 0xff;
+  }
+  return out;
+}
+
 /**
- * Extracts readable PDF text operators.
+ * Extracts readable PDF text operators (supports raw string or Uint8Array binary bytes).
  */
-export function extractPdfText(pdfSource: string): string {
+export function extractPdfText(pdfSource: string | Uint8Array): string {
   return GemPdfExtractor.extractTextFromPdfSource(pdfSource);
 }
 
@@ -95,12 +115,11 @@ export function extractPdfDetails(text: string, fallbackBidNumber?: string): Loc
   if (parsed.estimatedValueInr !== undefined) details.estimatedValueInr = parsed.estimatedValueInr;
   if (parsed.emdAmountInr !== undefined) details.emdAmountInr = parsed.emdAmountInr;
 
-  // Extended fields - only attached when present in tender text
   if (parsed.minAnnualTurnoverInr !== undefined) details.minAnnualTurnoverInr = parsed.minAnnualTurnoverInr;
   if (parsed.yearsExperienceRequired !== undefined) details.yearsExperienceRequired = parsed.yearsExperienceRequired;
   if (parsed.pastPerformancePercentage !== undefined) details.pastPerformancePercentage = parsed.pastPerformancePercentage;
-  if (parsed.isEmdExemptForMse && /MSE\s+Exemption/i.test(text)) details.isEmdExemptForMse = parsed.isEmdExemptForMse;
-  if (parsed.isEmdExemptForStartup && /Startup\s+Exemption/i.test(text)) details.isEmdExemptForStartup = parsed.isEmdExemptForStartup;
+  if (parsed.isEmdExemptForMse && /MSE\s+(?:Exemption|Relaxation)/i.test(text)) details.isEmdExemptForMse = parsed.isEmdExemptForMse;
+  if (parsed.isEmdExemptForStartup && /Startup\s+(?:Exemption|Relaxation)/i.test(text)) details.isEmdExemptForStartup = parsed.isEmdExemptForStartup;
   if (parsed.msePurchasePreference && /MSE\s+Purchase\s+Preference/i.test(text)) details.msePurchasePreference = parsed.msePurchasePreference;
   if (parsed.miiPurchasePreference && /MII\s+Purchase\s+Preference/i.test(text)) details.miiPurchasePreference = parsed.miiPurchasePreference;
   if (parsed.miiLocalContentPercentage !== undefined) details.miiLocalContentPercentage = parsed.miiLocalContentPercentage;
@@ -122,8 +141,109 @@ export function extractExtendedPdfDetails(text: string, fallbackBidNumber?: stri
   return GemPdfExtractor.parseGeMTenderText(text, fallbackBidNumber);
 }
 
+/**
+ * Merges locally extracted PDF scan fields into a public DeconstructedBidDoc
+ * so the 2x2 Fundamentals card, Disqualification Shield, Checklist, and WhatsApp
+ * Deal Sheet immediately display the real values parsed from the official GeM PDF.
+ */
+export function enrichBidWithPdfScan(
+  bid: DeconstructedBidDoc,
+  scan: LocalPdfScanResult | null
+): DeconstructedBidDoc {
+  if (!scan || scan.status !== 'EXTRACTED') return bid;
+  const d = scan.details;
+  const ext = d.extendedDetails;
+
+  const estimatedBidValueInr = bid.estimatedBidValueInr ?? d.estimatedValueInr ?? ext?.estimatedValueInr;
+  const emdAmountInr = bid.emdAmountInr ?? d.emdAmountInr ?? ext?.emdAmountInr;
+  const isEmdExemptForMse =
+    bid.isEmdExemptForMse !== undefined
+      ? bid.isEmdExemptForMse
+      : d.isEmdExemptForMse !== undefined
+      ? d.isEmdExemptForMse
+      : emdAmountInr === 0
+      ? true
+      : ext?.isEmdExemptForMse;
+  const epbgPercentage = bid.epbgPercentage ?? d.epbgPercentage ?? ext?.epbgPercentage;
+  const minAnnualTurnoverInr = bid.minAnnualTurnoverInr ?? d.minAnnualTurnoverInr ?? ext?.minAnnualTurnoverInr;
+  const yearsExperienceRequired =
+    bid.yearsExperienceRequired ?? d.yearsExperienceRequired ?? ext?.yearsExperienceRequired;
+  const pastPerformancePercentage =
+    bid.pastPerformancePercentage ?? d.pastPerformancePercentage ?? ext?.pastPerformancePercentage;
+  const deliveryPeriodDays = bid.deliveryPeriodDays ?? d.deliveryPeriodDays ?? ext?.deliveryPeriodDays;
+  const splittingRatio = bid.splittingRatio ?? d.splittingRatio ?? ext?.splittingRatio;
+  const makeInIndiaClass = bid.makeInIndiaClass ?? d.miiClass ?? ext?.miiClass;
+
+  const requiredDocuments =
+    bid.requiredDocuments && bid.requiredDocuments.length > 0
+      ? bid.requiredDocuments
+      : d.requiredDocuments && d.requiredDocuments.length > 0
+      ? d.requiredDocuments
+      : ext?.requiredDocuments ?? [];
+
+  const consignees =
+    bid.consignees && bid.consignees.length > 0
+      ? bid.consignees
+      : (ext?.consignees ?? []).map((c) => ({
+          location: c.address,
+          state: c.state,
+          pincode: c.pincode,
+          quantity: c.quantity,
+          reportingOfficer: c.officer,
+        }));
+
+  const boqItems =
+    bid.boqItems && bid.boqItems.length > 0
+      ? bid.boqItems
+      : ext?.totalQuantity !== undefined
+      ? [
+          {
+            itemTitle: d.title || ext.itemCategory || bid.title,
+            quantity: ext.totalQuantity,
+            unit: 'Units',
+            specsSummary: ext.typeOfBid || 'Extracted from official GeM PDF',
+          },
+        ]
+      : [];
+
+  return {
+    ...bid,
+    title: bid.title && bid.title !== 'Bid title not published' ? bid.title : d.title || bid.title,
+    department:
+      bid.department && bid.department !== 'Department not published'
+        ? bid.department
+        : d.department || bid.department,
+    ministry:
+      bid.ministry && bid.ministry !== 'Ministry not published' ? bid.ministry : d.ministry || bid.ministry,
+    estimatedBidValueInr,
+    emdAmountInr,
+    isEmdExemptForMse,
+    epbgPercentage,
+    minAnnualTurnoverInr,
+    yearsExperienceRequired,
+    pastPerformancePercentage,
+    deliveryPeriodDays,
+    splittingRatio,
+    makeInIndiaClass,
+    requiredDocuments,
+    consignees,
+    boqItems,
+    publishedFields: {
+      estimatedValue: estimatedBidValueInr !== undefined,
+      quantity: boqItems.length > 0,
+      requirements:
+        minAnnualTurnoverInr !== undefined ||
+        yearsExperienceRequired !== undefined ||
+        requiredDocuments.length > 0,
+      consignees: consignees.length > 0,
+      commercialTerms:
+        emdAmountInr !== undefined || epbgPercentage !== undefined || deliveryPeriodDays !== undefined,
+    },
+  };
+}
+
 function scanSource(
-  source: string,
+  source: string | Uint8Array,
   bidNumber: string,
   documentUrl: string,
   sourceUri: string
@@ -156,7 +276,7 @@ function scanSource(
     details,
     textLength: text.length,
     scannedAtUtc,
-    note: 'Details and compliance barriers extracted locally from readable PDF text layer. Confirm every requirement before bidding.',
+    note: 'Details and compliance barriers extracted locally from official GeM PDF text layer. Confirm every requirement before bidding.',
   };
 }
 
@@ -190,8 +310,54 @@ export class LocalPdfScanner {
     documentUrl: string
   ): Promise<LocalPdfScanResult> {
     const cached = await this.getCachedScan(bidNumber, documentUrl);
-    if (cached) return cached;
+    if (cached && cached.status === 'EXTRACTED') return cached;
 
+    // 1. Primary path: Direct binary fetch -> ArrayBuffer -> Uint8Array (zero UTF-8 corruption, works in Hermes & Node)
+    try {
+      const response = await fetch(documentUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/pdf,*/*',
+        },
+      });
+      if (response.ok && typeof response.arrayBuffer === 'function') {
+        const contentLen = Number(response.headers?.get?.('content-length') || 0);
+        if (contentLen > MAX_SCAN_BYTES) {
+          return {
+            bidNumber,
+            documentUrl,
+            sourceUri: documentUrl,
+            status: 'TOO_LARGE',
+            details: {},
+            textLength: 0,
+            scannedAtUtc: new Date().toISOString(),
+            note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
+          };
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength > MAX_SCAN_BYTES) {
+          return {
+            bidNumber,
+            documentUrl,
+            sourceUri: documentUrl,
+            status: 'TOO_LARGE',
+            details: {},
+            textLength: 0,
+            scannedAtUtc: new Date().toISOString(),
+            note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
+          };
+        }
+        if (bytes.byteLength > 0) {
+          const result = scanSource(bytes, bidNumber, documentUrl, documentUrl);
+          await this.saveScan(result);
+          return result;
+        }
+      }
+    } catch {
+      // Fall back to expo-file-system download if direct fetch is unavailable
+    }
+
+    // 2. Fallback path: expo-file-system downloadAsync
     const fileSystem = await this.getFileSystem();
     const temporaryDirectory = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
     if (!fileSystem || !temporaryDirectory) {
@@ -199,7 +365,7 @@ export class LocalPdfScanner {
     }
 
     const safeName = bidNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const temporaryUri = `${temporaryDirectory.replace(/\/?$/, '/') }gem-pdf-scan-${safeName}.pdf`;
+    const temporaryUri = `${temporaryDirectory.replace(/\/?$/, '/')}gem-pdf-scan-${safeName}.pdf`;
     let downloadedUri = temporaryUri;
 
     try {
@@ -222,7 +388,13 @@ export class LocalPdfScanner {
         };
       }
 
-      const source = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'utf8' });
+      let source: string | Uint8Array;
+      try {
+        const b64 = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'base64' });
+        source = decodeBase64ToUint8Array(b64);
+      } catch {
+        source = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'utf8' });
+      }
       const result = scanSource(source, bidNumber, documentUrl, documentUrl);
       await this.saveScan(result);
       return result;
@@ -292,7 +464,7 @@ export class LocalPdfScanner {
     try {
       const raw = await storage.getItem(SCAN_CACHE_KEY);
       const parsed = raw ? JSON.parse(raw) : {};
-      const cache = parsed && typeof parsed === 'object' ? parsed as Record<string, LocalPdfScanResult> : {};
+      const cache = parsed && typeof parsed === 'object' ? (parsed as Record<string, LocalPdfScanResult>) : {};
       cache[result.bidNumber] = result;
       await storage.setItem(SCAN_CACHE_KEY, JSON.stringify(cache));
     } catch {

@@ -1,9 +1,12 @@
 /**
  * GeM Mobile Companion App - High-Speed On-Device PDF Text & Clause Extractor
- * 
- * Specially designed for React Native (Hermes Engine) and Node environments.
- * Extracts text, tables, and compliance clauses from 10-50 page GeM tender PDFs
- * in under 1 second without uploading bytes to any remote server.
+ *
+ * Pure TypeScript / JavaScript implementation for React Native (Hermes Engine)
+ * and Node environments:
+ * - Self-contained RFC 1950/1951 Zlib/Deflate inflate engine (zero Node zlib dependency)
+ * - Official GeM wkhtmltopdf /ToUnicode CMap glyph decoder (beginbfchar & beginbfrange)
+ * - Two-column (x < 300 vs x >= 300) table row stitcher for GeM Bid Details tables
+ * - Backwards-compatible literal (...) Tj / [...] TJ / <hex> Tj operator parser
  */
 
 export interface ExtractedConsignee {
@@ -28,7 +31,7 @@ export interface ExtractedGeMTenderDetails {
   bidValidityDays?: number;
   totalQuantity?: number;
   itemCategory?: string;
-  typeOfBid?: string; // 'Two Packet Bid' | 'Single Packet Bid'
+  typeOfBid?: string;
 
   // Commercial & Financial Thresholds
   estimatedValueInr?: number;
@@ -70,9 +73,6 @@ export interface ExtractedGeMTenderDetails {
   isRaEnabled: boolean;
 }
 
-// -------------------------------------------------------------------------
-// Standard Indian States & Union Territories Dictionary
-// -------------------------------------------------------------------------
 const INDIAN_STATES_AND_UTS = [
   'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam',
   'Bihar', 'Chandigarh', 'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu',
@@ -80,42 +80,287 @@ const INDIAN_STATES_AND_UTS = [
   'Jharkhand', 'Karnataka', 'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh',
   'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha',
   'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
-  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal'
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
 ];
 
-/**
- * Fast RFC 1951 Deflate/Inflate wrapper supporting Node.js zlib and React Native.
- */
-function fastDecompress(buffer: Uint8Array): string {
+// -----------------------------------------------------------------------------
+// Pure-TypeScript RFC 1950 (Zlib) & RFC 1951 (Deflate) Decompressor for Hermes
+// -----------------------------------------------------------------------------
+
+const LENGTH_BASE = [
+  3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
+  35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
+];
+const LENGTH_EXTRA = [
+  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
+  3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
+];
+const DIST_BASE = [
+  1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
+  257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
+];
+const DIST_EXTRA = [
+  0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
+  7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+];
+const CODE_LEN_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+interface HuffmanTable {
+  counts: Int32Array;
+  symbols: Int32Array;
+}
+
+function buildHuffmanTable(lengths: Uint8Array, numSymbols: number): HuffmanTable {
+  const counts = new Int32Array(16);
+  for (let i = 0; i < numSymbols; i++) {
+    const len = lengths[i];
+    if (len > 0 && len < 16) counts[len]++;
+  }
+  const offsets = new Int32Array(16);
+  let total = 0;
+  for (let len = 1; len < 16; len++) {
+    offsets[len] = total;
+    total += counts[len];
+  }
+  const symbols = new Int32Array(total);
+  for (let i = 0; i < numSymbols; i++) {
+    const len = lengths[i];
+    if (len > 0 && len < 16) {
+      symbols[offsets[len]++] = i;
+    }
+  }
+  return { counts, symbols };
+}
+
+const FIXED_LIT_LENGTHS = (() => {
+  const arr = new Uint8Array(288);
+  for (let i = 0; i <= 143; i++) arr[i] = 8;
+  for (let i = 144; i <= 255; i++) arr[i] = 9;
+  for (let i = 256; i <= 279; i++) arr[i] = 7;
+  for (let i = 280; i <= 287; i++) arr[i] = 8;
+  return arr;
+})();
+
+const FIXED_DIST_LENGTHS = (() => {
+  const arr = new Uint8Array(32);
+  arr.fill(5);
+  return arr;
+})();
+
+const FIXED_LIT_TABLE = buildHuffmanTable(FIXED_LIT_LENGTHS, 288);
+const FIXED_DIST_TABLE = buildHuffmanTable(FIXED_DIST_LENGTHS, 32);
+
+function pureInflateRaw(src: Uint8Array, startOffset: number): Uint8Array | null {
+  let bytePos = startOffset;
+  let bitBuf = 0;
+  let bitCnt = 0;
+
+  let out = new Uint8Array(Math.max(4096, src.length * 3));
+  let outLen = 0;
+
+  const ensureOut = (extra: number) => {
+    if (outLen + extra <= out.length) return;
+    let nextSize = out.length * 2;
+    while (nextSize < outLen + extra) nextSize *= 2;
+    const next = new Uint8Array(nextSize);
+    next.set(out.subarray(0, outLen));
+    out = next;
+  };
+
+  const bits = (n: number): number => {
+    while (bitCnt < n) {
+      if (bytePos >= src.length) throw new Error('EOF');
+      bitBuf |= src[bytePos++] << bitCnt;
+      bitCnt += 8;
+    }
+    const val = bitBuf & ((1 << n) - 1);
+    bitBuf >>>= n;
+    bitCnt -= n;
+    return val;
+  };
+
+  const decodeSymbol = (table: HuffmanTable): number => {
+    let code = 0;
+    let first = 0;
+    let index = 0;
+    for (let len = 1; len <= 15; len++) {
+      code |= bits(1);
+      const count = table.counts[len];
+      if (code - count < first) {
+        return table.symbols[index + (code - first)];
+      }
+      index += count;
+      first += count;
+      first <<= 1;
+      code <<= 1;
+    }
+    throw new Error('Invalid Huffman code');
+  };
+
   try {
-    // Avoid Metro bundler static resolution of node core module in React Native
-    const modName = 'z' + 'lib';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const reqFn: any = typeof require === 'function' ? require : (globalThis as any)?.require;
-    const zlib = typeof reqFn === 'function' ? reqFn(modName) : null;
-    if (zlib && typeof zlib.inflateSync === 'function') {
-      try {
-        const decompressed = zlib.inflateSync(buffer);
-        return decompressed.toString('latin1');
-      } catch {
-        try {
-          const raw = zlib.inflateRawSync(buffer);
-          return raw.toString('latin1');
-        } catch {
-          // Fall through
+    let bfinal = 0;
+    while (!bfinal) {
+      bfinal = bits(1);
+      const btype = bits(2);
+
+      if (btype === 0) {
+        // Uncompressed block
+        bitBuf = 0;
+        bitCnt = 0;
+        if (bytePos + 4 > src.length) return null;
+        const len = src[bytePos] | (src[bytePos + 1] << 8);
+        const nlen = src[bytePos + 2] | (src[bytePos + 3] << 8);
+        bytePos += 4;
+        if ((len ^ 0xffff) !== nlen) return null;
+        if (bytePos + len > src.length) return null;
+        ensureOut(len);
+        out.set(src.subarray(bytePos, bytePos + len), outLen);
+        outLen += len;
+        bytePos += len;
+      } else if (btype === 1 || btype === 2) {
+        let litTable = FIXED_LIT_TABLE;
+        let distTable = FIXED_DIST_TABLE;
+
+        if (btype === 2) {
+          const hlit = bits(5) + 257;
+          const hdist = bits(5) + 1;
+          const hclen = bits(4) + 4;
+          const codeLengths = new Uint8Array(19);
+          for (let i = 0; i < hclen; i++) {
+            codeLengths[CODE_LEN_ORDER[i]] = bits(3);
+          }
+          const codeLenTable = buildHuffmanTable(codeLengths, 19);
+          const allLengths = new Uint8Array(hlit + hdist);
+          let idx = 0;
+          while (idx < hlit + hdist) {
+            const sym = decodeSymbol(codeLenTable);
+            if (sym < 16) {
+              allLengths[idx++] = sym;
+            } else if (sym === 16) {
+              const prev = idx > 0 ? allLengths[idx - 1] : 0;
+              const rep = bits(2) + 3;
+              for (let r = 0; r < rep && idx < hlit + hdist; r++) allLengths[idx++] = prev;
+            } else if (sym === 17) {
+              const rep = bits(3) + 3;
+              for (let r = 0; r < rep && idx < hlit + hdist; r++) allLengths[idx++] = 0;
+            } else if (sym === 18) {
+              const rep = bits(7) + 11;
+              for (let r = 0; r < rep && idx < hlit + hdist; r++) allLengths[idx++] = 0;
+            }
+          }
+          litTable = buildHuffmanTable(allLengths.subarray(0, hlit), hlit);
+          distTable = buildHuffmanTable(allLengths.subarray(hlit), hdist);
+        }
+
+        while (true) {
+          const sym = decodeSymbol(litTable);
+          if (sym < 256) {
+            ensureOut(1);
+            out[outLen++] = sym;
+          } else if (sym === 256) {
+            break;
+          } else {
+            const lenIdx = sym - 257;
+            if (lenIdx < 0 || lenIdx >= LENGTH_BASE.length) return null;
+            const length = LENGTH_BASE[lenIdx] + (LENGTH_EXTRA[lenIdx] ? bits(LENGTH_EXTRA[lenIdx]) : 0);
+            const distSym = decodeSymbol(distTable);
+            if (distSym < 0 || distSym >= DIST_BASE.length) return null;
+            const distance = DIST_BASE[distSym] + (DIST_EXTRA[distSym] ? bits(DIST_EXTRA[distSym]) : 0);
+            if (distance > outLen) return null;
+            ensureOut(length);
+            for (let k = 0; k < length; k++) {
+              out[outLen] = out[outLen - distance];
+              outLen++;
+            }
+          }
+        }
+      } else {
+        return null;
+      }
+    }
+    return out.subarray(0, outLen);
+  } catch {
+    return null;
+  }
+}
+
+export function fastDecompress(buffer: Uint8Array): string {
+  // Check for RFC 1950 zlib header (CMF/FLG, e.g. 0x78 0x9C, 0x78 0x01, 0x78 0xDA)
+  let inflated: Uint8Array | null = null;
+  if (
+    buffer.length >= 2 &&
+    (buffer[0] & 0x0f) === 8 &&
+    ((buffer[0] << 8) + buffer[1]) % 31 === 0
+  ) {
+    const fdict = (buffer[1] & 0x20) !== 0;
+    inflated = pureInflateRaw(buffer, fdict ? 6 : 2);
+  }
+  if (!inflated) {
+    inflated = pureInflateRaw(buffer, 0);
+  }
+
+  const target = inflated ?? buffer;
+  let out = '';
+  const chunk = 8192;
+  for (let i = 0; i < target.length; i += chunk) {
+    out += String.fromCharCode(...target.subarray(i, Math.min(target.length, i + chunk)));
+  }
+  return out;
+}
+
+function stringToUint8Array(str: string): Uint8Array {
+  const arr = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) {
+    arr[i] = str.charCodeAt(i) & 0xff;
+  }
+  return arr;
+}
+
+function parseToUnicodeCMap(cmapText: string): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!cmapText) return map;
+
+  for (const block of cmapText.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const pair of block[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)) {
+      const code = parseInt(pair[1], 16);
+      const hex = pair[2];
+      let decoded = '';
+      for (let i = 0; i < hex.length; i += 4) {
+        decoded += String.fromCodePoint(parseInt(hex.slice(i, i + 4), 16));
+      }
+      map.set(code, decoded);
+    }
+  }
+
+  for (const block of cmapText.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    const lines = block[1].trim().split(/[\r\n]+/);
+    for (const line of lines) {
+      const arrMatch = line.match(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*\[([\s\S]*?)\]/);
+      if (arrMatch) {
+        const start = parseInt(arrMatch[1], 16);
+        const items = Array.from(arrMatch[3].matchAll(/<([0-9a-fA-F]+)>/g)).map((m) => m[1]);
+        items.forEach((u, idx) => {
+          let decoded = '';
+          for (let i = 0; i < u.length; i += 4) {
+            decoded += String.fromCodePoint(parseInt(u.slice(i, i + 4), 16));
+          }
+          map.set(start + idx, decoded);
+        });
+        continue;
+      }
+      const seqMatch = line.match(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/);
+      if (seqMatch) {
+        const start = parseInt(seqMatch[1], 16);
+        const end = parseInt(seqMatch[2], 16);
+        const base = parseInt(seqMatch[3], 16);
+        for (let c = start; c <= end; c++) {
+          map.set(c, String.fromCodePoint(base + (c - start)));
         }
       }
     }
-  } catch {
-    // Running in Hermes without node zlib
   }
 
-  // Fallback: Latin-1 text decode
-  let out = '';
-  for (let i = 0; i < buffer.length; i++) {
-    out += String.fromCharCode(buffer[i]);
-  }
-  return out;
+  return map;
 }
 
 export class GemPdfExtractor {
@@ -135,24 +380,74 @@ export class GemPdfExtractor {
 
   /**
    * High-speed raw PDF text layer extraction.
-   * Scans stream objects, handles /FlateDecode decompression, and parses BT ... ET operators.
+   * Supports both:
+   * 1. Real GeM wkhtmltopdf PDFs (Type0 /Identity-H fonts with /ToUnicode CMaps & two-column layout)
+   * 2. Standard literal / hex PDF content streams.
    */
   public static extractTextFromPdfSource(pdfSource: string | Uint8Array): string {
     let rawPdf = '';
     if (typeof pdfSource === 'string') {
       rawPdf = pdfSource;
     } else {
-      let str = '';
-      const len = pdfSource.length;
-      for (let i = 0; i < len; i++) {
-        str += String.fromCharCode(pdfSource[i]);
+      const chunk = 8192;
+      for (let i = 0; i < pdfSource.length; i += chunk) {
+        rawPdf += String.fromCharCode(...pdfSource.subarray(i, Math.min(pdfSource.length, i + chunk)));
       }
-      rawPdf = str;
     }
 
-    const textPieces: string[] = [];
+    // 1. Check for numbered PDF objects with /ToUnicode font CMaps (real wkhtmltopdf GeM PDFs)
+    const objects = new Map<string, string>();
+    const objRegex = /(\d+)\s+0\s+obj\b([\s\S]*?)endobj/g;
+    let objMatch: RegExpExecArray | null;
+    while ((objMatch = objRegex.exec(rawPdf)) !== null) {
+      objects.set(objMatch[1], objMatch[2]);
+    }
 
-    // Find all stream ... endstream blocks
+    const getObjectStream = (objBody?: string): string => {
+      if (!objBody) return '';
+      const sm = objBody.match(/stream[\r\n]+([\s\S]*?)[\r\n]+endstream/);
+      if (!sm) return '';
+      if (objBody.includes('/FlateDecode')) {
+        return fastDecompress(stringToUint8Array(sm[1]));
+      }
+      return sm[1];
+    };
+
+    const fontMaps = new Map<string, Map<number, string>>();
+    if (objects.size > 0) {
+      for (const [, body] of objects) {
+        for (const fe of body.matchAll(/\/(F\d+)\s+(\d+)\s+0\s+R/g)) {
+          const fontName = fe[1];
+          const fontObj = objects.get(fe[2]);
+          const toUni = fontObj?.match(/\/ToUnicode\s+(\d+)\s+0\s+R/);
+          if (toUni && !fontMaps.has(fontName)) {
+            const cmapStream = getObjectStream(objects.get(toUni[1]));
+            const parsedMap = parseToUnicodeCMap(cmapStream);
+            if (parsedMap.size > 0) {
+              fontMaps.set(fontName, parsedMap);
+            }
+          }
+        }
+      }
+    }
+
+    if (fontMaps.size > 0) {
+      const cmapLines: string[] = [];
+      for (const [, body] of objects) {
+        if (!body.includes('/FlateDecode') || body.includes('/Subtype /Image') || body.includes('/Length1')) {
+          continue;
+        }
+        const stream = getObjectStream(body);
+        if (!stream.includes('BT')) continue;
+        this.extractCMapPositionedRows(stream, fontMaps, cmapLines);
+      }
+      if (cmapLines.length > 0) {
+        return cmapLines.join('\n').trim();
+      }
+    }
+
+    // 2. Standard stream / operator pass (for literal Tj/TJ & ASCII hex PDFs)
+    const textPieces: string[] = [];
     const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
     let match: RegExpExecArray | null;
     let hasStreamMatches = false;
@@ -165,17 +460,12 @@ export class GemPdfExtractor {
 
       let decompressed = streamContent;
       if (leadingChunk.includes('/FlateDecode')) {
-        const streamBuffer = new Uint8Array(streamContent.length);
-        for (let j = 0; j < streamContent.length; j++) {
-          streamBuffer[j] = streamContent.charCodeAt(j) & 0xff;
-        }
-        decompressed = fastDecompress(streamBuffer);
+        decompressed = fastDecompress(stringToUint8Array(streamContent));
       }
 
       this.extractTextFromOperatorStream(decompressed, textPieces);
     }
 
-    // Fallback pass if no stream markers existed
     if (!hasStreamMatches || textPieces.length === 0) {
       this.extractTextFromOperatorStream(rawPdf, textPieces);
     }
@@ -189,6 +479,105 @@ export class GemPdfExtractor {
   }
 
   /**
+   * Decodes wkhtmltopdf positioned glyph runs using per-font ToUnicode CMaps and
+   * stitches left (x < 300) and right (x >= 300) table cells on the same Y row.
+   */
+  private static extractCMapPositionedRows(
+    stream: string,
+    fontMaps: Map<string, Map<number, string>>,
+    outputLines: string[]
+  ): void {
+    const spans: Array<{ x: number; y: number; text: string }> = [];
+
+    for (const bt of stream.matchAll(/BT([\s\S]*?)ET/g)) {
+      // Remove duplicate BDC .. EMC shadow runs emitted by wkhtmltopdf
+      const clean = bt[1].replace(/\/Span\s*<<[\s\S]*?>>\s*BDC[\s\S]*?EMC/g, '');
+      let currentFont = 'F8';
+      let x = 0;
+      let y = 0;
+      let text = '';
+      let spanX = 0;
+      let spanY = 0;
+
+      const tokenRe =
+        /\/(F\d+)\s+[\d.]+\s+Tf|1\s+0\s+0\s+-1\s+([-\d.]+)\s+([-\d.]+)\s+Tm|([-\d.]+)\s+([-\d.]+)\s+Td|<([0-9a-fA-F]+)>\s*Tj/g;
+      let tok: RegExpExecArray | null;
+      while ((tok = tokenRe.exec(clean)) !== null) {
+        if (tok[1]) {
+          currentFont = tok[1];
+        } else if (tok[2] !== undefined) {
+          if (text.trim()) {
+            spans.push({ x: spanX, y: spanY, text: text.trim() });
+            text = '';
+          }
+          x = parseFloat(tok[2]);
+          y = parseFloat(tok[3]);
+        } else if (tok[4] !== undefined) {
+          const dx = parseFloat(tok[4]);
+          const dy = parseFloat(tok[5]);
+          if (Math.abs(dy) > 2 || Math.abs(dx) > 40) {
+            if (text.trim()) {
+              spans.push({ x: spanX, y: spanY, text: text.trim() });
+              text = '';
+            }
+          }
+          x += dx;
+          y += dy;
+        } else if (tok[6]) {
+          if (!text) {
+            spanX = x;
+            spanY = y;
+          }
+          const hex = tok[6];
+          const fmap = fontMaps.get(currentFont);
+          for (let i = 0; i < hex.length; i += 4) {
+            const code = parseInt(hex.slice(i, i + 4), 16);
+            text += fmap?.get(code) ?? '';
+          }
+        }
+      }
+      if (text.trim()) {
+        spans.push({ x: spanX, y: spanY, text: text.trim() });
+      }
+    }
+
+    const rows: Array<{ y: number; items: Array<{ x: number; text: string }> }> = [];
+    for (const sp of spans) {
+      const ascii = sp.text
+        .replace(/[\u0900-\u097F]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!ascii || ascii === '/' || ascii === '( )') continue;
+      let row = rows.find((r) => Math.abs(r.y - sp.y) <= 10);
+      if (!row) {
+        row = { y: sp.y, items: [] };
+        rows.push(row);
+      }
+      row.items.push({ x: sp.x, text: ascii.replace(/^\/\s*/, '') });
+    }
+
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows) {
+      r.items.sort((a, b) => a.x - b.x);
+      const left = r.items
+        .filter((i) => i.x < 300)
+        .map((i) => i.text)
+        .join(' ')
+        .trim();
+      const right = r.items
+        .filter((i) => i.x >= 300)
+        .map((i) => i.text)
+        .join(' ')
+        .trim();
+      if (left && right) {
+        outputLines.push(`${left} : ${right}`);
+      } else if (left || right) {
+        outputLines.push(left || right);
+      }
+    }
+  }
+
+  /**
    * Parses BT ... ET blocks and decodes Tj and TJ operators into text lines.
    */
   private static extractTextFromOperatorStream(stream: string, output: string[]): void {
@@ -196,7 +585,6 @@ export class GemPdfExtractor {
     for (const bt of btMatches) {
       const scope = bt[1];
 
-      // Handle TJ array syntax: [ (Text 1) 20 (Text 2) ] TJ
       const tjArrayRegex = /\[(.*?)\]\s*TJ/gi;
       let tjMatch: RegExpExecArray | null;
       while ((tjMatch = tjArrayRegex.exec(scope)) !== null) {
@@ -212,14 +600,12 @@ export class GemPdfExtractor {
         }
       }
 
-      // Handle simple Tj syntax: (Text) Tj
       const tjSimpleRegex = /\(((?:\\.|[^\\)])*)\)\s*Tj/gi;
       let simpleMatch: RegExpExecArray | null;
       while ((simpleMatch = tjSimpleRegex.exec(scope)) !== null) {
         output.push(this.decodePdfLiteral(simpleMatch[1]));
       }
 
-      // Handle Hex strings: <47654D> Tj
       const hexRegex = /<([0-9a-f\s]+)>\s*T[jJ]/gi;
       let hexMatch: RegExpExecArray | null;
       while ((hexMatch = hexRegex.exec(scope)) !== null) {
@@ -240,7 +626,7 @@ export class GemPdfExtractor {
     const escaped = labels.map((l) => l.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
     const regex = new RegExp(`(?:${escaped})(?:\\s*\\([^)]*\\))?\\s*[:\\-]?\\s*([^\\n\\r]{2,180})`, 'i');
     const match = text.match(regex);
-    return match?.[1]?.replace(/\s+/g, ' ').trim();
+    return match?.[1]?.replace(/^[:\-\s]+/, '').replace(/\s+/g, ' ').trim();
   }
 
   /**
@@ -250,21 +636,18 @@ export class GemPdfExtractor {
     if (!valStr) return undefined;
     const clean = valStr.replace(/₹|Rs\.?|INR|,/gi, '').trim();
 
-    // Check for "Cr" or "Crore"
-    const croreMatch = clean.match(/^([\d.]+)\s*(?:Crores?|Cr)/i);
+    const croreMatch = clean.match(/([\d.]+)\s*(?:Crores?|Cr)/i);
     if (croreMatch) {
       const num = parseFloat(croreMatch[1]);
       return Number.isFinite(num) ? Math.round(num * 10000000) : undefined;
     }
 
-    // Check for "Lakh" or "Lac" or "L"
-    const lakhMatch = clean.match(/^([\d.]+)\s*(?:Lakhs?|Lacs?|L\b)/i);
+    const lakhMatch = clean.match(/([\d.]+)\s*(?:Lakhs?|Lacs?|L\b)/i);
     if (lakhMatch) {
       const num = parseFloat(lakhMatch[1]);
       return Number.isFinite(num) ? Math.round(num * 100000) : undefined;
     }
 
-    // Direct numeric value
     const directMatch = clean.match(/^([\d.]+)/);
     if (directMatch) {
       const num = parseFloat(directMatch[1]);
@@ -276,63 +659,76 @@ export class GemPdfExtractor {
 
   /**
    * Master GeM Tender Extraction Engine.
-   * Applies exact regex and heuristic rules across all standard tables and clauses.
+   * Applies exact regex and heuristic rules across all standard tables and clauses,
+   * including multi-line wrapped labels produced by wkhtmltopdf on bidplus.gem.gov.in.
    */
   public static parseGeMTenderText(text: string, fallbackBidNumber?: string): ExtractedGeMTenderDetails {
-    // 1. Identification Details
     const bidNumberMatch =
       text.match(/\bGEM\s*\/\s*\d{4}\s*\/\s*[A-Z]+\s*\/\s*\d+\b/i)?.[0]?.replace(/\s+/g, '') ||
       fallbackBidNumber;
 
-    const title = this.extractLabeledField(text, ['bid title', 'item title', 'product name', 'service name']);
+    const itemCategory = this.extractLabeledField(text, ['item category', 'primary product category', 'category']);
+    const title =
+      this.extractLabeledField(text, ['bid title', 'item title', 'product name', 'service name']) || itemCategory;
     const department = this.extractLabeledField(text, ['department name', 'buyer department', 'department']);
     const ministry = this.extractLabeledField(text, ['ministry/state name', 'ministry']);
     const organisation = this.extractLabeledField(text, ['organisation name', 'organization']);
     const officeName = this.extractLabeledField(text, ['office name']);
     const closingDate = this.extractLabeledField(text, ['bid end date/time', 'bid closing date', 'end date']);
-    const bidOpeningDate = this.extractLabeledField(text, ['bid opening date/time', 'bid opening date']);
+    const bidOpeningDate = this.extractLabeledField(text, [
+      'bid opening date/time',
+      'bid opening date',
+      'bid opening',
+    ]);
 
-    // Bid Validity Days
-    const validityMatch = text.match(/Bid\s+Offer\s+Validity[^\d]{0,30}(\d+)\s*\(/i);
+    const validityMatch = text.match(/Bid\s+Offer[\s\S]{0,40}?(\d+)\s*\(\s*Days\s*\)/i);
     const bidValidityDays = validityMatch ? parseInt(validityMatch[1], 10) : undefined;
 
-    // Total Quantity
     const qtyMatch = text.match(/Total\s+Quantity\s*[:\-]?\s*(\d+)/i);
     const totalQuantity = qtyMatch ? parseInt(qtyMatch[1], 10) : undefined;
 
-    const itemCategory = this.extractLabeledField(text, ['item category', 'category']);
     const typeOfBid = this.extractLabeledField(text, ['type of bid']);
 
-    // 2. Turnover Extraction (Lakhs, Crores, or Raw)
-    const turnoverLine = this.extractLabeledField(text, [
-      'minimum average annual turnover of the bidder',
-      'minimum average annual turnover',
-      'bidder turnover',
-      'annual turnover of bidder',
-    ]);
+    // 2. Turnover Extraction (supports single-line AND wkhtmltopdf wrapped label)
+    const turnoverLine =
+      this.extractLabeledField(text, [
+        'minimum average annual turnover of the bidder',
+        'minimum average annual turnover',
+        'minimum average annual',
+        'bidder turnover',
+        'annual turnover of bidder',
+      ]) ||
+      text.match(/Minimum\s+Average\s+Annual[\s\S]{0,60}?([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)/i)?.[1];
     const minAnnualTurnoverInr = turnoverLine ? this.parseIndianCurrency(turnoverLine) : undefined;
 
-    // 3. Past Experience Extraction
-    const expMatch = text.match(/Years\s+of\s+Past\s+Experience\s+Required[^\d]{0,30}(\d+(?:\.\d+)?)\s*Year/i);
+    // 3. Past Experience Extraction (supports single-line AND wkhtmltopdf wrapped label)
+    const expMatch = text.match(/Years\s+of\s+Past\s+Experience\s+Required[^\d]{0,35}(\d+(?:\.\d+)?)\s*Year/i);
     const yearsExperienceRequired = expMatch ? parseFloat(expMatch[1]) : undefined;
 
     const pastPerfMatch = text.match(/Past\s+Performance\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*%/i);
     const pastPerformancePercentage = pastPerfMatch ? parseFloat(pastPerfMatch[1]) : undefined;
 
     // 4. MSE & Startup Exemptions
-    const mseExemptionMatch = text.match(/MSE\s+Exemption\s+(?:for\s+Years\s+Of\s+Experience\s+and\s+Turnover)?\s*[:\-]?\s*(Yes|No)/i);
+    const mseExemptionMatch = text.match(
+      /MSE\s+(?:Exemption|Relaxation)\s+(?:for\s+Years\s+Of(?:\s+Experience\s+and\s+Turnover)?)?\s*[:\-]?\s*(Yes|No)/i
+    );
     const mseExemptionForExpAndTurnover = mseExemptionMatch ? mseExemptionMatch[1].toLowerCase() === 'yes' : false;
 
-    const startupExemptionMatch = text.match(/Startup\s+Exemption\s+(?:for\s+Years\s+Of\s+Experience\s+and\s+Turnover)?\s*[:\-]?\s*(Yes|No)/i);
-    const startupExemptionForExpAndTurnover = startupExemptionMatch ? startupExemptionMatch[1].toLowerCase() === 'yes' : false;
+    const startupExemptionMatch = text.match(
+      /Startup\s+(?:Exemption|Relaxation)\s+(?:for\s+Years\s+Of(?:\s+Experience\s+and\s+Turnover)?)?\s*[:\-]?\s*(Yes|No)/i
+    );
+    const startupExemptionForExpAndTurnover = startupExemptionMatch
+      ? startupExemptionMatch[1].toLowerCase() === 'yes'
+      : false;
 
-    // EMD MSE Exemption Clause in Table 2 / Footnotes
-    const emdMseFootnoteMatch = /EMD\s+EXEMPTION\s*[:\-]?\s*.*?(?:manufacturers\s+for\s+goods|service\s+providers)/i.test(text);
-    const isEmdExemptForMse = mseExemptionForExpAndTurnover || emdMseFootnoteMatch || /EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
-    const isEmdExemptForStartup = startupExemptionForExpAndTurnover || /Startup\s+EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
+    const emdMseFootnoteMatch =
+      /EMD\s+EXEMPTION\s*[:\-]?\s*.*?(?:manufacturers\s+for\s+goods|service\s+providers)/i.test(text);
+    const isEmdExemptForMse =
+      mseExemptionForExpAndTurnover || emdMseFootnoteMatch || /EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
+    const isEmdExemptForStartup =
+      startupExemptionForExpAndTurnover || /Startup\s+EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
 
-    // MSE Purchase Preference (L1 + 15% rule)
-    const msePrefMatch = text.match(/MSE\s+Purchase\s+Preference\s*[:\-]?\s*(Yes|No)/i);
+    const msePrefMatch = text.match(/MSE\s+Purchase\s+Preference[\s\S]{0,40}?\b(Yes|No)\b/i);
     const msePurchasePreference = msePrefMatch
       ? msePrefMatch[1].toLowerCase() === 'yes'
       : /Purchase\s+preference\s+to\s+Micro\s+and\s+Small\s+Enterprises/i.test(text);
@@ -344,12 +740,14 @@ export class GemPdfExtractor {
       : /Preference\s+to\s+Make\s+In\s+India\s+products/i.test(text);
 
     let miiLocalContentPercentage: number | undefined;
-    const localContentMatch = text.match(/(?:minimum\s+local\s+content|local\s+content(?:\s+percentage)?)[^\d%]{0,40}(\d+(?:\.\d+)?)\s*%/i);
+    const localContentMatch = text.match(
+      /(?:minimum\s+local\s+content|local\s+content(?:\s+percentage)?)[^\d%]{0,40}(\d+(?:\.\d+)?)\s*%/i
+    );
     if (localContentMatch) {
       miiLocalContentPercentage = parseFloat(localContentMatch[1]);
-    } else if (text.includes('Class 1 local supplier')) {
+    } else if (/Class\s*1\s+local\s+supplier/i.test(text)) {
       miiLocalContentPercentage = 50;
-    } else if (text.includes('Class 2 local supplier')) {
+    } else if (/Class\s*2\s+local\s+supplier/i.test(text)) {
       miiLocalContentPercentage = 20;
     }
 
@@ -361,42 +759,57 @@ export class GemPdfExtractor {
     }
 
     // 6. Financial Guarantees (EMD and ePBG)
-    const estimatedValueInr = this.extractMoneyValue(text, ['estimated bid value', 'total bid value', 'estimated value']);
-    const emdAmountInr = this.extractMoneyValue(text, ['emd amount', 'earnest money deposit']);
+    const estimatedValueInr = this.extractMoneyValue(text, [
+      'estimated bid value',
+      'total bid value',
+      'estimated value',
+    ]);
+    let emdAmountInr = this.extractMoneyValue(text, ['emd amount', 'earnest money deposit']);
+    if (emdAmountInr === undefined && /EMD\s+Detail[\s\S]{0,40}?Required\s*[:\-]?\s*No\b/i.test(text)) {
+      emdAmountInr = 0;
+    }
 
     const epbgPercentMatch = text.match(/ePBG\s+Percentage\s*\(\s*%\s*\)\s*[:\-]?\s*([\d.]+)/i);
-    const epbgPercentage = epbgPercentMatch ? parseFloat(epbgPercentMatch[1]) : undefined;
+    let epbgPercentage = epbgPercentMatch ? parseFloat(epbgPercentMatch[1]) : undefined;
+    if (epbgPercentage === undefined && /ePBG\s+Detail[\s\S]{0,40}?Required\s*[:\-]?\s*No\b/i.test(text)) {
+      epbgPercentage = 0;
+    }
 
     const epbgDurationMatch = text.match(/Duration\s+of\s+ePBG\s+required[^\d]{0,30}(\d+)/i);
     const epbgDurationMonths = epbgDurationMatch ? parseInt(epbgDurationMatch[1], 10) : undefined;
 
     // 7. Delivery & Splitting
     const splittingAppliedMatch = text.match(/Bid\s+splitting\s+(not\s+applied|applied)/i);
-    const isSplittingApplied = splittingAppliedMatch ? !splittingAppliedMatch[1].includes('not') : /Splitting\s*[:\-]?\s*Yes/i.test(text);
+    const isSplittingApplied = splittingAppliedMatch
+      ? !splittingAppliedMatch[1].toLowerCase().includes('not')
+      : /Splitting\s*[:\-]?\s*Yes/i.test(text);
 
     const splitRatioMatch = text.match(/Splitting\s*(?:Ratio)?\s*[:\-]?\s*(\d+\s*:\s*\d+)/i);
     const splittingRatio = splitRatioMatch ? splitRatioMatch[1].replace(/\s+/g, '') : undefined;
 
-    const deliveryDaysMatch = text.match(/Delivery\s+Period\s*\(Days\)\s*[:\-]?\s*(\d+)/i);
-    const deliveryPeriodDays = deliveryDaysMatch ? parseInt(deliveryDaysMatch[1], 10) : undefined;
-
-    // 8. Consignees Table Extraction
     const consignees = this.extractConsigneesTable(text);
+    const consigneeDeliveryDays = consignees.find((c) => c.deliveryDays !== undefined)?.deliveryDays;
+    const deliveryDaysMatch = text.match(/Delivery\s+(?:Period|Days)\s*(?:\(Days\))?\s*[:\-]?\s*(\d+)/i);
+    const deliveryPeriodDays = deliveryDaysMatch
+      ? parseInt(deliveryDaysMatch[1], 10)
+      : consigneeDeliveryDays;
+
     const consigneeStateDistribution = this.computeStateDistribution(consignees, totalQuantity);
 
     // 9. Document Required from Seller & ATC Requirements
     const requiredDocuments = this.extractRequiredDocumentsList(text);
     const atcClauses = this.extractAtcClauses(text);
 
-    // Document Specific Flags
     const allDocText = (requiredDocuments.join(' ') + ' ' + atcClauses.join(' ')).toLowerCase();
     const requiresOemAuthorization = /oem\s+authorization|manufacturer\s+authorization|maf\b/i.test(allDocText);
     const requiresCaTurnoverCertificate = /ca\s+turnover|udin|chartered\s+accountant\s+certificate/i.test(allDocText);
-    const requiresMiiDeclaration = /local\s+content|make\s+in\s+india|mii\s+declaration|self\s+declaration/i.test(allDocText);
+    const requiresMiiDeclaration = /local\s+content|make\s+in\s+india|mii\s+declaration|self\s+declaration/i.test(
+      allDocText
+    );
     const requiresGstCertificate = /gst|pan/i.test(allDocText);
-    const requiresPastPerformanceDoc = /past\s+performance|crac|completion\s+certificate|copies\s+of\s+contract/i.test(allDocText);
+    const requiresPastPerformanceDoc =
+      /past\s+performance|crac|completion\s+certificate|copies\s+of\s+contract/i.test(allDocText);
 
-    // Reverse Auction (RA) Flag
     const isRaEnabled = /Bid\s+to\s+RA\s+enabled\s*[:\-]?\s*Yes/i.test(text);
 
     return {
@@ -444,9 +857,6 @@ export class GemPdfExtractor {
     };
   }
 
-  /**
-   * Extracts money value by searching for labeled fields and handling comma-separated numbers.
-   */
   private static extractMoneyValue(text: string, labels: string[]): number | undefined {
     const escaped = labels.map((l) => l.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
     const regex = new RegExp(`(?:${escaped})[^\\d₹]{0,60}(?:₹|rs\\.?|inr)?\\s*([\\d,]+(?:\\.\\d+)?)`, 'i');
@@ -456,13 +866,11 @@ export class GemPdfExtractor {
     return Number.isFinite(amount) ? amount : undefined;
   }
 
-  /**
-   * Parses the tabular Consignees section using 6-digit Indian PIN codes as structural anchors.
-   * Scopes detection to the specific line/row of the table to prevent cross-row state bleeding.
-   */
   public static extractConsigneesTable(text: string): ExtractedConsignee[] {
     const consignees: ExtractedConsignee[] = [];
-    const tableScopeMatch = text.match(/Consignees?\s*\/\s*Reporting\s+Officer[\s\S]*?(?:Buyer\s+Added|Specifications?|Disclaimer|$)/i);
+    const tableScopeMatch = text.match(
+      /Consignees?\s*\/\s*Reporting\s+Officer[\s\S]*?(?:Buyer\s+Added|Specifications?|Disclaimer|$)/i
+    );
     const scope = tableScopeMatch ? tableScopeMatch[0] : text;
 
     const pincodeRegex = /\b([1-9][0-9]{5})\b/g;
@@ -473,12 +881,10 @@ export class GemPdfExtractor {
       const pin = pinMatch[1];
       const matchIndex = pinMatch.index;
 
-      // Restrict scope to the line / row containing this PIN code
       const lineStart = scope.lastIndexOf('\n', matchIndex);
       const lineEnd = scope.indexOf('\n', matchIndex + 6);
       const rowScope = scope.slice(lineStart === -1 ? 0 : lineStart + 1, lineEnd === -1 ? scope.length : lineEnd);
 
-      // Detect Indian State on this row
       let matchedState = 'India';
       for (const st of INDIAN_STATES_AND_UTS) {
         if (new RegExp(`\\b${st}\\b`, 'i').test(rowScope)) {
@@ -487,8 +893,6 @@ export class GemPdfExtractor {
         }
       }
 
-      // Quantity & Delivery Days heuristic on this row
-      // In GeM table: Quantity and Delivery Days are the last numbers on the table row
       const pinPosInRow = rowScope.indexOf(pin);
       const afterPin = rowScope.slice(pinPosInRow + 6);
       const numbersAfter = Array.from(afterPin.matchAll(/\b(\d+)\b/g)).map((m) => parseInt(m[1], 10));
@@ -503,7 +907,6 @@ export class GemPdfExtractor {
         quantity = numbersAfter[0];
       }
 
-      // Consignee Officer name heuristic (precedes pincode in same row)
       const beforePin = rowScope.slice(0, pinPosInRow);
       const officerMatch = beforePin.match(/(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
       const officer = officerMatch ? officerMatch[0] : undefined;
@@ -522,9 +925,6 @@ export class GemPdfExtractor {
     return consignees;
   }
 
-  /**
-   * Computes state delivery distribution and percentage split ratios.
-   */
   private static computeStateDistribution(
     consignees: ExtractedConsignee[],
     totalQtyFallback?: number
@@ -548,17 +948,23 @@ export class GemPdfExtractor {
     return dist;
   }
 
-  /**
-   * Extracts "Document required from seller" bullet points from Section 1.
-   */
   public static extractRequiredDocumentsList(text: string): string[] {
     const docs: string[] = [];
-    const sectionMatch = text.match(/Document\s+required\s+from\s+seller\s*[:\-]?([\s\S]*?)(?:\*In\s+case|Past\s+Performance|Bid\s+to\s+RA|$)/i);
+    const sectionMatch = text.match(
+      /Document\s+required(?:\s+from\s+seller)?\s*[:\-]?([\s\S]*?)(?:\*In\s+case|Past\s+Performance|Bid\s+to\s+RA|$)/i
+    );
     if (sectionMatch) {
       const lines = sectionMatch[1]
         .split(/\n|,|•/)
-        .map((l) => l.trim())
-        .filter((l) => l.length > 2 && !/^\d+$/.test(l));
+        .map((l) => l.replace(/^[:\-\s]+/, '').trim())
+        .filter(
+          (l) =>
+            l.length > 3 &&
+            !/^\d+$/.test(l) &&
+            !/^\d+\s*\/\s*\d+$/.test(l) &&
+            !/^\([^)]*\)$/.test(l) &&
+            !/^from\s+seller\b/i.test(l)
+        );
 
       for (const line of lines) {
         if (!docs.includes(line)) {
@@ -567,12 +973,12 @@ export class GemPdfExtractor {
       }
     }
 
-    // Common standard document phrases check
     const standardDocChecks = [
       'Experience Criteria',
       'Bidder Turnover',
       'Certificate (Requested in ATC)',
       'OEM Authorization Certificate',
+      'OEM Annual Turnover',
       'Compliance of BoQ specification and supporting document',
       'Past Performance',
     ];
@@ -586,12 +992,11 @@ export class GemPdfExtractor {
     return docs;
   }
 
-  /**
-   * Extracts Buyer Added ATC (Additional Terms & Conditions) clauses.
-   */
   public static extractAtcClauses(text: string): string[] {
     const clauses: string[] = [];
-    const atcMatch = text.match(/(?:Buyer\s+Added\s+Bid\s+Specific\s+Terms\s+and\s+Conditions|Buyer\s+Added\s+ATC)[\s\S]*?(?:Disclaimer|$)/i);
+    const atcMatch = text.match(
+      /(?:Buyer\s+Added\s+Bid\s+Specific\s+Terms\s+and\s+Conditions|Buyer\s+Added\s+ATC)[\s\S]*?(?:Disclaimer|$)/i
+    );
     if (!atcMatch) return clauses;
 
     const atcScope = atcMatch[0];

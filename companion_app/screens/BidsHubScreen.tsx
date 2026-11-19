@@ -46,9 +46,11 @@ type TypeChip = 'All' | 'Goods' | 'Services' | 'BOQ' | 'Custom';
 interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
   initialFilter?: string;
+  initialSearch?: string;
   onSyncLive?: () => Promise<void> | void;
   isSyncing?: boolean;
   onInspectBid?: (bid: DeconstructedBidDoc) => void;
+  onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
 }
 
 function mapTypeChipToPortalParam(tab: GeMStatusTab, chip: TypeChip): GeMPortalByType {
@@ -69,16 +71,25 @@ function mapTypeChipToPortalParam(tab: GeMStatusTab, chip: TypeChip): GeMPortalB
 
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
+  initialSearch,
   onSyncLive,
   isSyncing = false,
   onInspectBid,
+  onPrepareDocuments,
 }) => {
   const { colors, fontMultiplier } = useTheme();
 
   const [activeStatusTab, setActiveStatusTab] = useState<GeMStatusTab>('Ongoing');
   const [activeTypeChip, setActiveTypeChip] = useState<TypeChip>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [debouncedQuery, setDebouncedQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearch || '');
+  const [debouncedQuery, setDebouncedQuery] = useState<string>((initialSearch || '').trim());
+
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      setSearchQuery(initialSearch);
+      setDebouncedQuery(initialSearch.trim());
+    }
+  }, [initialSearch]);
   const [highValueOnly, setHighValueOnly] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-End-Date-Oldest');
   const [inspectingBid, setInspectingBid] = useState<DeconstructedBidDoc | null>(null);
@@ -574,6 +585,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           bid={inspectingBid}
           visible={true}
           onClose={() => setInspectingBid(null)}
+          onPrepareDocuments={onPrepareDocuments}
         />
       )}
 

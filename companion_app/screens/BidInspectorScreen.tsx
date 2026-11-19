@@ -13,7 +13,11 @@ import {
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { GeMLiveSyncService, type GeMBidOtherDetails } from '../services/GeMLiveSyncService';
-import { LocalPdfScanner, type LocalPdfScanResult } from '../services/LocalPdfScanner';
+import {
+  LocalPdfScanner,
+  enrichBidWithPdfScan,
+  type LocalPdfScanResult,
+} from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
 import { useTheme } from '../theme/ThemeContext';
@@ -54,9 +58,16 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
     let cancelled = false;
     const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
-    LocalPdfScanner.getCachedScan(bid.bidNumber, targetUrl).then((cached) => {
-      if (!cancelled && cached) setPdfScan(cached);
-    });
+    if (PortalDocService.isSafeGemUrl(targetUrl)) {
+      setIsScanningPdf(true);
+      LocalPdfScanner.scanOfficialBidPdf(bid.bidNumber, targetUrl)
+        .then((result) => {
+          if (!cancelled) setPdfScan(result);
+        })
+        .finally(() => {
+          if (!cancelled) setIsScanningPdf(false);
+        });
+    }
 
     if (bid.b_id) {
       GeMLiveSyncService.fetchBidOtherDetails(bid.b_id).then((details) => {
@@ -71,12 +82,13 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
   if (!bid) return null;
 
-  const fundamentals = BidDocService.getFundamentalsSummary(bid);
-  const risks = BidDocService.assessTenderRisks(bid);
+  const effectiveBid = enrichBidWithPdfScan(bid, pdfScan);
+  const fundamentals = BidDocService.getFundamentalsSummary(effectiveBid);
+  const risks = BidDocService.assessTenderRisks(effectiveBid);
 
-  const requiredDocuments = Array.isArray(bid.requiredDocuments) ? bid.requiredDocuments : [];
-  const boqItems = Array.isArray(bid.boqItems) ? bid.boqItems : [];
-  const consignees = Array.isArray(bid.consignees) ? bid.consignees : [];
+  const requiredDocuments = Array.isArray(effectiveBid.requiredDocuments) ? effectiveBid.requiredDocuments : [];
+  const boqItems = Array.isArray(effectiveBid.boqItems) ? effectiveBid.boqItems : [];
+  const consignees = Array.isArray(effectiveBid.consignees) ? effectiveBid.consignees : [];
 
   const toggleDoc = (docName: string) => {
     setCheckedDocs((prev) => ({
@@ -554,7 +566,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       </Modal>
       {showDealSheet && bid && (
         <TenderDealSheetCard
-          bid={bid}
+          bid={effectiveBid}
           visible={showDealSheet}
           onClose={() => setShowDealSheet(false)}
         />

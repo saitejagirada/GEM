@@ -119,28 +119,31 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
 
         <Pressable
           style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
-          onPress={() => Alert.alert('Saved items', 'Saved-item persistence is not connected yet.')}
+          onPress={() => {
+            if (onOpenPortfolio) onOpenPortfolio();
+            else onNavigateTab('BIDS');
+          }}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.warningTint }]}>
             <Text style={[styles.menuIconText, { color: colors.warning }]}>S</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Saved Items &amp; Watchlist</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Bookmarked opportunities &amp; catalog items</Text>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Tracked Bids &amp; Handoffs</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Prepared opportunities &amp; local files</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
         </Pressable>
 
         <Pressable
           style={styles.menuItem}
-          onPress={() => Alert.alert('Notifications', 'Refresh the public feed from the Bids tab. Account notifications require GeM integration.')}
+          onPress={() => onNavigateTab('BIDS')}
         >
           <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
             <Text style={[styles.menuIconText, { color: colors.success }]}>!</Text>
           </View>
           <View style={styles.menuTextCol}>
-            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Notifications &amp; Corrigenda</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Real-time tender updates &amp; alerts</Text>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Live Bids &amp; Corrigenda</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Direct bidplus.gem.gov.in updates &amp; alerts</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
         </Pressable>
@@ -225,13 +228,32 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
           <StatusBadge label={isDark ? 'DARK' : 'LIGHT'} tone="neutral" />
         </Pressable>
 
-        <Pressable style={styles.menuItem} onPress={() => Alert.alert('Account connection', 'There is no app session to sign out of. GeM authentication happens on the official portal.')}>
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() =>
+            setFontScale(fontScale === 'medium' ? 'large' : fontScale === 'large' ? 'small' : 'medium')
+          }
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>A+</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Text Size Accessibility</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Toggle between small, medium, and large text scale</Text>
+          </View>
+          <StatusBadge label={fontScale.toUpperCase()} tone="neutral" />
+        </Pressable>
+
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
+        >
           <View style={[styles.menuIconBox, { backgroundColor: colors.dangerTint }]}>
-          <Text style={[styles.menuIconText, { color: colors.danger }]}>↪</Text>
+            <Text style={[styles.menuIconText, { color: colors.danger }]}>↪</Text>
           </View>
           <View style={styles.menuTextCol}>
             <Text style={[styles.menuTitle, { color: colors.danger, fontWeight: '700' }]}>Official account session</Text>
-            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Managed by GeM, not this app</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Open ui.gem.gov.in in official browser</Text>
           </View>
           <Text style={[styles.chevron, { color: colors.danger }]}>›</Text>
         </Pressable>

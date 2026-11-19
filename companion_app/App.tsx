@@ -31,7 +31,7 @@ import {
   Platform,
 } from 'react-native';
 import { ThemeProvider, useTheme, DESIGN_TOKENS } from './theme/ThemeContext';
-import { HomeScreen } from './screens/HomeScreen';
+import { HomeScreen, type HomeNavigateParams } from './screens/HomeScreen';
 import { MarketplaceScreen } from './screens/MarketplaceScreen';
 import { BidsHubScreen } from './screens/BidsHubScreen';
 import { AuctionsHubScreen } from './screens/AuctionsHubScreen';
@@ -67,7 +67,16 @@ const MainAppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
   const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
   const [bids, setBids] = useState<DeconstructedBidDoc[]>([]);
+  const [totalPortalBids, setTotalPortalBids] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
+
+  // Navigation parameters forwarded from Home / Categories
+  const [marketNavCategory, setMarketNavCategory] = useState<string | undefined>();
+  const [marketNavQuery, setMarketNavQuery] = useState<string | undefined>();
+  const [marketNavTypeTab, setMarketNavTypeTab] = useState<'Products' | 'Services' | undefined>();
+  const [marketNavTrigger, setMarketNavTrigger] = useState<number>(0);
+  const [bidsNavSearch, setBidsNavSearch] = useState<string | undefined>();
+  const [contractsNavSearch, setContractsNavSearch] = useState<string | undefined>();
 
   // Quick lookup modal
   const [showLookupModal, setShowLookupModal] = useState<boolean>(false);
@@ -129,9 +138,12 @@ const MainAppContent: React.FC = () => {
 
   // Subscribe to real-time live GeM public feed updates (Phone -> GeM directly)
   useEffect(() => {
-    const unsubscribe = GeMLiveSyncService.subscribe((updatedBids) => {
+    const unsubscribe = GeMLiveSyncService.subscribe((updatedBids, stats) => {
       if (updatedBids && updatedBids.length > 0) {
         setBids(updatedBids);
+      }
+      if (stats?.totalPortalOngoingBids) {
+        setTotalPortalBids(stats.totalPortalOngoingBids);
       }
     });
     return () => unsubscribe();
@@ -147,8 +159,11 @@ const MainAppContent: React.FC = () => {
       }
 
       // Direct Phone -> bidplus.gem.gov.in live sync. Zero backend, zero mock fallback.
-      await GeMLiveSyncService.syncFromPortal(3);
+      const res = await GeMLiveSyncService.syncFromPortal(3);
       setBids(GeMLiveSyncService.getLiveBids());
+      if (res.totalPortalBids) {
+        setTotalPortalBids(res.totalPortalBids);
+      }
     } catch {
       setBids(GeMLiveSyncService.getLiveBids());
     } finally {
@@ -209,17 +224,23 @@ const MainAppContent: React.FC = () => {
     setSubScreen('PORTFOLIO');
   }, []);
 
-  const handleHomeNavigate = (target: string) => {
+  const handleHomeNavigate = (target: string, params?: HomeNavigateParams) => {
     if (target === 'MARKET') {
+      setMarketNavCategory(params?.category);
+      setMarketNavQuery(params?.search);
+      setMarketNavTypeTab(params?.typeTab);
+      setMarketNavTrigger((n) => n + 1);
       setActiveTab('SEARCH');
       setSubScreen('NONE');
     } else if (target === 'BIDS') {
+      if (params?.search !== undefined) setBidsNavSearch(params.search);
       setActiveTab('BIDS');
       setSubScreen('NONE');
     } else if (target === 'AUCTIONS') {
       setActiveTab('AUCTIONS');
       setSubScreen('NONE');
     } else if (target === 'ORDERS') {
+      if (params?.search !== undefined) setContractsNavSearch(params.search);
       setSubScreen('CONTRACTS');
     } else if (target === 'PORTFOLIO') {
       setSubScreen('PORTFOLIO');
@@ -240,6 +261,10 @@ const MainAppContent: React.FC = () => {
   };
 
   const handleSelectCategory = (cat: MarketplaceCategory) => {
+    setMarketNavCategory(cat.name);
+    setMarketNavQuery(undefined);
+    setMarketNavTypeTab(cat.type === 'SERVICE' ? 'Services' : 'Products');
+    setMarketNavTrigger((n) => n + 1);
     setSubScreen('NONE');
     setActiveTab('SEARCH');
   };
@@ -351,9 +376,12 @@ const MainAppContent: React.FC = () => {
               >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
-              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Executed Contracts</Text>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Concluded Bids &amp; Contracts</Text>
             </View>
-            <OrdersKnowledgeScreen />
+            <OrdersKnowledgeScreen
+              initialSearch={contractsNavSearch}
+              onPrepareDocuments={openPreparation}
+            />
           </View>
         )}
         {subScreen === 'PORTAL' && (
@@ -401,19 +429,29 @@ const MainAppContent: React.FC = () => {
             {activeTab === 'HOME' && (
               <HomeScreen
                 bids={bids}
+                totalPortalBids={totalPortalBids}
                 onNavigateTab={handleHomeNavigate}
                 onSelectBid={(bid) => setSelectedBid(bid)}
                 onOpenMyWork={() => setSubScreen('PORTFOLIO')}
                 onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
             )}
-            {activeTab === 'SEARCH' && <MarketplaceScreen />}
+            {activeTab === 'SEARCH' && (
+              <MarketplaceScreen
+                initialCategory={marketNavCategory}
+                initialQuery={marketNavQuery}
+                initialTypeTab={marketNavTypeTab}
+                navTrigger={marketNavTrigger}
+              />
+            )}
             {activeTab === 'BIDS' && (
               <BidsHubScreen
                 bids={bids}
+                initialSearch={bidsNavSearch}
                 onSyncLive={loadData}
                 isSyncing={isSyncing}
                 onInspectBid={(bid) => setSelectedBid(bid)}
+                onPrepareDocuments={openPreparation}
               />
             )}
             {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}

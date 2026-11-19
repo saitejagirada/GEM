@@ -35,7 +35,15 @@ import type { DeconstructedBidDoc } from '../types/index';
 
 type ConcludedFilter = 'ALL' | 'GOODS' | 'SERVICES' | 'RA';
 
-export const OrdersKnowledgeScreen: React.FC = () => {
+export interface OrdersKnowledgeScreenProps {
+  initialSearch?: string;
+  onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
+}
+
+export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
+  initialSearch,
+  onPrepareDocuments,
+}) => {
   const { colors, fontMultiplier } = useTheme();
 
   const [records, setRecords] = useState<DeconstructedBidDoc[]>([]);
@@ -47,8 +55,15 @@ export const OrdersKnowledgeScreen: React.FC = () => {
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [isOffline, setIsOffline] = useState<boolean>(false);
 
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [debouncedQuery, setDebouncedQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearch || '');
+  const [debouncedQuery, setDebouncedQuery] = useState<string>((initialSearch || '').trim());
+
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      setSearchQuery(initialSearch);
+      setDebouncedQuery(initialSearch.trim());
+    }
+  }, [initialSearch]);
   const [activeFilter, setActiveFilter] = useState<ConcludedFilter>('ALL');
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
   const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
@@ -322,6 +337,7 @@ export const OrdersKnowledgeScreen: React.FC = () => {
           bid={selectedBid}
           visible={true}
           onClose={() => setSelectedBid(null)}
+          onPrepareDocuments={onPrepareDocuments}
         />
       )}
 
