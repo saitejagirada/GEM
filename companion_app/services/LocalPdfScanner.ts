@@ -7,6 +7,8 @@
  * or extracted text are sent to a companion server.
  */
 
+import { GemPdfExtractor, type ExtractedGeMTenderDetails } from './GemPdfExtractor.ts';
+
 const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v1';
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
 
@@ -25,6 +27,23 @@ export interface LocalPdfDetails {
   closingDate?: string;
   estimatedValueInr?: number;
   emdAmountInr?: number;
+
+  // Extended Compliance & Disqualification Fields
+  minAnnualTurnoverInr?: number;
+  yearsExperienceRequired?: number;
+  pastPerformancePercentage?: number;
+  isEmdExemptForMse?: boolean;
+  isEmdExemptForStartup?: boolean;
+  msePurchasePreference?: boolean;
+  miiPurchasePreference?: boolean;
+  miiLocalContentPercentage?: number;
+  miiClass?: 'CLASS_1' | 'CLASS_2' | 'NON_LOCAL';
+  epbgPercentage?: number;
+  splittingRatio?: string;
+  requiredDocuments?: string[];
+  consigneesCount?: number;
+  deliveryPeriodDays?: number;
+  extendedDetails?: ExtractedGeMTenderDetails;
 }
 
 export interface LocalPdfScanResult {
@@ -57,98 +76,50 @@ interface KeyValueStorage {
   setItem(key: string, value: string): Promise<void>;
 }
 
-function decodePdfLiteral(value: string): string {
-  return value
-    .replace(/\\([0-7]{1,3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)))
-    .replace(/\\n/g, '\n')
-    .replace(/\\r/g, '\r')
-    .replace(/\\t/g, '\t')
-    .replace(/\\b/g, '\b')
-    .replace(/\\f/g, '\f')
-    .replace(/\\([\\()])/g, '$1');
-}
-
 /**
- * Extracts text from uncompressed PDF text operators. Scanned image-only PDFs
- * are reported as unsupported instead of being uploaded for remote OCR.
+ * Extracts readable PDF text operators.
  */
 export function extractPdfText(pdfSource: string): string {
-  const blocks = Array.from(pdfSource.matchAll(/BT([\s\S]*?)ET/g)).map((match) => match[1]);
-  const scopes = blocks.length > 0 ? blocks : [pdfSource];
-  const parts: string[] = [];
-
-  for (const scope of scopes) {
-    // Text can be emitted as a single Tj operand or as strings inside a TJ
-    // array. The BT/ET scope keeps this from treating ordinary PDF metadata as
-    // bid text.
-    const literalPattern = /\(((?:\\.|[^\\)])*)\)/g;
-    let match: RegExpExecArray | null;
-    while ((match = literalPattern.exec(scope)) !== null) {
-      parts.push(decodePdfLiteral(match[1]));
-    }
-
-    const hexPattern = /<([0-9a-f\s]+)>/gi;
-    while ((match = hexPattern.exec(scope)) !== null) {
-      const hex = match[1].replace(/\s+/g, '');
-      let decoded = '';
-      for (let index = 0; index + 1 < hex.length; index += 2) {
-        decoded += String.fromCharCode(parseInt(hex.slice(index, index + 2), 16));
-      }
-      parts.push(decoded);
-    }
-  }
-
-  return parts
-    .join('\n')
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function extractLabeledLine(text: string, labels: string[]): string | undefined {
-  const expression = new RegExp(`(?:${labels.join('|')})\\s*[:\\-]?\\s*([^\\n]{2,160})`, 'i');
-  const match = text.match(expression);
-  return match?.[1]?.replace(/\s+/g, ' ').trim() || undefined;
-}
-
-function extractMoney(text: string, labels: string[]): number | undefined {
-  const expression = new RegExp(
-    `(?:${labels.join('|')})[^\\d₹]{0,100}(?:₹|rs\\.?|inr)?\\s*([\\d,]+(?:\\.\\d+)?)`,
-    'i'
-  );
-  const match = text.match(expression);
-  if (!match) return undefined;
-  const amount = Number(match[1].replace(/,/g, ''));
-  return Number.isFinite(amount) ? amount : undefined;
+  return GemPdfExtractor.extractTextFromPdfSource(pdfSource);
 }
 
 export function extractPdfDetails(text: string, fallbackBidNumber?: string): LocalPdfDetails {
+  const parsed = GemPdfExtractor.parseGeMTenderText(text, fallbackBidNumber);
   const details: LocalPdfDetails = {};
-  const bidNumber =
-    text.match(/\bGEM\s*\/\s*\d{4}\s*\/\s*[A-Z]+\s*\/\s*\d+\b/i)?.[0]?.replace(/\s+/g, '') ||
-    fallbackBidNumber;
-  const title = extractLabeledLine(text, ['bid title', 'item title', 'product name', 'service name']);
-  const department = extractLabeledLine(text, ['department', 'buyer department', 'organisation']);
-  const ministry = extractLabeledLine(text, ['ministry']);
-  const closingDate = extractLabeledLine(text, [
-    'bid closing date',
-    'bid end date',
-    'closing date',
-    'end date',
-  ]);
-  const estimatedValueInr = extractMoney(text, ['estimated bid value', 'total bid value', 'estimated value']);
-  const emdAmountInr = extractMoney(text, ['emd amount', 'earnest money deposit', 'emd']);
 
-  if (bidNumber) details.bidNumber = bidNumber;
-  if (title) details.title = title;
-  if (department) details.department = department;
-  if (ministry) details.ministry = ministry;
-  if (closingDate) details.closingDate = closingDate;
-  if (estimatedValueInr !== undefined) details.estimatedValueInr = estimatedValueInr;
-  if (emdAmountInr !== undefined) details.emdAmountInr = emdAmountInr;
+  if (parsed.bidNumber) details.bidNumber = parsed.bidNumber;
+  if (parsed.title) details.title = parsed.title;
+  if (parsed.department) details.department = parsed.department;
+  if (parsed.ministry) details.ministry = parsed.ministry;
+  if (parsed.closingDate) details.closingDate = parsed.closingDate;
+  if (parsed.estimatedValueInr !== undefined) details.estimatedValueInr = parsed.estimatedValueInr;
+  if (parsed.emdAmountInr !== undefined) details.emdAmountInr = parsed.emdAmountInr;
+
+  // Extended fields - only attached when present in tender text
+  if (parsed.minAnnualTurnoverInr !== undefined) details.minAnnualTurnoverInr = parsed.minAnnualTurnoverInr;
+  if (parsed.yearsExperienceRequired !== undefined) details.yearsExperienceRequired = parsed.yearsExperienceRequired;
+  if (parsed.pastPerformancePercentage !== undefined) details.pastPerformancePercentage = parsed.pastPerformancePercentage;
+  if (parsed.isEmdExemptForMse && /MSE\s+Exemption/i.test(text)) details.isEmdExemptForMse = parsed.isEmdExemptForMse;
+  if (parsed.isEmdExemptForStartup && /Startup\s+Exemption/i.test(text)) details.isEmdExemptForStartup = parsed.isEmdExemptForStartup;
+  if (parsed.msePurchasePreference && /MSE\s+Purchase\s+Preference/i.test(text)) details.msePurchasePreference = parsed.msePurchasePreference;
+  if (parsed.miiPurchasePreference && /MII\s+Purchase\s+Preference/i.test(text)) details.miiPurchasePreference = parsed.miiPurchasePreference;
+  if (parsed.miiLocalContentPercentage !== undefined) details.miiLocalContentPercentage = parsed.miiLocalContentPercentage;
+  if (parsed.miiClass) details.miiClass = parsed.miiClass;
+  if (parsed.epbgPercentage !== undefined) details.epbgPercentage = parsed.epbgPercentage;
+  if (parsed.splittingRatio) details.splittingRatio = parsed.splittingRatio;
+  if (parsed.deliveryPeriodDays !== undefined) details.deliveryPeriodDays = parsed.deliveryPeriodDays;
+  if (parsed.requiredDocuments && parsed.requiredDocuments.length > 0 && /Document\s+required/i.test(text)) {
+    details.requiredDocuments = parsed.requiredDocuments;
+  }
+  if (parsed.consignees && parsed.consignees.length > 0 && /Consignees?\s*\//i.test(text)) {
+    details.consigneesCount = parsed.consignees.length;
+  }
 
   return details;
+}
+
+export function extractExtendedPdfDetails(text: string, fallbackBidNumber?: string): ExtractedGeMTenderDetails {
+  return GemPdfExtractor.parseGeMTenderText(text, fallbackBidNumber);
 }
 
 function scanSource(
@@ -159,6 +130,9 @@ function scanSource(
 ): LocalPdfScanResult {
   const text = extractPdfText(source);
   const details = extractPdfDetails(text, bidNumber);
+  const extended = extractExtendedPdfDetails(text, bidNumber);
+  details.extendedDetails = extended;
+
   const scannedAtUtc = new Date().toISOString();
 
   if (text.length < 20) {
@@ -182,7 +156,7 @@ function scanSource(
     details,
     textLength: text.length,
     scannedAtUtc,
-    note: 'Details were extracted locally from the readable PDF text layer. Confirm every requirement in the official GeM document.',
+    note: 'Details and compliance barriers extracted locally from readable PDF text layer. Confirm every requirement before bidding.',
   };
 }
 

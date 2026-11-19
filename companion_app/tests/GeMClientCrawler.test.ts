@@ -12,7 +12,8 @@ describe('GeMClientCrawler & Live Multi-Seller Parsing', () => {
 
     const laptopConfig = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.id === 'laptops-notebooks');
     assert.ok(laptopConfig);
-    assert.ok(laptopConfig.slug.includes('laptop-notebook'));
+    assert.strictEqual(laptopConfig.slug, 'computers-0806nb/search');
+    assert.strictEqual(GeMClientCrawler.resolveMatchingSubcategory('laptop')?.id, 'laptops-notebooks');
   });
 
   it('parses live GeM HTML card variants with multi-seller, discounts, and badges', () => {

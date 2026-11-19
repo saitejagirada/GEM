@@ -41,7 +41,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'laptops-notebooks',
     name: 'Laptops & Notebooks',
     category: 'IT Products',
-    slug: 'entry-mid-level-laptop-notebook/search',
+    slug: 'computers-0806nb/search',
     priceUnit: 'per Laptop',
     defaultEta: '⚡ 24-48 Hours Express',
   },
@@ -57,7 +57,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'tablets-v2',
     name: 'Tablet Computers',
     category: 'IT Products',
-    slug: 'computers-0806tab/search',
+    slug: 'computers-0912tc/search',
     priceUnit: 'per Tablet',
     defaultEta: '⚡ 2-4 Days Delivery',
   },
@@ -83,7 +83,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'classroom-desking',
     name: 'Class Room Desking',
     category: 'Furniture',
-    slug: 'furniture-classroom-desking/search',
+    slug: 'general-classroom-furnishing-class-room-desking-and-seating91/search',
     priceUnit: 'per Desk Set',
     defaultEta: '⚡ 5-10 Days Delivery',
   },
@@ -109,7 +109,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'plain-registers',
     name: 'Diaries & Registers',
     category: 'Stationery Items',
-    slug: 'stationery-paper-register/search',
+    slug: 'diaries-printed-plain--register-/search',
     priceUnit: 'per Register',
     defaultEta: '⚡ 2-3 Days Delivery',
   },
@@ -127,7 +127,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'utility-vehicles',
     name: 'Utility Vehicles',
     category: 'Automobiles',
-    slug: 'utility-vehicles/search',
+    slug: '25101500-utility-vehicles-version-2-/search',
     priceUnit: 'per Vehicle',
     defaultEta: '⚡ 7-14 Days Delivery',
   },
@@ -135,7 +135,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'buses-chassis',
     name: 'Buses',
     category: 'Automobiles',
-    slug: 'bus-chassis/search',
+    slug: 'buses/search',
     priceUnit: 'per Bus',
     defaultEta: '⚡ 15-30 Days Handover',
   },
@@ -143,7 +143,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'agricultural-tractors',
     name: 'Tractors',
     category: 'Automobiles',
-    slug: 'agricultural-tractors/search',
+    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-specialized-and-recreational-vehicles-tractors-v1-/search',
     priceUnit: 'per Tractor',
     defaultEta: '⚡ 10-20 Days Delivery',
   },
@@ -153,7 +153,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'movable-file-storage',
     name: 'Movable File Storage System',
     category: 'Furniture',
-    slug: 'movable-storage-system/search',
+    slug: 'movable-file-storage-system/search',
     priceUnit: 'per Unit System',
     defaultEta: '⚡ 7-10 Days Installation',
   },
@@ -189,7 +189,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'television-tv',
     name: 'Television TVs',
     category: 'Electronic Equipments',
-    slug: 'television-tv/search',
+    slug: 'domestic-appliances-and-supplies-and-consumer-electronic-products-consumer-electronics-audio-and-visual-equipmentold-television-tv-v2-/search',
     priceUnit: 'per TV Unit',
     defaultEta: '⚡ 2-4 Days Delivery',
   },
@@ -243,7 +243,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'hand-sanitizer',
     name: 'Hand Sanitizer (IS 4148)',
     category: 'Medical Products',
-    slug: 'hand-sanitizer/search',
+    slug: 'bath-and-body-alcohol-based-hand-sanitizer/search',
     priceUnit: 'per 5L Container',
     defaultEta: '⚡ 24-48 Hours Express',
   },
@@ -275,7 +275,8 @@ export class GeMClientCrawler {
   public static async fetchCategoryPage(
     categorySlug: string,
     page: number = 1,
-    timeoutMs: number = 8000
+    timeoutMs: number = 8000,
+    allowFallback: boolean = true
   ): Promise<{ items: MarketplaceItem[]; hasMore: boolean; page: number }> {
     const cleanSlug = categorySlug.replace(/^\/+/, '').replace(/\/search$/, '');
     const url = `${this.BASE_URL}/${cleanSlug}/search?page=${page}`;
@@ -296,8 +297,8 @@ export class GeMClientCrawler {
 
       if (!resp.ok) {
         const config = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.slug.includes(cleanSlug));
-        if (config?.name) {
-          return await this.searchLiveProducts(config.name, page, timeoutMs);
+        if (allowFallback && config?.name) {
+          return await this.searchLiveProducts(config.name, page, timeoutMs, false);
         }
         return { items: [], hasMore: false, page };
       }
@@ -313,8 +314,8 @@ export class GeMClientCrawler {
       };
 
       const items = this.parseGeMHtml(html, config.category, config.priceUnit, config.defaultEta);
-      if (items.length === 0 && config.name) {
-        return await this.searchLiveProducts(config.name, page, timeoutMs);
+      if (allowFallback && items.length === 0 && config.name) {
+        return await this.searchLiveProducts(config.name, page, timeoutMs, false);
       }
       const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
 
@@ -325,18 +326,49 @@ export class GeMClientCrawler {
   }
 
   /**
-   * Searches live products across GeM using the official marketplace search bar endpoint.
+   * Matches a free-text product search query against verified GeM category slugs
+   * so direct keyword search resolves straight to live mkp.gem.gov.in product listings.
+   */
+  public static resolveMatchingSubcategory(query: string): GeMSubcategoryConfig | undefined {
+    const q = query.trim().toLowerCase();
+    if (!q) return undefined;
+    const tokens = q.split(/\s+/).filter((t) => t.length >= 3);
+
+    return OFFICIAL_GEM_SUBCATEGORIES.find((sub) => {
+      const haystack = `${sub.name} ${sub.category} ${sub.id} ${sub.slug}`.toLowerCase();
+      if (haystack.includes(q)) return true;
+      return tokens.some((token) => haystack.includes(token));
+    });
+  }
+
+  /**
+   * Searches live products across GeM using the official marketplace search endpoint,
+   * automatically falling back to the matching official category listing when GeM's
+   * generic /search page returns category links instead of direct variant cards.
    */
   public static async searchLiveProducts(
     query: string,
     page: number = 1,
-    timeoutMs: number = 8000
+    timeoutMs: number = 8000,
+    allowCategoryResolve: boolean = true
   ): Promise<{ items: MarketplaceItem[]; hasMore: boolean; page: number }> {
     if (!query || !query.trim()) {
       return { items: [], hasMore: false, page };
     }
 
-    const url = `${this.BASE_URL}/search?q=${encodeURIComponent(query.trim())}&page=${page}`;
+    const trimmed = query.trim();
+
+    if (allowCategoryResolve) {
+      const matchedSub = this.resolveMatchingSubcategory(trimmed);
+      if (matchedSub) {
+        const directCategoryResult = await this.fetchCategoryPage(matchedSub.slug, page, timeoutMs, false);
+        if (directCategoryResult.items.length > 0) {
+          return directCategoryResult;
+        }
+      }
+    }
+
+    const url = `${this.BASE_URL}/search?q=${encodeURIComponent(trimmed)}&page=${page}`;
 
     try {
       const controller = new AbortController();

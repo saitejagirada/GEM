@@ -253,7 +253,12 @@ export interface DeconstructedBidDoc {
   boqItems?: BoqLineItem[];
   consignees?: ConsigneeDestination[];
   requiredDocuments?: string[];
+  startTimeUtc?: string;
   closingTimeUtc: string;
+  isHighValue?: boolean;
+  parentBidNumber?: string;
+  hasCorrigendum?: boolean;
+  hasRepresentation?: boolean;
   docUrl: string;
   /** Separate official attachments only when GeM exposes a verified URL for them. */
   relatedDocuments?: OfficialBidDocument[];

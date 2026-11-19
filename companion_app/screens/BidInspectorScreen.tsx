@@ -12,11 +12,14 @@ import {
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
+import { GeMLiveSyncService, type GeMBidOtherDetails } from '../services/GeMLiveSyncService';
 import { LocalPdfScanner, type LocalPdfScanResult } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { formatDateSafe } from '../utils/formatters';
 import { useTheme } from '../theme/ThemeContext';
 import { BidDocumentViewer } from './BidDocumentViewer';
+import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
+import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -37,19 +40,34 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const [isScanningPdf, setIsScanningPdf] = useState(false);
   const [documentViewerVisible, setDocumentViewerVisible] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
+  const [showDealSheet, setShowDealSheet] = useState(false);
+  const [otherDetails, setOtherDetails] = useState<GeMBidOtherDetails | null>(null);
 
   useEffect(() => {
     setCheckedDocs({});
     setPdfScan(null);
+    setOtherDetails(null);
     setDocumentViewerVisible(false);
+    setShowDealSheet(false);
     setSelectedDocumentId(undefined);
     if (!bid) return;
 
+    let cancelled = false;
     const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
     LocalPdfScanner.getCachedScan(bid.bidNumber, targetUrl).then((cached) => {
-      if (cached) setPdfScan(cached);
+      if (!cancelled && cached) setPdfScan(cached);
     });
-  }, [bid?.bidNumber, bid?.docUrl]);
+
+    if (bid.b_id) {
+      GeMLiveSyncService.fetchBidOtherDetails(bid.b_id).then((details) => {
+        if (!cancelled && details) setOtherDetails(details);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bid?.bidNumber, bid?.docUrl, bid?.b_id]);
 
   if (!bid) return null;
 
@@ -204,12 +222,46 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 <Text style={styles.headerBidNum}>{bid.bidNumber}</Text>
                 <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
               </View>
-              <TouchableOpacity style={styles.shareBtn} onPress={handleShare} accessibilityLabel="Share summary">
-                <Text style={styles.shareBtnText}>↗</Text>
+              <TouchableOpacity style={styles.shareBtn} onPress={() => setShowDealSheet(true)} accessibilityLabel="Share WhatsApp Deal Sheet">
+                <Text style={styles.shareBtnText}>📲</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
+              {/* WhatsApp Deal Sheet Hero Action */}
+              <TouchableOpacity
+                style={styles.whatsAppHeroBtn}
+                onPress={() => setShowDealSheet(true)}
+                activeOpacity={0.85}
+                accessibilityLabel="Generate WhatsApp Deal Sheet"
+              >
+                <Text style={{ fontSize: 20, marginRight: 10 }}>📲</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.whatsAppHeroTitle}>Share WhatsApp Deal Sheet</Text>
+                  <Text style={styles.whatsAppHeroSub}>Instant 1080×1350 summary • EMD waiver badge • Zero login</Text>
+                </View>
+                <View style={styles.whatsAppBadge}>
+                  <Text style={styles.whatsAppBadgeText}>FORWARD ↗</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Live GeM Corrigendum / Representation Probe Alert */}
+              {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
+                <View style={[styles.cutoffBanner, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1 }]}>
+                  <View style={styles.cutoffLeft}>
+                    <Text style={[styles.cutoffIcon, { backgroundColor: '#D97706' }]}>!</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.cutoffTitle, { color: '#92400E' }]}>
+                        {otherDetails.hasCorrigendum ? 'Live Corrigendum Published on GeM' : 'Live Representation Recorded on GeM'}
+                      </Text>
+                      <Text style={[styles.cutoffSubtitle, { color: '#78350F' }]}>
+                        Verified directly from bidplus.gem.gov.in. Review the official bid page before submitting.
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
               {/* Bid Closing Cutoff & Freeze Protection Banner */}
               <View style={styles.cutoffBanner}>
                 <View style={styles.cutoffLeft}>
@@ -398,6 +450,14 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             ) : null}
           </View>
 
+          {/* On-Device Pre-Bid Disqualification Shield */}
+          {pdfScan?.details?.extendedDetails ? (
+            <PreBidDisqualificationShield
+              tenderDetails={pdfScan.details.extendedDetails}
+              onPrepareDocuments={handlePrepareDocuments}
+            />
+          ) : null}
+
           {/* Risk Factors Assessment */}
           {risks.flags.length > 0 && (
             <View style={[styles.card, styles.riskCard]}>
@@ -492,6 +552,13 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       </View>
       </SafeAreaView>
       </Modal>
+      {showDealSheet && bid && (
+        <TenderDealSheetCard
+          bid={bid}
+          visible={showDealSheet}
+          onClose={() => setShowDealSheet(false)}
+        />
+      )}
       <BidDocumentViewer
         bid={bid}
         visible={documentViewerVisible}
@@ -861,5 +928,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontStyle: 'italic',
+  },
+  whatsAppHeroBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F2C59',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#1E3A8A',
+  },
+  whatsAppHeroTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  whatsAppHeroSub: {
+    color: '#93C5FD',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  whatsAppBadge: {
+    backgroundColor: '#25D366',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  whatsAppBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

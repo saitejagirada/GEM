@@ -56,7 +56,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({ auct
 
   const openOfficial = () => {
     Linking.openURL(auction.docUrl).catch(() => {
-      Linking.openURL('https://bidplus-global.gem.gov.in/').catch(() => undefined);
+      Linking.openURL('https://bidplus.gem.gov.in/all-bids').catch(() => undefined);
     });
   };
 

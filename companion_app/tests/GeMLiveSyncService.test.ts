@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { GeMLiveSyncService } from '../services/GeMLiveSyncService.ts';
+import { GeMLiveSyncService, extractCsrfTokenFromHtml } from '../services/GeMLiveSyncService.ts';
 import type { DeconstructedBidDoc } from '../types/index.ts';
 
 const makeBid = (overrides: Partial<DeconstructedBidDoc> = {}): DeconstructedBidDoc => ({
@@ -74,5 +74,41 @@ describe('GeMLiveSyncService', () => {
     GeMLiveSyncService.ingestLiveBids([makeBid({ bidNumber: 'GEM/2026/B/LIVE_TEST' })]);
     unsubscribe();
     assert.equal(notified, true);
+  });
+
+  it('extracts csrf_bd_gem_nk directly from bidplus.gem.gov.in HTML or cookie fallback', () => {
+    const htmlSample = `var post_array = {'csrf_bd_gem_nk': 'efe6db721a77175d39826d6ebbf15710'};`;
+    assert.equal(extractCsrfTokenFromHtml(htmlSample), 'efe6db721a77175d39826d6ebbf15710');
+
+    const cookieFallback = extractCsrfTokenFromHtml(
+      '<html></html>',
+      'ci_session=abc123; csrf_gem_cookie=970052ec694ab5f4d16604a1852119f3'
+    );
+    assert.equal(cookieFallback, '970052ec694ab5f4d16604a1852119f3');
+  });
+
+  it('maps national bidplus service RAs and high-value flags accurately without guessing values', () => {
+    const bid = GeMLiveSyncService.mapPortalBid({
+      b_id: [10172181],
+      b_bid_number: ['GEM/2026/R/771126'],
+      b_bid_number_parent: ['GEM/2026/B/8100001'],
+      b_category_name: ['Manpower Outsourcing Service'],
+      b_total_quantity: [25],
+      b_bid_type: [2],
+      b_type: [1],
+      b_bid_to_ra: [1],
+      is_high_value: [1],
+      final_start_date_sort: ['2026-11-10T10:00:00Z'],
+      final_end_date_sort: ['2099-11-18T16:30:47Z'],
+      ba_official_details_deptName: ['Higher Education Department'],
+    });
+
+    assert.ok(bid);
+    assert.equal(bid?.type, 'SERVICE');
+    assert.equal(bid?.isRa, true);
+    assert.equal(bid?.isHighValue, true);
+    assert.equal(bid?.parentBidNumber, 'GEM/2026/B/8100001');
+    assert.equal(bid?.estimatedBidValueInr, undefined);
+    assert.equal(bid?.docUrl, 'https://bidplus.gem.gov.in/showradocumentPdf/10172181');
   });
 });

@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
+  NativeModules,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,10 +11,44 @@ import {
   Text,
   View,
 } from 'react-native';
-import Pdf from 'react-native-pdf';
 import type { DeconstructedBidDoc, OfficialBidDocument } from '../types/index';
 import { PortalDocService } from '../services/PortalDocService';
 import { useTheme } from '../theme/ThemeContext';
+
+type NativePdfComponent = React.ComponentType<{
+  source: { uri: string; cache?: boolean; cacheFileName?: string };
+  trustAllCerts?: boolean;
+  fitPolicy?: number;
+  enableDoubleTapZoom?: boolean;
+  onLoadProgress?: (percent: number) => void;
+  onLoadComplete?: (numberOfPages: number) => void;
+  onPageChanged?: (page: number, numberOfPages: number) => void;
+  onError?: (error: unknown) => void;
+  style?: object;
+  renderActivityIndicator?: (progress: number) => React.ReactNode;
+}>;
+
+let cachedPdfComponent: NativePdfComponent | null | undefined;
+
+function getNativePdfComponent(): NativePdfComponent | null {
+  if (cachedPdfComponent !== undefined) return cachedPdfComponent;
+  const hasBlobNative = Boolean(
+    NativeModules?.ReactNativeBlobUtil || NativeModules?.RNFetchBlob
+  );
+  if (!hasBlobNative) {
+    cachedPdfComponent = null;
+    return null;
+  }
+  try {
+    // Lazy require avoids crashing builds that don't compile react-native-blob-util
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('react-native-pdf');
+    cachedPdfComponent = (mod?.default ?? mod) as NativePdfComponent;
+  } catch {
+    cachedPdfComponent = null;
+  }
+  return cachedPdfComponent;
+}
 
 interface BidDocumentViewerProps {
   bid: DeconstructedBidDoc | null;
@@ -58,6 +94,12 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setPage(1);
     setPageCount(0);
     setLoadError(false);
+  };
+
+  const NativePdf = getNativePdfComponent();
+
+  const openInSystemViewer = () => {
+    Linking.openURL(selectedDocument.url).catch(() => undefined);
   };
 
   return (
@@ -114,17 +156,28 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
         </View>
 
         <View style={styles.pdfFrame}>
-          {loadError ? (
+          {!NativePdf || loadError ? (
             <View style={styles.errorState}>
-              <Text style={styles.errorIcon}>!</Text>
-              <Text style={styles.errorTitle}>This document could not be displayed</Text>
-              <Text style={styles.errorText}>Check your connection and try opening the document again from the bid details.</Text>
-              <Pressable style={styles.retryButton} onPress={() => setLoadError(false)}>
-                <Text style={styles.retryButtonText}>Try again</Text>
+              <Text style={styles.errorIcon}>{NativePdf ? '!' : 'PDF'}</Text>
+              <Text style={styles.errorTitle}>
+                {NativePdf ? 'This document could not be displayed inline' : 'Open Official GeM PDF'}
+              </Text>
+              <Text style={styles.errorText}>
+                {NativePdf
+                  ? 'Check your connection and retry, or open the official PDF directly in your device viewer.'
+                  : 'Tap below to download and read this official document directly from bidplus.gem.gov.in.'}
+              </Text>
+              <Pressable style={styles.retryButton} onPress={openInSystemViewer}>
+                <Text style={styles.retryButtonText}>Open Official PDF ↗</Text>
               </Pressable>
+              {NativePdf ? (
+                <Pressable style={[styles.retryButton, { backgroundColor: '#475569', marginTop: 10 }]} onPress={() => setLoadError(false)}>
+                  <Text style={styles.retryButtonText}>Retry Inline Viewer</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : (
-            <Pdf
+            <NativePdf
               key={selectedDocument.id}
               source={{
                 uri: selectedDocument.url,

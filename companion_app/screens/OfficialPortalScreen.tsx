@@ -25,7 +25,7 @@ interface OfficialPortalScreenProps {
 
 const OFFICIAL_LOGIN_URL = 'https://ui.gem.gov.in/login';
 const OFFICIAL_PORTAL_URL = 'https://gem.gov.in/';
-const PUBLIC_BIDS_URL = 'https://bidplus-global.gem.gov.in/';
+const PUBLIC_BIDS_URL = 'https://bidplus.gem.gov.in/all-bids';
 
 export const OfficialPortalScreen: React.FC<OfficialPortalScreenProps> = ({ onBack }) => {
   const { colors, fontMultiplier } = useTheme();

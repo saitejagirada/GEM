@@ -72,6 +72,7 @@ const MainAppContent: React.FC = () => {
   // Quick lookup modal
   const [showLookupModal, setShowLookupModal] = useState<boolean>(false);
   const [lookupInput, setLookupInput] = useState<string>('');
+  const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
   const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
 
@@ -126,7 +127,7 @@ const MainAppContent: React.FC = () => {
     return () => sub.remove();
   }, [selectedBid, showLookupModal, subScreen, activeTab]);
 
-  // Subscribe to real-time live synchronization updates
+  // Subscribe to real-time live GeM public feed updates (Phone -> GeM directly)
   useEffect(() => {
     const unsubscribe = GeMLiveSyncService.subscribe((updatedBids) => {
       if (updatedBids && updatedBids.length > 0) {
@@ -139,18 +140,17 @@ const MainAppContent: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // 1. Check genuine public internet connectivity (4G / Wi-Fi)
       const online = await isNetworkOnline();
       if (!online) {
         setBids([]);
         return;
       }
 
-      // 2. Fetch the current public bid listing from GeM. No fixture fallback is used.
-      await GeMLiveSyncService.syncFromPortal();
+      // Direct Phone -> bidplus.gem.gov.in live sync. Zero backend, zero mock fallback.
+      await GeMLiveSyncService.syncFromPortal(3);
       setBids(GeMLiveSyncService.getLiveBids());
     } catch {
-      setBids([]);
+      setBids(GeMLiveSyncService.getLiveBids());
     } finally {
       setIsSyncing(false);
     }
@@ -160,26 +160,46 @@ const MainAppContent: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  const handleQuickLookup = useCallback(() => {
-    if (!lookupInput.trim()) {
-      Alert.alert('Enter Bid Number', 'Please enter a valid GeM Bid Number (e.g. GEM/2026/B/890123)');
+  const handleQuickLookup = useCallback(async () => {
+    const trimmed = lookupInput.trim();
+    if (!trimmed) {
+      Alert.alert('Enter Bid Number', 'Please enter a valid GeM Bid Number (e.g. GEM/2026/B/8229586)');
       return;
     }
 
-    const found =
+    const localMatch =
       bids.find(
         (b) =>
-          b.bidNumber.toLowerCase().includes(lookupInput.trim().toLowerCase()) ||
-          b.title.toLowerCase().includes(lookupInput.trim().toLowerCase())
+          b.bidNumber.toLowerCase().includes(trimmed.toLowerCase()) ||
+          b.title.toLowerCase().includes(trimmed.toLowerCase())
       ) ||
-      GeMLiveSyncService.getBidById(lookupInput.trim());
+      GeMLiveSyncService.getBidById(trimmed);
 
-    setShowLookupModal(false);
-    setLookupInput('');
-    if (found) {
-      setSelectedBid(found);
-    } else {
-      Alert.alert('Bid not found', 'That bid is not present in the latest public GeM feed. Refresh and try again.');
+    if (localMatch) {
+      setShowLookupModal(false);
+      setLookupInput('');
+      setSelectedBid(localMatch);
+      return;
+    }
+
+    // Live direct lookup on bidplus.gem.gov.in
+    setIsLookingUp(true);
+    try {
+      const liveMatches = await GeMLiveSyncService.lookupBidOnPortal(trimmed);
+      setShowLookupModal(false);
+      setLookupInput('');
+      if (liveMatches.length > 0) {
+        setSelectedBid(liveMatches[0]);
+      } else {
+        Alert.alert(
+          'Bid not found on GeM',
+          `No public bid matching "${trimmed}" was returned by bidplus.gem.gov.in.`
+        );
+      }
+    } catch {
+      Alert.alert('Lookup failed', 'Unable to reach bidplus.gem.gov.in right now. Check your connection and try again.');
+    } finally {
+      setIsLookingUp(false);
     }
   }, [bids, lookupInput]);
 
@@ -503,10 +523,13 @@ const MainAppContent: React.FC = () => {
                 <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.lookupSubmitBtn, { backgroundColor: colors.primary }]}
+                style={[styles.lookupSubmitBtn, { backgroundColor: colors.primary, opacity: isLookingUp ? 0.7 : 1 }]}
                 onPress={handleQuickLookup}
+                disabled={isLookingUp}
               >
-                <Text style={{ color: colors.textInverse, fontWeight: '700' }}>Search Bid</Text>
+                <Text style={{ color: colors.textInverse, fontWeight: '700' }}>
+                  {isLookingUp ? 'Querying GeM...' : 'Search Live on GeM'}
+                </Text>
               </Pressable>
             </View>
           </View>

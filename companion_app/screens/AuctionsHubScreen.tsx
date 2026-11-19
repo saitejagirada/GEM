@@ -17,8 +17,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import type { ForwardAuctionLot, DeconstructedBidDoc } from '../types/index';
-import { PortalApiClient } from '../services/PortalApiClient';
+import type { DeconstructedBidDoc } from '../types/index';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { isNetworkOnline } from '../utils/network';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
@@ -28,7 +27,6 @@ import {
   SegmentedTabs,
   StatusBadge,
   PrimaryButton,
-  SecondaryButton,
 } from '../components/SharedUI';
 
 type TabMode = 'Live Reverse' | 'Forward e-Scrap';
@@ -81,8 +79,8 @@ export const AuctionsHubScreen: React.FC = () => {
   const { colors, fontMultiplier } = useTheme();
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [forwardLots, setForwardLots] = useState<ForwardAuctionLot[]>([]);
   const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>([]);
+  const [totalPortalRas, setTotalPortalRas] = useState<number>(0);
   const [selectedRa, setSelectedRa] = useState<ReverseAuctionDetailItem | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -94,22 +92,43 @@ export const AuctionsHubScreen: React.FC = () => {
       const online = await isNetworkOnline();
       if (!online) {
         setReverseAuctions([]);
-        setForwardLots([]);
+        setTotalPortalRas(0);
         setIsOffline(true);
         return;
       }
 
-      await GeMLiveSyncService.syncFromPortal();
-      const liveDocs = GeMLiveSyncService.getReverseAuctions();
-      setReverseAuctions(liveDocs.map(mapBidDocToReverseAuction));
-      setIsOffline(false);
+      // Query live Reverse Auctions directly from bidplus.gem.gov.in (zero backend)
+      const [page1, page2] = await Promise.all([
+        GeMLiveSyncService.queryLivePortal({
+          page: 1,
+          bidStatusType: 'ongoing_bids',
+          byType: 'bidToRA',
+          sort: 'Bid-End-Date-Oldest',
+        }),
+        GeMLiveSyncService.queryLivePortal({
+          page: 2,
+          bidStatusType: 'ongoing_bids',
+          byType: 'bidToRA',
+          sort: 'Bid-End-Date-Oldest',
+        }),
+      ]);
 
-      // This optional backend may provide a public forward-auction feed. An
-      // empty response is intentional; no local lots are used as a fallback.
-      setForwardLots(await PortalApiClient.getForwardAuctions());
+      const combined = [...page1.bids, ...page2.bids];
+      const deduped = Array.from(new Map(combined.map((b) => [b.bidNumber, b])).values());
+
+      if (page1.error && deduped.length === 0) {
+        setReverseAuctions([]);
+        setTotalPortalRas(0);
+        setIsOffline(true);
+        return;
+      }
+
+      setReverseAuctions(deduped.map(mapBidDocToReverseAuction));
+      setTotalPortalRas(page1.total || deduped.length);
+      setIsOffline(false);
     } catch {
       setReverseAuctions([]);
-      setForwardLots([]);
+      setTotalPortalRas(0);
       setIsOffline(true);
     } finally {
       setIsRefreshing(false);
@@ -141,16 +160,6 @@ export const AuctionsHubScreen: React.FC = () => {
     );
   }, [reverseAuctions, searchQuery]);
 
-  const filteredForwardLots = useMemo(() => {
-    if (!searchQuery.trim()) return forwardLots;
-    const q = searchQuery.toLowerCase().trim();
-    return forwardLots.filter((lot) =>
-      [lot.auctionNumber, lot.title, lot.department, lot.locationYard]
-        .filter(Boolean)
-        .some((field) => String(field).toLowerCase().includes(q))
-    );
-  }, [forwardLots, searchQuery]);
-
   if (selectedRa) {
     return <ReverseAuctionScreen auction={selectedRa} onBack={() => setSelectedRa(null)} />;
   }
@@ -162,13 +171,13 @@ export const AuctionsHubScreen: React.FC = () => {
           options={['Live Reverse', 'Forward e-Scrap']}
           selected={activeTab}
           onSelect={(tab) => setActiveTab(tab as TabMode)}
-          counts={{ 'Live Reverse': reverseAuctions.length, 'Forward e-Scrap': forwardLots.length }}
+          counts={{ 'Live Reverse': totalPortalRas || reverseAuctions.length }}
           style={{ marginBottom: 12 }}
         />
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search auction ID, item or department"
+          placeholder="Search live reverse auction ID, item or department"
         />
       </View>
 
@@ -233,29 +242,18 @@ export const AuctionsHubScreen: React.FC = () => {
         )}
 
         {activeTab === 'Forward e-Scrap' && (
-          filteredForwardLots.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>FA</Text>
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No public forward-auction records loaded</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>This app does not seed auction lots or simulate bid placement. Use the official portal for current lots and authenticated bidding.</Text>
-              <SecondaryButton label="Open official forward auctions ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 14 }} />
-            </View>
-          ) : (
-            filteredForwardLots.map((lot) => (
-              <View key={lot.id} style={[styles.auctionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <View style={styles.cardHeaderRow}>
-                  <StatusBadge label={lot.category} tone="orange" />
-                  <Text style={[styles.auctionNumber, { color: colors.textSecondary }]}>{lot.auctionNumber}</Text>
-                </View>
-                <Text style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]} numberOfLines={2}>{lot.title}</Text>
-                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>
-                  Location: {[lot.locationYard, lot.department].filter(Boolean).join(' • ') || 'Yard unstated'}
-                </Text>
-                <Text style={[styles.publicNote, { color: colors.textSecondary }]}>Prices, rank, and bid placement are available only in the official authenticated auction session.</Text>
-                <SecondaryButton label="Open official portal ↗" onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')} style={{ marginTop: 10 }} />
-              </View>
-            ))
-          )
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyEmoji}>FA</Text>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Official GeM Forward Auctions</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Forward e-Scrap auctions (surplus vehicles, machinery, and scrap lots) are hosted directly on forwardauction.gem.gov.in with live registration and EMD verification.
+            </Text>
+            <PrimaryButton
+              label="Open Official Forward Auctions ↗"
+              onPress={() => Linking.openURL('https://forwardauction.gem.gov.in')}
+              style={{ marginTop: 16 }}
+            />
+          </View>
         )}
       </ScrollView>
     </View>
