@@ -452,26 +452,26 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     Key Procurement Fundamentals
                   </Text>
                   {isScanningPdf ? (
-                    <View style={styles.scanStatusBusy}>
-                      <ActivityIndicator size="small" color="#0B3B60" />
-                      <Text style={styles.scanStatusBusyText}>Scanning…</Text>
+                    <View style={[styles.scanStatusBusy, { backgroundColor: colors.primaryTint }]}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[styles.scanStatusBusyText, { color: colors.primary }]}>Scanning…</Text>
                     </View>
                   ) : scannedOk ? (
-                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={styles.scanStatusOk}>
-                      <Text style={styles.scanStatusOkText}>
+                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={[styles.scanStatusOk, { backgroundColor: colors.successTint }]}>
+                      <Text style={[styles.scanStatusOkText, { color: colors.success }]}>
                         ✓ {officialDocuments.length > 1 ? 'RA + Bid PDF' : 'From PDF'}
                       </Text>
                     </Pressable>
                   ) : (
-                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={styles.scanRetryPill}>
-                      <Text style={styles.scanRetryText}>Scan PDF ↻</Text>
+                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={[styles.scanRetryPill, { backgroundColor: colors.warningTint }]}>
+                      <Text style={[styles.scanRetryText, { color: colors.warning }]}>Scan PDF ↻</Text>
                     </Pressable>
                   )}
                 </View>
 
                 {isScanningPdf ? (
                   <View style={[styles.scanningBanner, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                    <ActivityIndicator size="small" color="#0B3B60" />
+                    <ActivityIndicator size="small" color={colors.primary} />
                     <Text style={[styles.scanningBannerText, { color: colors.textSecondary }]}>
                       Reading official GeM PDF{officialDocuments.length > 1 ? 's' : ''} locally on your phone to extract EMD, ePBG, turnover &amp; delivery terms…
                     </Text>
@@ -570,21 +570,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
               {/* Service Contract Terms (only for service bids) */}
               {(bid.serviceDetails || bid.type === 'SERVICE') && (
-                <View style={[styles.card, styles.serviceCard]}>
+                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <View style={styles.serviceHeader}>
-                    <Text style={styles.serviceHeaderTitle}>Service contract terms &amp; SLAs</Text>
-                    <Text style={styles.serviceSlaBadge}>GeM SLA Governed</Text>
+                    <Text style={[styles.serviceHeaderTitle, { color: colors.primary }]}>Service contract terms &amp; SLAs</Text>
+                    <Text style={[styles.serviceSlaBadge, { color: colors.primary, backgroundColor: colors.primaryTint }]}>GeM SLA Governed</Text>
                   </View>
                   <View style={styles.grid2x4}>
-                    <View style={styles.serviceCell}>
-                      <Text style={styles.serviceCellLabel}>Contract Duration</Text>
-                      <Text style={styles.serviceCellValue}>
+                    <View style={[styles.serviceCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                      <Text style={[styles.serviceCellLabel, { color: colors.textMuted }]}>Contract Duration</Text>
+                      <Text style={[styles.serviceCellValue, { color: colors.textPrimary }]}>
                         {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : 'See PDF'}
                       </Text>
                     </View>
-                    <View style={styles.serviceCell}>
-                      <Text style={styles.serviceCellLabel}>Manpower / Staffing</Text>
-                      <Text style={styles.serviceCellValue}>
+                    <View style={[styles.serviceCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                      <Text style={[styles.serviceCellLabel, { color: colors.textMuted }]}>Manpower / Staffing</Text>
+                      <Text style={[styles.serviceCellValue, { color: colors.textPrimary }]}>
                         {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'See PDF'}
                       </Text>
                     </View>

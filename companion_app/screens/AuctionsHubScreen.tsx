@@ -16,6 +16,7 @@ import {
   BackHandler,
   RefreshControl,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
@@ -25,7 +26,6 @@ import { BidDocumentViewer } from './BidDocumentViewer';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
-  SegmentedTabs,
   StatusBadge,
   PrimaryButton,
   SecondaryButton,
@@ -181,19 +181,40 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.topSection}>
-        <SegmentedTabs
-          options={['Live Reverse', 'Forward e-Scrap']}
-          selected={activeTab}
-          onSelect={(tab) => setActiveTab(tab as TabMode)}
-          counts={{ 'Live Reverse': totalPortalRas || reverseAuctions.length }}
-          style={{ marginBottom: 12 }}
-        />
+      <View style={[styles.headerBlock, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search live reverse auction ID, item or department"
+          placeholder="Search reverse auction ID, item or department"
         />
+
+        <View style={styles.underlineTabsRow}>
+          {(['Live Reverse', 'Forward e-Scrap'] as const).map((tab) => {
+            const active = activeTab === tab;
+            const label =
+              tab === 'Live Reverse' && (totalPortalRas || reverseAuctions.length) > 0
+                ? `Live Reverse (${(totalPortalRas || reverseAuctions.length).toLocaleString('en-IN')})`
+                : tab;
+            return (
+              <Pressable
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                style={[styles.underlineTab, active && { borderBottomColor: colors.primary }]}
+              >
+                <Text
+                  style={[
+                    styles.underlineTabText,
+                    { color: active ? colors.primary : colors.textSecondary },
+                    active && styles.underlineTabTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <ScrollView
@@ -304,9 +325,26 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topSection: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 8 },
-  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 4, paddingBottom: 40 },
-  auctionCard: { borderRadius: DESIGN_TOKENS.cardRadius, borderWidth: DESIGN_TOKENS.borderWidth, padding: 14, marginBottom: 12 },
+  headerBlock: {
+    paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
+    paddingTop: 12,
+    borderBottomWidth: 1,
+  },
+  underlineTabsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  underlineTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  underlineTabText: { fontSize: 13, fontWeight: '600' },
+  underlineTabTextActive: { fontWeight: '800' },
+  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 10, paddingBottom: 40 },
+  auctionCard: { borderRadius: 10, borderWidth: DESIGN_TOKENS.borderWidth, padding: 13, marginBottom: 10 },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   auctionNumber: { fontSize: 12, fontWeight: '600' },
   closingText: { fontSize: 11, fontWeight: '700' },

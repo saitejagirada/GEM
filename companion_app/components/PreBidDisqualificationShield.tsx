@@ -115,10 +115,9 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.shieldIcon}>🛡️</Text>
-          <View>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Pre-Bid Disqualification Shield</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>On-Device Technical Evaluation Verification</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Pre-Bid Compliance Check</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>On-Device Technical Eligibility Audit</Text>
           </View>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(report.overallStatus) + '20', borderColor: getStatusColor(report.overallStatus) }]}>
@@ -137,17 +136,17 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
 
       {/* Metrics Row */}
       <View style={styles.metricsRow}>
-        <View style={[styles.metricCell, { backgroundColor: '#F0FDF4' }]}>
-          <Text style={[styles.metricCount, { color: '#059669' }]}>{report.passedCount}</Text>
-          <Text style={styles.metricLabel}>Passed</Text>
+        <View style={[styles.metricCell, { backgroundColor: colors.successTint }]}>
+          <Text style={[styles.metricCount, { color: colors.success }]}>{report.passedCount}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Passed</Text>
         </View>
-        <View style={[styles.metricCell, { backgroundColor: '#FEF3C7' }]}>
-          <Text style={[styles.metricCount, { color: '#D97706' }]}>{report.warningCount}</Text>
-          <Text style={styles.metricLabel}>Warnings</Text>
+        <View style={[styles.metricCell, { backgroundColor: colors.warningTint }]}>
+          <Text style={[styles.metricCount, { color: colors.warning }]}>{report.warningCount}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Warnings</Text>
         </View>
-        <View style={[styles.metricCell, { backgroundColor: '#FEF2F2' }]}>
-          <Text style={[styles.metricCount, { color: '#DC2626' }]}>{report.criticalDisqualificationCount}</Text>
-          <Text style={styles.metricLabel}>Blocking</Text>
+        <View style={[styles.metricCell, { backgroundColor: colors.dangerTint }]}>
+          <Text style={[styles.metricCount, { color: colors.danger }]}>{report.criticalDisqualificationCount}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Blocking</Text>
         </View>
       </View>
 
@@ -156,12 +155,12 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
         {report.checks.map((check) => {
           const isCritical = check.severity === 'CRITICAL';
           const isWarning = check.severity === 'WARNING';
-          const icon = isCritical ? '✕' : isWarning ? '⚠' : '✓';
-          const iconBg = isCritical ? '#FEF2F2' : isWarning ? '#FEF3C7' : '#ECFDF5';
-          const iconColor = isCritical ? '#DC2626' : isWarning ? '#D97706' : '#059669';
+          const icon = isCritical ? '✕' : isWarning ? '!' : '✓';
+          const iconBg = isCritical ? colors.dangerTint : isWarning ? colors.warningTint : colors.successTint;
+          const iconColor = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
 
           return (
-            <View key={check.id} style={[styles.checkCard, { borderColor: isCritical ? '#FECACA' : colors.border }]}>
+            <View key={check.id} style={[styles.checkCard, { borderColor: isCritical ? colors.danger : colors.border }]}>
               <View style={styles.checkHeader}>
                 <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
                   <Text style={[styles.iconText, { color: iconColor }]}>{icon}</Text>
@@ -173,15 +172,19 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
               </View>
 
               {check.remediation ? (
-                <View style={styles.remediationBox}>
-                  <Text style={styles.remediationText}>💡 Remediation: {check.remediation}</Text>
+                <View style={[styles.remediationBox, { backgroundColor: colors.surfaceSubtle, borderLeftColor: colors.primary }]}>
+                  <Text style={[styles.remediationText, { color: colors.textSecondary }]}>
+                    Remediation: {check.remediation}
+                  </Text>
                   {check.templateAction ? (
                     <TouchableOpacity
-                      style={styles.templateButton}
+                      style={[styles.templateButton, { backgroundColor: colors.primary }]}
                       onPress={() => handleOpenTemplate(check.templateAction)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.templateButtonText}>Draft Compliance Letter ↗</Text>
+                      <Text style={[styles.templateButtonText, { color: colors.textInverse }]}>
+                        Draft Compliance Letter ↗
+                      </Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -193,13 +196,15 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
 
       {/* Consignee Logistics Distribution Matrix */}
       {tenderDetails.consignees && tenderDetails.consignees.length > 0 ? (
-        <View style={styles.logisticsCard}>
+        <View style={[styles.logisticsCard, { borderTopColor: colors.border }]}>
           <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>Consignee Delivery Split</Text>
           <View style={styles.stateTagsRow}>
             {Object.entries(tenderDetails.consigneeStateDistribution).map(([state, data]) => (
-              <View key={state} style={styles.stateTag}>
-                <Text style={styles.stateTagTitle}>{state}</Text>
-                <Text style={styles.stateTagMeta}>{data.quantity} Units ({data.percentage}%)</Text>
+              <View key={state} style={[styles.stateTag, { backgroundColor: colors.primaryTint, borderColor: colors.border }]}>
+                <Text style={[styles.stateTagTitle, { color: colors.primary }]}>{state}</Text>
+                <Text style={[styles.stateTagMeta, { color: colors.textSecondary }]}>
+                  {data.quantity} Units ({data.percentage}%)
+                </Text>
               </View>
             ))}
           </View>

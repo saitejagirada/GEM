@@ -295,13 +295,13 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Key Procurement Fundamentals</Text>
             {isScanningPdf ? (
-              <View style={styles.busyPill}>
-                <ActivityIndicator size="small" color="#0B3B60" />
-                <Text style={styles.busyPillText}>Scanning…</Text>
+              <View style={[styles.busyPill, { backgroundColor: colors.primaryTint }]}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.busyPillText, { color: colors.primary }]}>Scanning…</Text>
               </View>
             ) : scannedOk ? (
-              <View style={styles.okPill}>
-                <Text style={styles.okPillText}>✓ From PDF</Text>
+              <View style={[styles.okPill, { backgroundColor: colors.successTint }]}>
+                <Text style={[styles.okPillText, { color: colors.success }]}>✓ From PDF</Text>
               </View>
             ) : null}
           </View>

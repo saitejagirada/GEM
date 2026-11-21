@@ -489,8 +489,8 @@ export const FilterBottomSheetModal: React.FC<FilterBottomSheetModalProps> = ({
 // -----------------------------------------------------------------------------
 const styles = StyleSheet.create({
   searchContainer: {
-    height: 48,
-    borderRadius: DESIGN_TOKENS.inputRadius,
+    height: 44,
+    borderRadius: 10,
     borderWidth: DESIGN_TOKENS.borderWidth,
     flexDirection: 'row',
     alignItems: 'center',
@@ -510,12 +510,12 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   clearBtnText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
   },
   segmentedBar: {
     height: 40,
-    borderRadius: DESIGN_TOKENS.inputRadius,
+    borderRadius: 10,
     borderWidth: DESIGN_TOKENS.borderWidth,
     flexDirection: 'row',
     padding: 3,
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   segmentTab: {
     flex: 1,
     height: '100%',
-    borderRadius: DESIGN_TOKENS.inputRadius - 2,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.06,
         shadowRadius: 2,
       },
       android: {
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
   chip: {
     height: 32,
     paddingHorizontal: 12,
-    borderRadius: DESIGN_TOKENS.chipRadius,
+    borderRadius: 8,
     borderWidth: DESIGN_TOKENS.borderWidth,
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,14 +557,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   chipIcon: {
-    fontSize: 13,
+    fontSize: 12,
     marginRight: 4,
   },
   chipText: {},
   badge: {
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: DESIGN_TOKENS.inputRadius,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 5,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -576,13 +576,13 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   primaryBtn: {
     minHeight: DESIGN_TOKENS.touchTargetMin,
-    borderRadius: DESIGN_TOKENS.buttonRadius,
+    borderRadius: 9,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -590,12 +590,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   primaryBtnText: {
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
   secondaryBtn: {
     minHeight: DESIGN_TOKENS.touchTargetMin,
-    borderRadius: DESIGN_TOKENS.buttonRadius,
+    borderRadius: 9,
     borderWidth: DESIGN_TOKENS.borderWidth,
     flexDirection: 'row',
     alignItems: 'center',
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   secondaryBtnText: {
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
   btnIcon: {

@@ -7,7 +7,7 @@
  * - MSE statutory benefit privileges (100% EMD waiver & 10-day payment SLA)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -18,12 +18,10 @@ import {
   Linking,
   Pressable,
 } from 'react-native';
-import { PortalOnboardingService, MsmeTier, BusinessConstitution } from '../services/PortalOnboardingService';
+import { MsmeTier } from '../services/PortalOnboardingService';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
-  SegmentedTabs,
   CompactChip,
-  StatusBadge,
   PrimaryButton,
   SecondaryButton,
 } from '../components/SharedUI';
@@ -41,21 +39,21 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
 
   const [activeRole, setActiveRole] = useState<'BUYER' | 'SELLER'>(initialMode);
 
-  // Buyer Stepper (Screen 7)
+  // Buyer Stepper (Screen 7) — clean empty fields, zero dummy PII pre-filled
   const [buyerStep, setBuyerStep] = useState<number>(1);
-  const [buyerMinistry, setBuyerMinistry] = useState<string>('Ministry of Finance');
-  const [buyerOffice, setBuyerOffice] = useState<string>('Directorate of Income Tax');
-  const [buyerName, setBuyerName] = useState<string>('Rajesh Kumar');
-  const [buyerEmail, setBuyerEmail] = useState<string>('rajesh.kumar@gov.in');
+  const [buyerMinistry, setBuyerMinistry] = useState<string>('');
+  const [buyerOffice, setBuyerOffice] = useState<string>('');
+  const [buyerName, setBuyerName] = useState<string>('');
+  const [buyerEmail, setBuyerEmail] = useState<string>('');
   const [buyerRole, setBuyerRole] = useState<'Primary User / HOD' | 'Secondary Buyer'>('Primary User / HOD');
 
-  // Seller Stepper (Screen 8)
+  // Seller Stepper (Screen 8) — clean empty fields, zero dummy PII pre-filled
   const [sellerStep, setSellerStep] = useState<number>(1);
-  const [enterpriseName, setEnterpriseName] = useState<string>('Garuda Tech & Electrical Solutions');
+  const [enterpriseName, setEnterpriseName] = useState<string>('');
   const [businessType, setBusinessType] = useState<string>('Private Limited');
-  const [sellerPan, setSellerPan] = useState<string>('AABCG1234F');
-  const [sellerGstin, setSellerGstin] = useState<string>('07AABCG1234F1Z8');
-  const [sellerUdyam, setSellerUdyam] = useState<string>('UDYAM-DL-01-0098765');
+  const [sellerPan, setSellerPan] = useState<string>('');
+  const [sellerGstin, setSellerGstin] = useState<string>('');
+  const [sellerUdyam, setSellerUdyam] = useState<string>('');
   const [classification, setClassification] = useState<MsmeTier>('MICRO');
 
   const openOfficialSignup = (type: 'buyer' | 'seller') => {
@@ -66,32 +64,60 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Top Header / Back navigation */}
-      <View style={styles.topNavRow}>
-        {onBack && (
-          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
-            <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
-          </Pressable>
-        )}
-        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 18 * fontMultiplier }]}>
-          {activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
-        </Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Fixed Sub-Header & Role Tabs */}
+      <View style={[styles.headerBlock, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <View style={styles.topNavRow}>
+          {onBack && (
+            <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+              <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
+            </Pressable>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
+              {activeRole === 'BUYER' ? 'Buyer Registration Guide' : 'Seller & MSE KYC Guide'}
+            </Text>
+            <Text style={[styles.navSub, { color: colors.textMuted }]}>
+              On-device preparation checklist · Submitted on mkp.gem.gov.in
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.tabRow}>
+          {[
+            { id: 'BUYER' as const, label: 'Buyer Registration' },
+            { id: 'SELLER' as const, label: 'Seller & MSE KYC' },
+          ].map((tab) => {
+            const active = activeRole === tab.id;
+            return (
+              <Pressable
+                key={tab.id}
+                onPress={() => setActiveRole(tab.id)}
+                style={[
+                  styles.underlineTab,
+                  active && { borderBottomWidth: 2, borderBottomColor: colors.primary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.underlineTabText,
+                    { color: active ? colors.primary : colors.textSecondary },
+                    active && styles.underlineTabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      {/* Role Switcher */}
-      <SegmentedTabs
-        options={['Buyer Registration', 'Seller / MSE KYC']}
-        selected={activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
-        onSelect={(tab) => {
-          setActiveRole(tab === 'Buyer Registration' ? 'BUYER' : 'SELLER');
-        }}
-        style={{ marginBottom: 16 }}
-      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
 
       {/* =========================================================================
           SCREEN 7: BUYER REGISTRATION
@@ -278,24 +304,27 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
             {buyerStep === 3 && (
               <View>
                 <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
-                  Review &amp; Official Submission
+                  Review &amp; Official Portal Handoff
+                </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Keep these details ready — final verification and OTP signup happen directly on the official GeM portal.
                 </Text>
                 <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Ministry:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerMinistry}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerMinistry || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Office Unit:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerOffice}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerOffice || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Officer Name:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerName}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerName || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Gov Email:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerEmail}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerEmail || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Designated Role:</Text>
@@ -303,11 +332,18 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                 </View>
 
-                <PrimaryButton
-                  label="Submit to Official GeM Portal ↗"
-                  onPress={() => openOfficialSignup('buyer')}
-                  style={{ marginTop: 14 }}
-                />
+                <View style={styles.btnRow}>
+                  <SecondaryButton
+                    label="← Edit"
+                    onPress={() => setBuyerStep(2)}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <PrimaryButton
+                    label="Open GeM Signup ↗"
+                    onPress={() => openOfficialSignup('buyer')}
+                    style={{ flex: 2 }}
+                  />
+                </View>
               </View>
             )}
           </View>
@@ -549,13 +585,16 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
             {sellerStep === 4 && (
               <View>
                 <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
-                  Review &amp; Portal Verification
+                  Review &amp; Official Portal Handoff
+                </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Keep these tax and MSME IDs handy for Aadhaar/PAN verification directly on the official GeM portal.
                 </Text>
 
                 <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Enterprise:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{enterpriseName}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{enterpriseName || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Type:</Text>
@@ -563,7 +602,7 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>PAN:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerPan}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerPan || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>GSTIN:</Text>
@@ -579,23 +618,36 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                 </View>
 
-                <PrimaryButton
-                  label="Complete Verification on GeM Portal ↗"
-                  onPress={() => openOfficialSignup('seller')}
-                  style={{ marginTop: 14 }}
-                />
+                <View style={styles.btnRow}>
+                  <SecondaryButton
+                    label="← Edit"
+                    onPress={() => setSellerStep(3)}
+                    style={{ flex: 1, marginRight: 8 }}
+                  />
+                  <PrimaryButton
+                    label="Open GeM Seller Signup ↗"
+                    onPress={() => openOfficialSignup('seller')}
+                    style={{ flex: 2 }}
+                  />
+                </View>
               </View>
             )}
           </View>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   contentContainer: {
     padding: DESIGN_TOKENS.pagePaddingMobile,
@@ -604,17 +656,38 @@ const styles = StyleSheet.create({
   topNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   backBtn: {
     marginRight: 10,
-    padding: 4,
+    paddingVertical: 4,
+    paddingRight: 4,
   },
   backArrow: {
     fontSize: 20,
     fontWeight: '700',
   },
   navTitle: {
+    fontWeight: '700',
+  },
+  navSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  underlineTab: {
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  underlineTabText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  underlineTabTextActive: {
     fontWeight: '700',
   },
   stepperContainer: {

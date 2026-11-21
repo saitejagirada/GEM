@@ -259,12 +259,12 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                     <Pressable
                       key={tab.id}
                       onPress={() => setActiveTab(tab.id)}
-                      style={[styles.tabBtn, active && styles.tabBtnActive]}
+                      style={[styles.tabBtn, active && { borderBottomColor: colors.primary }]}
                     >
                       <Text
                         style={[
                           styles.tabText,
-                          { color: active ? '#0B3B60' : colors.textSecondary },
+                          { color: active ? colors.primary : colors.textSecondary },
                           active && styles.tabTextActive,
                         ]}
                         numberOfLines={1}
@@ -283,7 +283,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                 <View>
                   {isLoadingSellers ? (
                     <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
                         Loading live GeM providers…
                       </Text>
@@ -320,8 +320,8 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                           key={seller.sellerId}
                           style={[styles.sellerRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
                         >
-                          <View style={styles.sellerInitialCircle}>
-                            <Text style={styles.sellerInitialText}>
+                          <View style={[styles.sellerInitialCircle, { backgroundColor: colors.primaryTint }]}>
+                            <Text style={[styles.sellerInitialText, { color: colors.primary }]}>
                               {seller.name.slice(0, 2).toUpperCase()}
                             </Text>
                           </View>
@@ -336,8 +336,8 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                                 : ' · Registered Provider'}
                             </Text>
                           </View>
-                          <View style={styles.verifiedTag}>
-                            <Text style={styles.verifiedTagText}>LIVE</Text>
+                          <View style={[styles.verifiedTag, { backgroundColor: colors.successTint }]}>
+                            <Text style={[styles.verifiedTagText, { color: colors.success }]}>LIVE</Text>
                           </View>
                         </View>
                       ))}
@@ -349,7 +349,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                           disabled={isLoadingMoreSellers}
                         >
                           {isLoadingMoreSellers ? (
-                            <ActivityIndicator size="small" color="#0B3B60" />
+                            <ActivityIndicator size="small" color={colors.primary} />
                           ) : (
                             <Text style={[styles.loadMoreText, { color: colors.primary }]}>
                               Load More Providers
@@ -366,7 +366,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                 <View>
                   {isLoadingTenders ? (
                     <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
                         Searching live service bids…
                       </Text>
@@ -390,7 +390,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                         style={[styles.tenderCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                       >
                         <View style={styles.tenderTopRow}>
-                          <Text style={styles.tenderNum}>{bid.bidNumber}</Text>
+                          <Text style={[styles.tenderNum, { color: colors.primary }]}>{bid.bidNumber}</Text>
                           <Text style={[styles.tenderClose, { color: colors.textSecondary }]}>
                             Closes {formatDateSafe(bid.closingTimeUtc)}
                           </Text>
@@ -427,7 +427,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                 <View>
                   {isLoadingDetail ? (
                     <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
                         Loading official GeM specifications…
                       </Text>
@@ -533,7 +533,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                               Official GeM Service STC / SLA
                             </Text>
                             <Pressable onPress={() => setSlaExpanded((prev) => !prev)} hitSlop={8}>
-                              <Text style={styles.slaToggle}>
+                              <Text style={[styles.slaToggle, { color: colors.primary }]}>
                                 {slaExpanded ? 'Collapse' : 'Read full'}
                               </Text>
                             </Pressable>
