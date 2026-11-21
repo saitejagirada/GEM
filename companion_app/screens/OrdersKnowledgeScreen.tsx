@@ -221,8 +221,25 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Compact Search + Filter Toolbar */}
-      <View style={[styles.headerBlock, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+      {/* Official Executed Contracts Portal Handoff Banner */}
+      <View style={[styles.handoffBanner, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.border }]}>
+        <View style={styles.handoffCopy}>
+          <Text style={[styles.handoffEyebrow, { color: colors.primary }]}>OFFICIAL CONTRACTS & RESULTS</Text>
+          <Text style={[styles.handoffText, { color: colors.textSecondary }]}>
+            {totalCount > 0
+              ? `${totalCount.toLocaleString('en-IN')} concluded public bids on bidplus.gem.gov.in. Signed GeM contracts & CRAC/PFMS records open on gem.gov.in.`
+              : 'Concluded bids stream live from bidplus.gem.gov.in. Signed contracts open on the official GeM portal.'}
+          </Text>
+        </View>
+        <SecondaryButton
+          label="Open gem.gov.in/view_contracts ↗"
+          onPress={openContractsPortal}
+          style={{ marginTop: 8 }}
+        />
+      </View>
+
+      {/* Search & Filter Toolbar */}
+      <View style={styles.topSection}>
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -251,20 +268,6 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
             />
           ))}
         </ScrollView>
-
-        <View style={styles.summaryStrip}>
-          <Text style={[styles.countText, { color: colors.textSecondary }]} numberOfLines={1}>
-            {totalCount > 0
-              ? `${totalCount.toLocaleString('en-IN')} concluded bids · bidplus.gem.gov.in`
-              : 'Live concluded bids · bidplus.gem.gov.in'}
-          </Text>
-          <Text
-            style={[styles.contractsLink, { color: colors.primary }]}
-            onPress={openContractsPortal}
-          >
-            Contracts Portal ↗
-          </Text>
-        </View>
       </View>
 
       {/* Concluded Public Records List */}
@@ -319,6 +322,7 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
             </View>
           ) : (
             <View style={styles.emptyState}>
+              <Text style={styles.emptyEmoji}>📜</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching concluded records</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Try another search term or view signed contracts directly on gem.gov.in/view_contracts.
@@ -348,28 +352,22 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBlock: {
+  handoffBanner: {
     paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
-  summaryStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    gap: 8,
-  },
-  countText: { fontSize: 11, fontWeight: '600', flex: 1 },
-  contractsLink: { fontSize: 11.5, fontWeight: '800' },
+  handoffCopy: { flexShrink: 1 },
+  handoffEyebrow: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  handoffText: { fontSize: 11, lineHeight: 15, marginTop: 3 },
+  topSection: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 8 },
   filterChipRow: { flexDirection: 'row', alignItems: 'center' },
-  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 10, paddingBottom: 40 },
+  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 4, paddingBottom: 40 },
   contractCard: {
-    borderRadius: 10,
+    borderRadius: DESIGN_TOKENS.cardRadius,
     borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 13,
-    marginBottom: 10,
+    padding: 14,
+    marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',

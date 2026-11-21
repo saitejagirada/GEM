@@ -1,26 +1,26 @@
 /**
- * GeM More / Settings & Tools Screen
- * Cleanly categorized into:
- * 1. Direct Public Mode status banner + official portal shortcut
- * 2. Procurement Workspace (Document Prep, Concluded Bids & Contracts, Official Portal)
- * 3. Onboarding & Support (Buyer Guide, Seller/MSE KYC Guide, Helpdesk & Manuals)
- * 4. Display & Accessibility (inline Theme & Text Size controls)
+ * GeM More / Profile Screen
+ * Conforms to Screen 10 of the GeM Mobile UI Specification:
+ * - Profile header card: Avatar circle (S), Name, Role, Ministry, Chevron
+ * - Workspace links: My Bids, My Contracts, Saved Items, Notifications
+ * - Preferences & Tools: Switch Role, Buyer Registration, Seller KYC, Help,
+ *   Accessibility (Dark mode & font scale), Sign out
  */
 
 import React from 'react';
 import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
   View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Pressable,
 } from 'react-native';
-import { useTheme, DESIGN_TOKENS, type FontSizeScale } from '../theme/ThemeContext';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import { StatusBadge } from '../components/SharedUI';
 
 export interface MoreProfileScreenProps {
-  onNavigateTab: (
-    tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'HELP' | 'REG_BUYER' | 'REG_SELLER'
-  ) => void;
+  onNavigateTab: (tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'HELP' | 'REG_BUYER' | 'REG_SELLER') => void;
   onOpenPortfolio?: () => void;
   onOpenOfficialPortal?: () => void;
 }
@@ -31,286 +31,322 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onOpenOfficialPortal,
 }) => {
   const { colors, fontMultiplier, isDark, toggleColorMode, fontScale, setFontScale } = useTheme();
-
-  const openPortal = () => {
-    if (onOpenOfficialPortal) onOpenOfficialPortal();
-    else onNavigateTab('PORTAL');
-  };
-
-  const openWorkspace = () => {
-    if (onOpenPortfolio) onOpenPortfolio();
-    else onNavigateTab('PORTAL');
-  };
-
-  const fontOptions: Array<{ id: FontSizeScale; label: string }> = [
-    { id: 'small', label: 'A-' },
-    { id: 'medium', label: 'A' },
-    { id: 'large', label: 'A+' },
-  ];
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {/* 1. Companion Mode Status Banner */}
-      <View style={[styles.statusBanner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.statusTopRow}>
-          <View style={[styles.emblemBox, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.emblemText, { color: colors.textInverse }]}>GeM</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.bannerTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}>
-              GeM Mobile Companion
-            </Text>
-            <Text style={[styles.bannerSub, { color: colors.textSecondary }]}>
-              Direct Phone → GeM · Zero stored credentials
-            </Text>
-          </View>
-          <Pressable
-            style={[styles.portalBtn, { backgroundColor: colors.primaryTint }]}
-            onPress={openPortal}
-            hitSlop={6}
-          >
-            <Text style={[styles.portalBtnText, { color: colors.primary }]}>GeM ↗</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* 2. Procurement Workspace */}
-      <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>PROCUREMENT WORKSPACE</Text>
-      <View style={[styles.groupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <MenuRow
-          code="DOC"
-          title="Document Preparation"
-          subtitle="Stage local bid files & compliance checklists"
-          onPress={openWorkspace}
-          colors={colors}
-        />
-        <MenuRow
-          code="RES"
-          title="Concluded Bids & Contracts"
-          subtitle="Live closed bid results & official contract registry"
-          onPress={() => onNavigateTab('ORDERS')}
-          colors={colors}
-        />
-        <MenuRow
-          code="WEB"
-          title="Official GeM Portal Session"
-          subtitle="Sign in with 2FA on ui.gem.gov.in to submit bids"
-          onPress={openPortal}
-          colors={colors}
-          isLast
-        />
-      </View>
-
-      {/* 3. Onboarding & Support */}
-      <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ONBOARDING &amp; SUPPORT</Text>
-      <View style={[styles.groupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <MenuRow
-          code="BUY"
-          title="Buyer Registration Guide"
-          subtitle="Government office onboarding checklist & signup"
-          onPress={() => onNavigateTab('REG_BUYER')}
-          colors={colors}
-        />
-        <MenuRow
-          code="MSE"
-          title="Seller & MSE KYC Guide"
-          subtitle="Udyam verification, PAN/GST checklist & EMD waiver"
-          onPress={() => onNavigateTab('REG_SELLER')}
-          colors={colors}
-        />
-        <MenuRow
-          code="HLP"
-          title="Helpdesk & Official Manuals"
-          subtitle="Toll-free 1800-419-3436, LMS courses & SOPs"
-          onPress={() => onNavigateTab('HELP')}
-          colors={colors}
-          isLast
-        />
-      </View>
-
-      {/* 4. Display & Accessibility */}
-      <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>DISPLAY &amp; ACCESSIBILITY</Text>
-      <View style={[styles.groupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        {/* Inline Theme Toggle */}
-        <View style={[styles.controlRow, { borderBottomColor: colors.borderSubtle }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>Appearance</Text>
-            <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
-              Switch light or dark color scheme
-            </Text>
-          </View>
-          <View style={[styles.inlineToggle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-            <Pressable
-              onPress={() => isDark && toggleColorMode()}
-              style={[styles.toggleOption, !isDark && { backgroundColor: colors.primary }]}
-            >
-              <Text style={[styles.toggleText, { color: !isDark ? colors.textInverse : colors.textSecondary }]}>
-                Light
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => !isDark && toggleColorMode()}
-              style={[styles.toggleOption, isDark && { backgroundColor: colors.primary }]}
-            >
-              <Text style={[styles.toggleText, { color: isDark ? colors.textInverse : colors.textSecondary }]}>
-                Dark
-              </Text>
-            </Pressable>
-          </View>
+      {/* 1. Profile Header Card */}
+      <View
+        style={[
+          styles.profileCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={[styles.avatarCircle, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.avatarText, { color: colors.textInverse }]}>S</Text>
         </View>
 
-        {/* Inline Text Size Scale */}
-        <View style={[styles.controlRow, { borderBottomWidth: 0 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>Text Size</Text>
-            <Text style={[styles.rowSub, { color: colors.textSecondary }]}>
-              Adjust readability across screens
-            </Text>
-          </View>
-          <View style={[styles.inlineToggle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-            {fontOptions.map((opt) => {
-              const active = fontScale === opt.id;
-              return (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => setFontScale(opt.id)}
-                  style={[styles.toggleOption, active && { backgroundColor: colors.primary }]}
-                >
-                  <Text style={[styles.toggleText, { color: active ? colors.textInverse : colors.textSecondary }]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <View style={styles.profileMeta}>
+          <Text style={[styles.profileName, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
+            GeM companion
+          </Text>
+          <Text style={[styles.profileRole, { color: colors.primary }]}>
+            Public GeM feed
+          </Text>
+          <Text style={[styles.profileDept, { color: colors.textSecondary }]}>
+            Official account data is not connected
+          </Text>
         </View>
+
+        <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
       </View>
 
-      <Text style={[styles.versionFooter, { color: colors.textMuted }]}>
-        GeM Mobile Companion v2.1 · Direct Public Portal UI Layer
+      {/* 2. Workspace Links */}
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+        Your Workspace
       </Text>
+
+      <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>G</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Official GeM workspace</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Login, 2FA, bidding and account records</Text>
+          </View>
+          <StatusBadge label="GeM" tone="success" />
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => {
+            if (onOpenPortfolio) onOpenPortfolio();
+            else onNavigateTab('PORTAL');
+          }}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>D</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Document preparation</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Prepare files for a live public bid</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => onNavigateTab('ORDERS')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.violetTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.violet }]}>C</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>My Contracts &amp; CRAC</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Disbursements, PFMS &amp; acceptance SLAs</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => {
+            if (onOpenPortfolio) onOpenPortfolio();
+            else onNavigateTab('BIDS');
+          }}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.warningTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.warning }]}>S</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Tracked Bids &amp; Handoffs</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Prepared opportunities &amp; local files</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => onNavigateTab('BIDS')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.success }]}>!</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Live Bids &amp; Corrigenda</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Direct bidplus.gem.gov.in updates &amp; alerts</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+      </View>
+
+      {/* 3. Preferences & Portal Tools */}
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 18 }]}>
+        Preferences &amp; Tools
+      </Text>
+
+      <View style={[styles.menuCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => Alert.alert('Account connection', 'Role and account details will appear after an approved GeM integration is available.')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>↻</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Switch Role</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>No authenticated GeM account</Text>
+          </View>
+          <StatusBadge label="SWITCH" tone="neutral" />
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => onNavigateTab('REG_BUYER')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.primary }]}>B</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Buyer Registration</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Onboard government office establishment</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => onNavigateTab('REG_SELLER')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.successTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.success }]}>K</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Seller / MSE KYC</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Verify Udyam &amp; claim 100% EMD waiver</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() => onNavigateTab('HELP')}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>?</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Help &amp; Support</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Toll-free helpdesk, LMS &amp; manuals</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+        </Pressable>
+
+        {/* Accessibility controls: Dark mode & Font scale */}
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={toggleColorMode}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+          <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>{isDark ? 'L' : 'D'}</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>
+              {isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            </Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>High-contrast visual accessibility</Text>
+          </View>
+          <StatusBadge label={isDark ? 'DARK' : 'LIGHT'} tone="neutral" />
+        </Pressable>
+
+        <Pressable
+          style={[styles.menuItem, { borderBottomColor: colors.borderSubtle }]}
+          onPress={() =>
+            setFontScale(fontScale === 'medium' ? 'large' : fontScale === 'large' ? 'small' : 'medium')
+          }
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.menuIconText, { color: colors.textSecondary }]}>A+</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>Text Size Accessibility</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Toggle between small, medium, and large text scale</Text>
+          </View>
+          <StatusBadge label={fontScale.toUpperCase()} tone="neutral" />
+        </Pressable>
+
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
+        >
+          <View style={[styles.menuIconBox, { backgroundColor: colors.dangerTint }]}>
+            <Text style={[styles.menuIconText, { color: colors.danger }]}>↪</Text>
+          </View>
+          <View style={styles.menuTextCol}>
+            <Text style={[styles.menuTitle, { color: colors.danger, fontWeight: '700' }]}>Official account session</Text>
+            <Text style={[styles.menuSub, { color: colors.textSecondary }]}>Open ui.gem.gov.in in official browser</Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.danger }]}>›</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 };
 
-const MenuRow: React.FC<{
-  code: string;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
-  isLast?: boolean;
-}> = ({ code, title, subtitle, onPress, colors, isLast }) => (
-  <Pressable
-    style={({ pressed }) => [
-      styles.menuRow,
-      !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-      pressed && { opacity: 0.75 },
-    ]}
-    onPress={onPress}
-  >
-    <View style={[styles.codeBadge, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-      <Text style={[styles.codeText, { color: colors.primary }]}>{code}</Text>
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{title}</Text>
-      <Text style={[styles.rowSub, { color: colors.textSecondary }]} numberOfLines={1}>
-        {subtitle}
-      </Text>
-    </View>
-    <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
-  </Pressable>
-);
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  contentContainer: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 36 },
-  statusBanner: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 18,
+  container: {
+    flex: 1,
   },
-  statusTopRow: {
+  contentContainer: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 40,
+  },
+  profileCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    marginBottom: 20,
   },
-  emblemBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
   },
-  emblemText: { fontSize: 13, fontWeight: '900', letterSpacing: -0.3 },
-  bannerTitle: { fontWeight: '800' },
-  bannerSub: { fontSize: 11.5, marginTop: 2 },
-  portalBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  portalBtnText: { fontSize: 12, fontWeight: '800' },
-  sectionLabel: {
-    fontSize: 10,
+  avatarText: {
+    fontSize: 20,
     fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 7,
-    marginLeft: 2,
   },
-  groupCard: {
-    borderRadius: 12,
-    borderWidth: 1,
+  profileMeta: {
+    flex: 1,
+  },
+  profileName: {
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  profileRole: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  profileDept: {
+    fontSize: 11,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  menuCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     overflow: 'hidden',
-    marginBottom: 18,
+    marginBottom: 10,
   },
-  menuRow: {
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    gap: 12,
+    padding: 14,
+    borderBottomWidth: 1,
   },
-  codeBadge: {
+  menuIconBox: {
     width: 38,
-    height: 34,
-    borderRadius: 7,
-    borderWidth: 1,
+    height: 38,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  codeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
-  rowTitle: { fontSize: 13.5, fontWeight: '700' },
-  rowSub: { fontSize: 11.5, marginTop: 2 },
-  chevron: { fontSize: 18, fontWeight: '700' },
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    gap: 12,
+  menuIconText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
-  inlineToggle: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 2,
+  menuTextCol: {
+    flex: 1,
   },
-  toggleOption: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+  menuTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
   },
-  toggleText: { fontSize: 11.5, fontWeight: '800' },
-  versionFooter: {
+  menuSub: {
     fontSize: 11,
-    textAlign: 'center',
-    marginTop: 4,
+  },
+  chevron: {
+    fontSize: 18,
+    fontWeight: '600',
   },
 });

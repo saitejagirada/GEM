@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
   View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
 } from 'react-native';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
-  CompactChip,
   SearchField,
-  SectionHeader,
+  CompactChip,
   StatusBadge,
+  SectionHeader,
+  PrimaryButton,
+  SecondaryButton,
 } from '../components/SharedUI';
-import { formatDateSafe } from '../utils/formatters';
+import { formatLakhs, formatDateSafe } from '../utils/formatters';
 import type { DeconstructedBidDoc } from '../types/index';
 
 export interface HomeNavigateParams {
@@ -27,62 +27,46 @@ export interface HomeNavigateParams {
 export interface HomeScreenProps {
   bids: DeconstructedBidDoc[];
   totalPortalBids?: number;
-  isSyncing?: boolean;
-  onRefresh?: () => void;
   onNavigateTab: (
     tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'CATEGORIES' | 'HELP' | 'MORE',
     params?: HomeNavigateParams
   ) => void;
   onSelectBid: (bid: DeconstructedBidDoc) => void;
-  onOpenBidPdf?: (bid: DeconstructedBidDoc) => void;
   onOpenMyWork?: () => void;
   onOpenOfficialPortal?: () => void;
 }
 
-const SEARCH_SCOPES = ['All', 'Bids', 'Products', 'Services'] as const;
+const SEARCH_FILTER_PILLS = ['All', 'Products', 'Services', 'Bids', 'Contracts'];
 
-const CATALOG_SHORTCUTS: Array<{
-  id: string;
-  code: string;
-  label: string;
-  sub: string;
-  targetCategory?: string;
-  typeTab: 'Products' | 'Services';
-}> = [
-  { id: 'it', code: 'IT', label: 'IT & Tech', sub: 'PCs, Laptops', targetCategory: 'IT Products', typeTab: 'Products' },
-  { id: 'auto', code: 'AUTO', label: 'Automobiles', sub: 'Cars, EVs, Buses', targetCategory: 'Automobiles', typeTab: 'Products' },
-  { id: 'tex', code: 'TEX', label: 'Textiles', sub: 'Sheets, Towels', targetCategory: 'Textile Products', typeTab: 'Products' },
-  { id: 'pipe', code: 'PIPE', label: 'Pipes & Steel', sub: 'ISI Tubes, CPVC', targetCategory: 'Pipes & Fittings', typeTab: 'Products' },
-  { id: 'med', code: 'MED', label: 'Medical', sub: 'Gloves, Syringes', targetCategory: 'Medical Products', typeTab: 'Products' },
-  { id: 'furn', code: 'FURN', label: 'Furniture', sub: 'Chairs, Tables', targetCategory: 'Furniture', typeTab: 'Products' },
-  { id: 'elec', code: 'ELEC', label: 'Electrical', sub: 'LEDs, MCCB', targetCategory: 'Electrical Appliances', typeTab: 'Products' },
-  { id: 'srv', code: 'SRV', label: '380+ Services', sub: 'Manpower, AMC', typeTab: 'Services' },
+const POPULAR_CATEGORIES = [
+  { id: 'cat-it', name: 'Computers & IT', marketCategory: 'IT Products', desc: 'Laptops, servers & peripherals', code: 'IT', color: '#0B4F71', tint: '#EAF2F6' },
+  { id: 'cat-med', name: 'Medical & Healthcare', marketCategory: 'Medical Products', desc: 'Hospital equipment & consumables', code: 'MED', color: '#0B7A3B', tint: '#E8F4EC' },
+  { id: 'cat-off', name: 'Office & Furniture', marketCategory: 'Furniture', desc: 'Desks, chairs & stationery', code: 'OFF', color: '#9A5B00', tint: '#FFF4DF' },
+  { id: 'cat-veh', name: 'Vehicles & Fleet', marketCategory: 'Automobiles', desc: 'Vehicles and transport equipment', code: 'VEH', color: '#49627A', tint: '#EDF1F4' },
 ];
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   bids,
   totalPortalBids = 0,
-  isSyncing = false,
-  onRefresh,
   onNavigateTab,
   onSelectBid,
-  onOpenBidPdf,
   onOpenMyWork,
   onOpenOfficialPortal,
 }) => {
   const { colors, fontMultiplier } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeScope, setActiveScope] = useState<(typeof SEARCH_SCOPES)[number]>('All');
+  const [activeFilterPill, setActiveFilterPill] = useState('All');
 
-  const closingSoonBids = bids.slice(0, 4);
+  const latestOpportunities = bids.slice(0, 3);
 
-  const handleSearchSubmit = (overrideScope?: (typeof SEARCH_SCOPES)[number]) => {
+  const handleSearchSubmit = () => {
     const q = searchQuery.trim();
-    const scope = overrideScope || activeScope;
     const looksLikeBidNumber = /^GEM\/\d{4}\/[BR]\//i.test(q);
-    if (scope === 'Bids' || looksLikeBidNumber) {
+    if (activeFilterPill === 'Bids' || looksLikeBidNumber) {
       onNavigateTab('BIDS', { search: q });
-    } else if (scope === 'Services') {
+    } else if (activeFilterPill === 'Contracts') {
+      onNavigateTab('ORDERS', { search: q });
+    } else if (activeFilterPill === 'Services') {
       onNavigateTab('MARKET', { search: q, typeTab: 'Services' });
     } else {
       onNavigateTab('MARKET', { search: q, typeTab: 'Products' });
@@ -94,246 +78,295 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl
-            refreshing={isSyncing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        ) : undefined
-      }
     >
-      {/* 1. Unified Search & Live Pulse Strip */}
-      <View style={[styles.searchPanel, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+      {/* 1. Welcome Banner */}
+      <View style={styles.welcomeSection}>
+        <Text style={[styles.welcomeTitle, { color: colors.textPrimary, fontSize: 24 * fontMultiplier }]}>
+          Procurement, made simpler
+        </Text>
+        <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary, fontSize: 14 * fontMultiplier }]}>
+          Discover products, services and public procurement opportunities.
+        </Text>
+      </View>
+
+      {/* 2. Universal Search Field */}
+      <View style={styles.searchSection}>
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search bids, products, services or GEM/2026/..."
-          onSubmit={() => handleSearchSubmit()}
+          placeholder="Search products, services, bids or contracts"
+          onSubmit={handleSearchSubmit}
         />
-
+        {/* Horizontal Filter Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scopeRow}
+          style={styles.pillScrollView}
+          contentContainerStyle={styles.pillContainer}
         >
-          {SEARCH_SCOPES.map((scope) => (
+          {SEARCH_FILTER_PILLS.map((pill) => (
             <CompactChip
-              key={scope}
-              label={scope}
-              selected={activeScope === scope}
+              key={pill}
+              label={pill}
+              selected={activeFilterPill === pill}
               onPress={() => {
-                setActiveScope(scope);
-                if (searchQuery.trim()) {
-                  handleSearchSubmit(scope);
-                }
+                setActiveFilterPill(pill);
+                const q = searchQuery.trim();
+                if (!q) return;
+                if (pill === 'Bids') onNavigateTab('BIDS', { search: q });
+                else if (pill === 'Contracts') onNavigateTab('ORDERS', { search: q });
+                else if (pill === 'Services') onNavigateTab('MARKET', { search: q, typeTab: 'Services' });
+                else if (pill === 'Products') onNavigateTab('MARKET', { search: q, typeTab: 'Products' });
               }}
             />
           ))}
         </ScrollView>
+      </View>
 
-        {/* Live 3-Column Portal Pulse */}
-        <View style={[styles.pulseStrip, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-          <Pressable style={styles.pulseCell} onPress={() => onNavigateTab('BIDS')}>
-            <Text style={[styles.pulseVal, { color: colors.primary }]}>
-              {totalPortalBids > 0 ? totalPortalBids.toLocaleString('en-IN') : bids.length > 0 ? `${bids.length}+` : '—'}
+      {/* 3. Hero Card: Transparent Efficient Inclusive */}
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.heroBadgeRow}>
+          <View style={[styles.heroDot, { backgroundColor: colors.primary }]} />
+          <Text style={[styles.heroBadgeText, { color: colors.primary }]}>PUBLIC GeM PROCUREMENT FEED</Text>
+        </View>
+        <Text style={[styles.heroTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
+          Government e-Marketplace companion
+        </Text>
+          <Text style={[styles.heroDescription, { color: colors.textSecondary, fontSize: 13 * fontMultiplier }]}>
+          Browse the current public GeM feed, inspect tender documents, and prepare your response before continuing on the official portal.
+        </Text>
+        <View style={[styles.heroStatsRow, { borderTopColor: colors.borderSubtle }]}>
+          <View style={styles.heroStatItem}>
+            <Text style={[styles.heroStatNum, { color: colors.primary }]}>
+              {(totalPortalBids || bids.length).toLocaleString('en-IN')}
             </Text>
-            <Text style={[styles.pulseLabel, { color: colors.textSecondary }]}>Live Tenders ›</Text>
-          </Pressable>
-          <View style={[styles.pulseDivider, { backgroundColor: colors.border }]} />
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Live on GeM</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStatItem}>
+            <Text style={[styles.heroStatNum, { color: colors.emerald }]}>Direct</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Phone → GeM</Text>
+          </View>
+          <View style={styles.heroStatDivider} />
+          <View style={styles.heroStatItem}>
+            <Text style={[styles.heroStatNum, { color: colors.saffron }]}>GeM</Text>
+            <Text style={[styles.heroStatLabel, { color: colors.textMuted }]}>Submit there</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 4. Personal workspace entry point */}
+      <View style={[styles.workspaceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.workspaceCopy}>
+          <Text style={[styles.workspaceEyebrow, { color: colors.primary }]}>COMPANION WORKSPACE</Text>
+          <Text style={[styles.workspaceTitle, { color: colors.textPrimary }]}>Prepare response files</Text>
+          <Text style={[styles.workspaceSubtitle, { color: colors.textSecondary }]}>Choose a public opportunity, assemble local files, and continue on the official GeM portal when ready.</Text>
+        </View>
+        <View style={styles.workspaceActions}>
+          <PrimaryButton
+            label="Open preparation"
+            onPress={() => (onOpenMyWork ? onOpenMyWork() : onNavigateTab('MORE'))}
+            style={styles.workspaceButton}
+          />
+          <SecondaryButton
+            label="Open official GeM"
+            onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
+            style={styles.workspaceButton}
+          />
+        </View>
+      </View>
+
+      {/* 5. Quick Access Grid (4 Tiles) */}
+      <View style={styles.quickAccessSection}>
+        <SectionHeader title="Quick access" />
+        <View style={styles.quickGrid}>
           <Pressable
-            style={styles.pulseCell}
-            onPress={() => onNavigateTab('MARKET', { typeTab: 'Services' })}
+            style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            onPress={() => onNavigateTab('MARKET')}
           >
-            <Text style={[styles.pulseVal, { color: colors.emerald }]}>380+</Text>
-            <Text style={[styles.pulseLabel, { color: colors.textSecondary }]}>GeM Services ›</Text>
+            <View style={[styles.quickIconCircle, { backgroundColor: colors.primaryTint }]}>
+              <Text style={[styles.quickIconText, { color: colors.primary }]}>P</Text>
+            </View>
+            <Text style={[styles.quickCardTitle, { color: colors.textPrimary }]}>Products</Text>
+            <Text style={[styles.quickCardSubtitle, { color: colors.textMuted }]}>Public catalog</Text>
           </Pressable>
-          <View style={[styles.pulseDivider, { backgroundColor: colors.border }]} />
-          <Pressable style={styles.pulseCell} onPress={() => onNavigateTab('AUCTIONS')}>
-            <Text style={[styles.pulseVal, { color: colors.warning }]}>Live RA</Text>
-            <Text style={[styles.pulseLabel, { color: colors.textSecondary }]}>Auctions ›</Text>
+
+          <Pressable
+            style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            onPress={() => onNavigateTab('BIDS')}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: colors.successTint }]}>
+              <Text style={[styles.quickIconText, { color: colors.emerald }]}>B</Text>
+            </View>
+            <Text style={[styles.quickCardTitle, { color: colors.textPrimary }]}>Bids & Tenders</Text>
+            <Text style={[styles.quickCardSubtitle, { color: colors.textMuted }]}>Live public feed</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            onPress={() => onNavigateTab('AUCTIONS')}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: colors.warningTint }]}>
+              <Text style={[styles.quickIconText, { color: colors.warning }]}>A</Text>
+            </View>
+            <Text style={[styles.quickCardTitle, { color: colors.textPrimary }]}>Auctions</Text>
+            <Text style={[styles.quickCardSubtitle, { color: colors.textMuted }]}>Public RA records</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            onPress={() => onNavigateTab('ORDERS')}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: colors.violetTint }]}>
+              <Text style={[styles.quickIconText, { color: colors.violet }]}>C</Text>
+            </View>
+            <Text style={[styles.quickCardTitle, { color: colors.textPrimary }]}>Contracts</Text>
+            <Text style={[styles.quickCardSubtitle, { color: colors.textMuted }]}>Official registry</Text>
           </Pressable>
         </View>
       </View>
 
-      <View style={styles.bodyPad}>
-        {/* 2. Closing Soon — Live Opportunities (Above the fold!) */}
+      {/* 6. Popular Categories Preview */}
+      <View style={styles.categoriesSection}>
         <SectionHeader
-          title="Closing soon on GeM"
-          actionLabel="All bids ›"
-          onAction={() => onNavigateTab('BIDS')}
-        />
-
-        {isSyncing && closingSoonBids.length === 0 ? (
-          <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Syncing live public tenders from bidplus.gem.gov.in…
-            </Text>
-          </View>
-        ) : closingSoonBids.length === 0 ? (
-          <View style={[styles.loadingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Pull down to sync live tenders directly from GeM.
-            </Text>
-          </View>
-        ) : (
-          closingSoonBids.map((bid) => {
-            const isRa = Boolean(bid.isRa || bid.type === 'RA');
-            const isService = bid.type === 'SERVICE';
-            const qty = bid.boqItems?.[0]?.quantity;
-
-            return (
-              <Pressable
-                key={`${bid.bidNumber}-${bid.b_id || ''}`}
-                style={({ pressed }) => [
-                  styles.bidCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.88 : 1,
-                  },
-                ]}
-                onPress={() => onSelectBid(bid)}
-              >
-                <View style={styles.bidTopRow}>
-                  <StatusBadge
-                    label={isRa ? 'RA' : isService ? 'SERVICE' : 'GOODS'}
-                    tone={isRa ? 'warning' : isService ? 'violet' : 'neutral'}
-                  />
-                  <Text style={[styles.bidNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {bid.bidNumber}
-                  </Text>
-                  {bid.isHighValue ? <StatusBadge label="≥ ₹2 Cr" tone="success" /> : null}
-                </View>
-
-                <Text
-                  style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-                  numberOfLines={2}
-                >
-                  {bid.title}
-                </Text>
-
-                <Text style={[styles.bidDept, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {bid.department}
-                </Text>
-
-                <View style={[styles.bidFooterRow, { borderTopColor: colors.borderSubtle }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.bidCloseMeta, { color: colors.textMuted }]}>
-                      Closes {formatDateSafe(bid.closingTimeUtc)}
-                      {qty !== undefined ? ` · Qty ${qty.toLocaleString('en-IN')}` : ''}
-                    </Text>
-                  </View>
-                  <View style={styles.bidInlineActions}>
-                    {onOpenBidPdf ? (
-                      <Pressable
-                        style={[styles.miniPdfBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSubtle }]}
-                        hitSlop={6}
-                        onPress={() => onOpenBidPdf(bid)}
-                      >
-                        <Text style={[styles.miniPdfBtnText, { color: colors.textPrimary }]}>PDF</Text>
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      style={[styles.miniInspectBtn, { backgroundColor: colors.primary }]}
-                      hitSlop={6}
-                      onPress={() => onSelectBid(bid)}
-                    >
-                      <Text style={[styles.miniInspectBtnText, { color: colors.textInverse }]}>Inspect</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })
-        )}
-
-        {/* 3. Explore Catalog — Compact Horizontal Rail */}
-        <SectionHeader
-          title="Explore catalog"
-          actionLabel="Directory ›"
+          title="Browse categories"
+          actionLabel="View all >"
           onAction={() => onNavigateTab('CATEGORIES')}
-          style={{ marginTop: 10 }}
         />
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catalogScroll}
-        >
-          {CATALOG_SHORTCUTS.map((cat) => (
+        <View style={styles.categoryList}>
+          {POPULAR_CATEGORIES.map((cat) => (
             <Pressable
               key={cat.id}
-              style={({ pressed }) => [
-                styles.catalogTile,
+              unstable_pressDelay={0}
+              hitSlop={6}
+              style={[
+                styles.categoryRowItem,
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
-                  opacity: pressed ? 0.8 : 1,
                 },
               ]}
-              onPress={() =>
-                onNavigateTab('MARKET', {
-                  category: cat.targetCategory,
-                  typeTab: cat.typeTab,
-                })
-              }
+              onPress={() => onNavigateTab('MARKET', { category: cat.marketCategory, typeTab: 'Products' })}
             >
-              <View style={[styles.catalogCodePill, { backgroundColor: colors.primaryTint }]}>
-                <Text style={[styles.catalogCodeText, { color: colors.primary }]}>{cat.code}</Text>
+              <View style={[styles.categoryIconSquare, { backgroundColor: cat.tint }]}>
+                <Text style={[styles.categoryCode, { color: cat.color }]}>{cat.code}</Text>
               </View>
-              <Text style={[styles.catalogLabel, { color: colors.textPrimary }]} numberOfLines={1}>
-                {cat.label}
-              </Text>
-              <Text style={[styles.catalogSub, { color: colors.textMuted }]} numberOfLines={1}>
-                {cat.sub}
-              </Text>
+              <View style={styles.categoryInfo}>
+                <Text style={[styles.categoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
+                <Text style={[styles.categoryDesc, { color: colors.textSecondary }]}>{cat.desc}</Text>
+              </View>
+              <View style={styles.categoryEndCol}>
+                <Text style={[styles.categoryCount, { color: colors.textMuted }]}>Browse</Text>
+                <Text style={[styles.chevronText, { color: colors.textMuted }]}>›</Text>
+              </View>
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
+      </View>
 
-        {/* 4. Compact Procurement Tools Grid (2x2 — Zero Redundancy) */}
-        <SectionHeader title="Procurement tools" style={{ marginTop: 14 }} />
-
-        <View style={styles.toolsGrid}>
+      {/* 7. Latest Opportunities Snippet */}
+      <View style={styles.opportunitiesSection}>
+        <SectionHeader
+          title="Latest opportunities"
+          actionLabel="View all >"
+          onAction={() => onNavigateTab('BIDS')}
+        />
+        {latestOpportunities.map((bid) => (
           <Pressable
-            style={[styles.toolCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => (onOpenMyWork ? onOpenMyWork() : onNavigateTab('MORE'))}
+            key={bid.bidNumber}
+            unstable_pressDelay={0}
+            hitSlop={6}
+            style={[
+              styles.opportunityCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => onSelectBid(bid)}
           >
-            <Text style={[styles.toolEyebrow, { color: colors.primary }]}>WORKSPACE</Text>
-            <Text style={[styles.toolTitle, { color: colors.textPrimary }]}>Doc Preparation</Text>
-            <Text style={[styles.toolSub, { color: colors.textSecondary }]}>Stage local files &amp; checklists</Text>
-          </Pressable>
+            <View style={styles.oppHeaderRow}>
+              <StatusBadge
+                label={bid.isRa || bid.type === 'RA' ? 'RA' : bid.type === 'SERVICE' ? 'SERVICES' : 'GOODS'}
+                tone={bid.isRa || bid.type === 'RA' ? 'warning' : bid.type === 'SERVICE' ? 'violet' : 'neutral'}
+              />
+              <Text style={[styles.oppBidNum, { color: colors.textSecondary }]}>{bid.bidNumber}</Text>
+              <StatusBadge label="ACTIVE" tone="success" dot />
+            </View>
 
-          <Pressable
-            style={[styles.toolCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => onNavigateTab('ORDERS')}
-          >
-            <Text style={[styles.toolEyebrow, { color: colors.violet }]}>RESULTS</Text>
-            <Text style={[styles.toolTitle, { color: colors.textPrimary }]}>Concluded Bids</Text>
-            <Text style={[styles.toolSub, { color: colors.textSecondary }]}>Past tenders &amp; contracts</Text>
-          </Pressable>
+            <Text
+              style={[styles.oppTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
+              numberOfLines={2}
+            >
+              {bid.title}
+            </Text>
+            <Text style={[styles.oppDept, { color: colors.textSecondary }]} numberOfLines={1}>
+              {bid.department}
+            </Text>
 
-          <Pressable
-            style={[styles.toolCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => (onOpenOfficialPortal ? onOpenOfficialPortal() : onNavigateTab('PORTAL'))}
-          >
-            <Text style={[styles.toolEyebrow, { color: colors.emerald }]}>PORTAL</Text>
-            <Text style={[styles.toolTitle, { color: colors.textPrimary }]}>Official GeM ↗</Text>
-            <Text style={[styles.toolSub, { color: colors.textSecondary }]}>Sign in, 2FA &amp; submit</Text>
+            <View style={[styles.oppMetaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+              <View style={styles.oppMetaCol}>
+                <Text style={[styles.oppMetaLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+                <Text style={[styles.oppMetaVal, { color: colors.primary }]}>
+                  {bid.estimatedBidValueInr === undefined || bid.publishedFields?.estimatedValue === false
+                    ? bid.isHighValue
+                      ? '≥ ₹2 Cr'
+                      : 'Tap to inspect'
+                    : formatLakhs(bid.estimatedBidValueInr)}
+                </Text>
+              </View>
+              <View style={styles.oppMetaCol}>
+                <Text style={[styles.oppMetaLabel, { color: colors.textMuted }]}>CLOSES IN</Text>
+                <Text style={[styles.oppMetaVal, { color: colors.textPrimary }]}>
+                  {formatDateSafe(bid.closingTimeUtc)}
+                </Text>
+              </View>
+            </View>
           </Pressable>
+        ))}
+      </View>
 
-          <Pressable
-            style={[styles.toolCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            onPress={() => onNavigateTab('HELP')}
-          >
-            <Text style={[styles.toolEyebrow, { color: colors.warning }]}>SUPPORT</Text>
-            <Text style={[styles.toolTitle, { color: colors.textPrimary }]}>GeM Helpdesk</Text>
-            <Text style={[styles.toolSub, { color: colors.textSecondary }]}>1800-419-3436 &amp; SOPs</Text>
-          </Pressable>
+      {/* 8. Procurement Help Banner */}
+      <View
+        style={[
+          styles.helpCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={[styles.helpIconSquare, { backgroundColor: colors.primaryTint }]}>
+          <Text style={[styles.helpIconEmoji, { color: colors.primary }]}>i</Text>
+        </View>
+        <View style={styles.helpTextCol}>
+          <Text style={[styles.helpTitle, { color: colors.textPrimary }]}>Need help using the marketplace?</Text>
+          <Text style={[styles.helpSubtitle, { color: colors.textSecondary }]}>
+            Browse manuals, FAQs, LMS courses, and call official toll-free support.
+          </Text>
+          <View style={{ marginTop: 8 }}>
+            <PrimaryButton
+              label="Help & Resources"
+              onPress={() => onNavigateTab('HELP')}
+              style={{ paddingVertical: 8, alignSelf: 'flex-start' }}
+            />
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -341,177 +374,259 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  contentContainer: { paddingBottom: 32 },
-  searchPanel: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-  },
-  scopeRow: {
-    flexDirection: 'row',
-    paddingTop: 10,
-    paddingBottom: 12,
-  },
-  pulseStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingVertical: 10,
-  },
-  pulseCell: {
+  container: {
     flex: 1,
-    alignItems: 'center',
   },
-  pulseVal: {
-    fontSize: 15,
-    fontWeight: '800',
+  contentContainer: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 40,
   },
-  pulseLabel: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    marginTop: 2,
+  welcomeSection: {
+    marginTop: 8,
+    marginBottom: 16,
   },
-  pulseDivider: {
-    width: 1,
-    height: 26,
+  welcomeTitle: {
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  bodyPad: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
+  welcomeSubtitle: {
+    lineHeight: 20,
   },
-  loadingCard: {
+  searchSection: {
+    marginBottom: 16,
+  },
+  pillScrollView: {
+    marginTop: 10,
+  },
+  pillContainer: {
+    flexDirection: 'row',
+  },
+  heroCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 16,
+    marginBottom: 20,
+  },
+  heroBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 18,
-    gap: 10,
+    marginBottom: 6,
+  },
+  heroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  heroTitle: {
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  heroDescription: {
+    lineHeight: 18,
     marginBottom: 12,
   },
-  loadingText: {
-    fontSize: 12.5,
-  },
-  bidCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 13,
-    marginBottom: 10,
-  },
-  bidTopRow: {
+  heroStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 7,
-  },
-  bidNumber: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    flex: 1,
-  },
-  bidTitle: {
-    fontWeight: '700',
-    lineHeight: 19,
-    marginBottom: 3,
-  },
-  bidDept: {
-    fontSize: 11.5,
-    marginBottom: 10,
-  },
-  bidFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     borderTopWidth: 1,
-    paddingTop: 9,
-    gap: 8,
+    paddingTop: 12,
   },
-  bidCloseMeta: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  bidInlineActions: {
-    flexDirection: 'row',
+  heroStatItem: {
     alignItems: 'center',
-    gap: 6,
   },
-  miniPdfBtn: {
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  miniPdfBtnText: {
-    fontSize: 11,
+  heroStatNum: {
+    fontSize: 15,
     fontWeight: '700',
   },
-  miniInspectBtn: {
-    borderRadius: 6,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-  },
-  miniInspectBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  catalogScroll: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  catalogTile: {
-    width: 112,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 10,
-  },
-  catalogCodePill: {
-    alignSelf: 'flex-start',
-    borderRadius: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    marginBottom: 8,
-  },
-  catalogCodeText: {
+  heroStatLabel: {
     fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  catalogLabel: {
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  catalogSub: {
-    fontSize: 10.5,
     marginTop: 2,
   },
-  toolsGrid: {
+  heroStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+  },
+  workspaceCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 14,
+    marginBottom: 20,
+  },
+  workspaceCopy: { marginBottom: 12 },
+  workspaceEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  workspaceTitle: { fontSize: 16, fontWeight: '800', marginTop: 4 },
+  workspaceSubtitle: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  workspaceActions: { gap: 8 },
+  workspaceButton: { alignSelf: 'stretch' },
+  quickAccessSection: {
+    marginBottom: 20,
+  },
+  quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 10,
   },
-  toolCard: {
-    width: '48.5%',
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 12,
+  quickCard: {
+    width: '48%',
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 14,
+    marginBottom: 12,
   },
-  toolEyebrow: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 4,
+  quickIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  toolTitle: {
-    fontSize: 13.5,
-    fontWeight: '800',
+  quickIconText: {
+    fontSize: 18,
+  },
+  quickCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
     marginBottom: 2,
   },
-  toolSub: {
+  quickCardSubtitle: {
     fontSize: 11,
-    lineHeight: 15,
+  },
+  categoriesSection: {
+    marginBottom: 20,
+  },
+  categoryList: {
+    gap: 8,
+  },
+  categoryRowItem: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+  },
+  categoryIconSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  categoryCode: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  categoryInfo: {
+    flex: 1,
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  categoryDesc: {
+    fontSize: 11,
+  },
+  categoryEndCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryCount: {
+    fontSize: 11,
+    marginRight: 6,
+  },
+  chevronText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  opportunitiesSection: {
+    marginBottom: 20,
+  },
+  opportunityCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 14,
+    marginBottom: 12,
+  },
+  oppHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  oppBidNum: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  oppTitle: {
+    fontWeight: '700',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  oppDept: {
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  oppMetaGrid: {
+    flexDirection: 'row',
+    borderRadius: DESIGN_TOKENS.buttonRadius,
+    padding: 10,
+    justifyContent: 'space-between',
+  },
+  oppMetaCol: {
+    flex: 1,
+  },
+  oppMetaLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  oppMetaVal: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  helpCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    padding: 16,
+    flexDirection: 'row',
+  },
+  helpIconSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  helpIconEmoji: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  helpTextCol: {
+    flex: 1,
+  },
+  helpTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  helpSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

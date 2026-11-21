@@ -17,7 +17,6 @@ import {
   RefreshControl,
   BackHandler,
   ActivityIndicator,
-  Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import {
@@ -32,6 +31,7 @@ import { BidDocumentViewer } from './BidDocumentViewer';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
+  SegmentedTabs,
   CompactChip,
   StatusBadge,
   PrimaryButton,
@@ -40,7 +40,7 @@ import {
 } from '../components/SharedUI';
 import { formatLakhs, formatDateSafe } from '../utils/formatters';
 
-export type GeMStatusTab = 'Ongoing' | 'Concluded' | 'Cancelled';
+export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed';
 type TypeChip = 'All' | 'Goods' | 'Services' | 'BOQ' | 'Custom';
 
 interface BidsHubScreenProps {
@@ -53,7 +53,8 @@ interface BidsHubScreenProps {
   onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
 }
 
-function mapTypeChipToPortalParam(_tab: GeMStatusTab, chip: TypeChip): GeMPortalByType {
+function mapTypeChipToPortalParam(tab: GeMStatusTab, chip: TypeChip): GeMPortalByType {
+  if (tab === 'Live RA') return 'bidToRA';
   switch (chip) {
     case 'Goods':
       return 'product';
@@ -143,14 +144,10 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       setQueryError(null);
 
       const bidStatusType: GeMPortalStatusType =
-        activeStatusTab === 'Concluded'
-          ? 'bidrastatus'
-          : activeStatusTab === 'Cancelled'
-            ? 'cancelled_bids'
-            : 'ongoing_bids';
+        activeStatusTab === 'Closed' ? 'bidrastatus' : 'ongoing_bids';
       const byType = mapTypeChipToPortalParam(activeStatusTab, activeTypeChip);
       const effectiveSort: GeMPortalSort =
-        activeStatusTab !== 'Ongoing' && sortOrder === 'Bid-End-Date-Oldest'
+        activeStatusTab === 'Closed' && sortOrder === 'Bid-End-Date-Oldest'
           ? 'Bid-End-Date-Latest'
           : sortOrder;
       const isExactBidNum = /^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery);
@@ -175,7 +172,13 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           return;
         }
 
-        const results = res.bids;
+        // Apply secondary local filter when inside Live RA + Goods/Services sub-chip
+        let results = res.bids;
+        if (activeStatusTab === 'Live RA' && activeTypeChip === 'Services') {
+          results = results.filter((b) => b.type === 'SERVICE');
+        } else if (activeStatusTab === 'Live RA' && activeTypeChip === 'Goods') {
+          results = results.filter((b) => b.type !== 'SERVICE');
+        }
 
         setQueryTotal(res.total);
         setCurrentPage(page);
@@ -330,52 +333,71 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             .join(' • ') || 'Department not published'}
         </Text>
 
-        {/* High-signal published metadata bar (zero filler noise) */}
-        <View style={[styles.metaStrip, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
-          <View style={styles.metaCol}>
+        {/* 2x2 Glanceable Metrics Grid — strictly published portal values */}
+        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+            <Text style={[styles.metricValue, { color: estVal ? colors.primary : colors.textMuted }]}>
+              {estVal === undefined || item.publishedFields?.estimatedValue === false
+                ? item.isHighValue
+                  ? 'High Value (≥ ₹2 Cr)'
+                  : 'In PDF'
+                : formatLakhs(estVal)}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+            <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
+              {publishedQty !== undefined ? `${publishedQty.toLocaleString('en-IN')} Units` : 'In PDF'}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSING (IST)</Text>
             <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
               {formatDateSafe(item.closingTimeUtc)}
             </Text>
           </View>
-          <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.metaCol}>
+          <View style={styles.metricItem}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-              {estVal !== undefined && item.publishedFields?.estimatedValue !== false
-                ? 'EST. VALUE'
-                : item.parentBidNumber
-                  ? 'ORIGINAL BID'
-                  : 'QUANTITY'}
+              {item.parentBidNumber ? 'ORIGINAL BID' : 'TERMS / EMD'}
             </Text>
             <Text
               style={[
                 styles.metricValue,
-                { color: estVal || item.parentBidNumber ? colors.primary : colors.textPrimary },
+                {
+                  color: item.parentBidNumber
+                    ? colors.primary
+                    : item.isEmdExemptForMse === undefined
+                      ? colors.textMuted
+                      : item.isEmdExemptForMse
+                        ? colors.success
+                        : colors.warning,
+                },
               ]}
               numberOfLines={1}
             >
-              {estVal !== undefined && item.publishedFields?.estimatedValue !== false
-                ? formatLakhs(estVal)
-                : item.parentBidNumber
-                  ? item.parentBidNumber
-                  : publishedQty !== undefined
-                    ? `${publishedQty.toLocaleString('en-IN')} Units`
-                    : 'See PDF'}
+              {item.parentBidNumber
+                ? item.parentBidNumber
+                : item.isEmdExemptForMse === undefined
+                  ? 'Tap to scan PDF'
+                  : item.isEmdExemptForMse
+                    ? 'MSE exempt'
+                    : 'Applicable'}
             </Text>
           </View>
         </View>
 
-        {/* Actions: Read PDF Inline + Inspect Fundamentals */}
+        {/* Actions: View PDF + Inspect Details */}
         <View style={styles.cardActionsRow}>
           <SecondaryButton
-            label="Read PDF"
+            label="View PDF"
             onPress={() => handleOpenDoc(item)}
             style={{ flex: 1, marginRight: 8 }}
           />
           <PrimaryButton
-            label="Inspect Bid"
+            label="View Bid Details"
             onPress={() => handleInspect(item)}
-            style={{ flex: 1.4 }}
+            style={{ flex: 1.5 }}
           />
         </View>
       </View>
@@ -386,40 +408,37 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Clean Unified Search + Underline Tabs + Filter Chips Header */}
-      <View style={[styles.headerBlock, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+      <View style={[styles.liveNotice, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.border }]}>
+        <Text style={[styles.liveNoticeLabel, { color: colors.success }]}>
+          DIRECT GeM PORTAL FEED · bidplus.gem.gov.in
+        </Text>
+        <Text style={[styles.liveNoticeText, { color: colors.textSecondary }]}>
+          {activeTotalCount > 0
+            ? `${activeTotalCount.toLocaleString('en-IN')} live public ${
+                activeStatusTab === 'Closed' ? 'concluded records' : activeStatusTab === 'Live RA' ? 'reverse auctions' : 'tenders'
+              } directly from GeM`
+            : 'Direct phone-to-GeM public feed. No backend proxy or mock records.'}
+        </Text>
+      </View>
+
+      {/* 1. Status Tabs */}
+      <View style={styles.topSection}>
+        <SegmentedTabs
+          options={['Ongoing', 'Live RA', 'Closed']}
+          selected={activeStatusTab}
+          onSelect={(tab) => setActiveStatusTab(tab as GeMStatusTab)}
+          style={{ marginBottom: 12 }}
+        />
+
+        {/* 2. Direct Live Search Field (queries bidplus.gem.gov.in directly) */}
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search GeM bids (e.g. Laptop, Solar, GEM/2026/...)"
+          placeholder="Live search GeM (e.g. Laptop, Solar, GEM/2026/...)"
+          style={{ marginBottom: 10 }}
         />
 
-        <View style={styles.underlineTabsRow}>
-          {(['Ongoing', 'Concluded', 'Cancelled'] as const).map((tab) => {
-            const active = activeStatusTab === tab;
-            return (
-              <Pressable
-                key={tab}
-                onPress={() => setActiveStatusTab(tab)}
-                style={[styles.underlineTab, active && { borderBottomColor: colors.primary }]}
-              >
-                <Text
-                  style={[
-                    styles.underlineTabText,
-                    { color: active ? colors.primary : colors.textSecondary },
-                    active && styles.underlineTabTextActive,
-                  ]}
-                >
-                  {tab}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Filter Chips + Live Count Strip */}
-      <View style={styles.toolbarStrip}>
+        {/* 3. Filter Chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -445,12 +464,6 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             onPress={() => setHighValueOnly((prev) => !prev)}
           />
         </ScrollView>
-
-        {activeTotalCount > 0 ? (
-          <Text style={[styles.countCaption, { color: colors.textMuted }]}>
-            {activeTotalCount.toLocaleString('en-IN')} live {activeStatusTab.toLowerCase()} tenders · bidplus.gem.gov.in
-          </Text>
-        ) : null}
       </View>
 
       {/* 4. Bid List */}
@@ -505,6 +518,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             </View>
           ) : (
             <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📋</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching tenders on GeM</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Try a different keyword or reset your filters.
@@ -594,42 +608,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerBlock: {
+  topSection: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 8,
+  },
+  liveNotice: {
     paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingTop: 12,
+    paddingVertical: 9,
     borderBottomWidth: 1,
   },
-  underlineTabsRow: {
-    flexDirection: 'row',
-    marginTop: 8,
+  liveNoticeLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
-  underlineTab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  underlineTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  underlineTabTextActive: {
-    fontWeight: '800',
-  },
-  toolbarStrip: {
-    paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingTop: 10,
-    paddingBottom: 6,
+  liveNoticeText: {
+    fontSize: 10.5,
+    lineHeight: 14,
+    marginTop: 2,
   },
   filterChipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  countCaption: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 8,
   },
   listContent: {
     padding: DESIGN_TOKENS.pagePaddingMobile,
@@ -637,16 +637,16 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   bidCard: {
-    borderRadius: 10,
+    borderRadius: DESIGN_TOKENS.cardRadius,
     borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 13,
-    marginBottom: 10,
+    padding: 14,
+    marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 7,
+    marginBottom: 8,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
@@ -655,40 +655,34 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bidNumberText: {
-    fontSize: 11.5,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
     marginLeft: 8,
     flexShrink: 1,
   },
   bidTitle: {
     fontWeight: '700',
-    marginBottom: 3,
+    marginBottom: 4,
     lineHeight: 20,
   },
   deptText: {
-    fontSize: 11.5,
+    fontSize: 12,
     marginBottom: 10,
   },
-  metaStrip: {
+  metaGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-    gap: 10,
+    flexWrap: 'wrap',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 12,
   },
-  metaCol: {
-    flex: 1,
-  },
-  metaDivider: {
-    width: 1,
-    height: 24,
+  metricItem: {
+    width: '50%',
+    padding: 4,
   },
   metricLabel: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.4,
     marginBottom: 2,
   },

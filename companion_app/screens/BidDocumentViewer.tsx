@@ -242,20 +242,10 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                   </Pressable>
                 ) : null}
                 <Pressable
-                  style={
-                    NativePdf
-                      ? [styles.secondaryActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]
-                      : styles.primaryActionBtn
-                  }
+                  style={NativePdf ? styles.secondaryActionBtn : styles.primaryActionBtn}
                   onPress={openInSystemViewer}
                 >
-                  <Text
-                    style={
-                      NativePdf
-                        ? [styles.secondaryActionText, { color: colors.primary }]
-                        : styles.primaryActionText
-                    }
-                  >
+                  <Text style={NativePdf ? styles.secondaryActionText : styles.primaryActionText}>
                     Open Official PDF ↗
                   </Text>
                 </Pressable>
@@ -298,7 +288,7 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
               style={styles.pdf}
               renderActivityIndicator={(progress) => (
                 <View style={[styles.loadingState, { backgroundColor: colors.background }]}>
-                  <ActivityIndicator size="large" color={colors.primary} />
+                  <ActivityIndicator size="large" color="#0B3B60" />
                   <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>
                     Loading official GeM PDF…
                   </Text>

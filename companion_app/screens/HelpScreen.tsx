@@ -1,19 +1,27 @@
 /**
- * GeM Help & Resources Screen — Clean Helpdesk Hero + Grouped Official Directory
+ * GeM Help & Resources Screen
+ * Conforms to Screen 9 of the GeM Mobile UI Specification:
+ * - SearchField: "Search help articles and guides"
+ * - Official GeM Helpdesk Callout Card with verified phone numbers & [Call Support]
+ * - Clean Resource List with colored icon squares, titles, descriptions, and chevrons
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   Alert,
   Linking,
   Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
 } from 'react-native';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
-import { SearchField } from '../components/SharedUI';
+import {
+  SearchField,
+  PrimaryButton,
+  SecondaryButton,
+} from '../components/SharedUI';
 
 export interface HelpScreenProps {
   onBack?: () => void;
@@ -23,7 +31,8 @@ interface ResourceItem {
   id: string;
   title: string;
   description: string;
-  code: string;
+  icon: string;
+  tint: string;
   url: string;
 }
 
@@ -31,43 +40,49 @@ const RESOURCES: ResourceItem[] = [
   {
     id: 'lms',
     title: 'e-Learning & LMS',
-    description: 'Courses, buyer/seller certifications & official webinars',
-    code: 'LMS',
+    description: 'Interactive courses, buyer/seller certifications & webinars',
+    icon: 'LMS',
+    tint: '#E8F1FF',
     url: 'https://lms.gem.gov.in',
   },
   {
     id: 'manuals',
     title: 'User Manuals & SOPs',
-    description: 'Step-by-step buyer, seller & consignee operating guides',
-    code: 'DOC',
+    description: 'Comprehensive step-by-step buyer, seller & consignee guides',
+    icon: 'DOC',
+    tint: '#E7F8EE',
     url: 'https://gem.gov.in/user_manual',
   },
   {
     id: 'faq',
     title: 'FAQs & Knowledge Base',
-    description: 'CRAC, PFMS payment timelines, EMD waivers & GFR Rule 149',
-    code: 'FAQ',
+    description: 'Answers to frequent questions on CRAC, PFMS, EMD waivers & GFR 149',
+    icon: 'FAQ',
+    tint: '#FFF4DB',
     url: 'https://gem.gov.in/faqs',
   },
   {
     id: 'policies',
-    title: 'Policies & Office Memoranda',
-    description: 'Ministry of Finance circulars, OMs & MII / MSE guidelines',
-    code: 'POL',
+    title: 'Policies & Guidelines',
+    description: 'Official Ministry of Finance circulars, OMs & procurement policies',
+    icon: 'POL',
+    tint: '#FDECEC',
     url: 'https://gem.gov.in/policy',
   },
   {
     id: 'incident',
     title: 'Incident Management',
-    description: 'Administrative actions, dispute resolution & appeals',
-    code: 'INC',
+    description: 'Delisting, administrative actions, dispute resolution & appeals',
+    icon: 'INC',
+    tint: '#F0EAFE',
     url: 'https://gem.gov.in/incidents',
   },
   {
     id: 'videos',
-    title: 'Video Walkthroughs',
-    description: 'Official video tutorials for bidding and reverse auctions',
-    code: 'VID',
+    title: 'Video Tutorials',
+    description: 'Official YouTube walkthroughs for bidding and reverse auctions',
+    icon: 'VID',
+    tint: '#FFF0DE',
     url: 'https://gem.gov.in/video_tutorials',
   },
 ];
@@ -78,7 +93,7 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
 
   const filteredResources = useMemo(() => {
     if (!searchQuery.trim()) return RESOURCES;
-    const q = searchQuery.toLowerCase().trim();
+    const q = searchQuery.toLowerCase();
     return RESOURCES.filter(
       (r) => r.title.toLowerCase().includes(q) || r.description.toLowerCase().includes(q)
     );
@@ -88,7 +103,7 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
     Linking.openURL('tel:18004193436').catch(() => {
       Alert.alert(
         'GeM Helpdesk',
-        'Call toll-free: 1800-419-3436 or 1800-102-3436\n(Monday – Saturday, 8:00 AM – 8:00 PM IST)'
+        'Call toll-free: 1800-419-3436 or 1800-102-3436\n(Monday - Saturday, 8:00 AM - 8:00 PM IST)'
       );
     });
   };
@@ -100,150 +115,207 @@ export const HelpScreen: React.FC<HelpScreenProps> = ({ onBack }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Fixed Sub-Header */}
-      <View style={[styles.headerBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Top Header / Back Navigation */}
+      <View style={styles.topNavRow}>
         {onBack && (
-          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Go back">
+          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
             <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
           </Pressable>
         )}
-        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}>
-          Helpdesk &amp; Manuals
+        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 18 * fontMultiplier }]}>
+          Help &amp; Resources
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        {/* Official GeM National Helpdesk Card */}
-        <View style={styles.helpdeskBanner}>
-          <Text style={styles.helpdeskEyebrow}>NATIONAL TOLL-FREE HELPDESK</Text>
-          <Text style={styles.phoneNumbers}>1800-419-3436 / 1800-102-3436</Text>
-          <Text style={styles.operatingHours}>Monday – Saturday · 8:00 AM to 8:00 PM IST</Text>
-          <Pressable
-            style={({ pressed }) => [styles.callCta, pressed && { opacity: 0.85 }]}
-            onPress={handleCallSupport}
-          >
-            <Text style={styles.callCtaText}>Call Support (Toll-Free)</Text>
-          </Pressable>
+      {/* Search Input */}
+      <SearchField
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search help articles and guides"
+        style={{ marginBottom: 16 }}
+      />
+
+      {/* Official GeM Helpdesk Card */}
+      <View
+        style={[
+          styles.helpdeskCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.helpdeskHeaderRow}>
+          <View style={[styles.helpdeskIconSquare, { backgroundColor: colors.primaryTint }]}>
+            <Text style={styles.helpdeskIconEmoji}>📞</Text>
+          </View>
+          <View style={styles.helpdeskInfo}>
+            <Text style={[styles.helpdeskTitle, { color: colors.textPrimary }]}>
+              GeM Official National Helpdesk
+            </Text>
+            <Text style={[styles.phoneNumbers, { color: colors.primary }]}>
+              1800-419-3436 / 1800-102-3436
+            </Text>
+            <Text style={[styles.operatingHours, { color: colors.textMuted }]}>
+              Mon - Sat: 8:00 AM – 8:00 PM IST
+            </Text>
+          </View>
         </View>
 
-        <SearchField
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Filter manuals, FAQs, policies..."
-          style={{ marginBottom: 14 }}
+        <PrimaryButton
+          label="Call Support (Toll-Free)"
+          icon="📞"
+          onPress={handleCallSupport}
+          style={{ marginTop: 12 }}
         />
+      </View>
 
-        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>OFFICIAL PORTAL RESOURCES</Text>
+      {/* Resource List */}
+      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+        Portals, Manuals &amp; Training
+      </Text>
 
-        <View style={[styles.groupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          {filteredResources.map((res, idx) => (
-            <Pressable
-              key={res.id}
-              style={({ pressed }) => [
-                styles.resourceRow,
-                idx > 0 && { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-                pressed && { opacity: 0.75 },
-              ]}
-              onPress={() => handleOpenResource(res)}
-            >
-              <View style={[styles.codeBox, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                <Text style={[styles.codeText, { color: colors.primary }]}>{res.code}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.resTitle, { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier }]}>
-                  {res.title}
-                </Text>
-                <Text style={[styles.resDesc, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {res.description}
-                </Text>
-              </View>
-              <Text style={[styles.chevron, { color: colors.textMuted }]}>↗</Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
+      <View style={styles.resourceList}>
+        {filteredResources.map((res) => (
+          <Pressable
+            key={res.id}
+            style={[
+              styles.resourceCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={() => handleOpenResource(res)}
+          >
+            <View style={[styles.resourceIconSquare, { backgroundColor: res.tint }]}>
+              <Text style={styles.resourceEmoji}>{res.icon}</Text>
+            </View>
+
+            <View style={styles.resourceInfo}>
+              <Text style={[styles.resTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}>
+                {res.title}
+              </Text>
+              <Text style={[styles.resDesc, { color: colors.textSecondary }]}>
+                {res.description}
+              </Text>
+            </View>
+
+            <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  headerBar: {
-    height: 48,
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingBottom: 40,
+  },
+  topNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
+    marginBottom: 12,
   },
-  backBtn: { marginRight: 10, padding: 4 },
-  backArrow: { fontSize: 20, fontWeight: '700' },
-  navTitle: { fontWeight: '800' },
-  contentContainer: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 36 },
-  helpdeskBanner: {
-    backgroundColor: '#0B3B60',
-    borderRadius: 12,
+  backBtn: {
+    marginRight: 10,
+    padding: 4,
+  },
+  backArrow: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  navTitle: {
+    fontWeight: '700',
+  },
+  helpdeskCard: {
+    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderWidth: DESIGN_TOKENS.borderWidth,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  helpdeskEyebrow: {
-    color: '#93C5FD',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  phoneNumbers: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 5,
-  },
-  operatingHours: {
-    color: '#CBD5E1',
-    fontSize: 11.5,
-    marginTop: 3,
-  },
-  callCta: {
-    marginTop: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  callCtaText: {
-    color: '#0B3B60',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginBottom: 7,
-    marginLeft: 2,
-  },
-  groupCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  resourceRow: {
+  helpdeskHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    gap: 12,
   },
-  codeBox: {
-    width: 38,
-    height: 34,
-    borderRadius: 7,
-    borderWidth: 1,
+  helpdeskIconSquare: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  codeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
-  resTitle: { fontWeight: '700' },
-  resDesc: { fontSize: 11.5, lineHeight: 16, marginTop: 2 },
-  chevron: { fontSize: 15, fontWeight: '700' },
+  helpdeskIconEmoji: {
+    fontSize: 22,
+  },
+  helpdeskInfo: {
+    flex: 1,
+  },
+  helpdeskTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  phoneNumbers: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  operatingHours: {
+    fontSize: 11,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  resourceList: {
+    gap: 8,
+  },
+  resourceCard: {
+    borderRadius: 12,
+    borderWidth: DESIGN_TOKENS.borderWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+  },
+  resourceIconSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  resourceEmoji: {
+    fontSize: 20,
+  },
+  resourceInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  resTitle: {
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  resDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  chevron: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
 });

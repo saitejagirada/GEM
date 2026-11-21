@@ -41,7 +41,6 @@ import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
-import { BidDocumentViewer } from './screens/BidDocumentViewer';
 import { MyWorkScreen } from './screens/MyWorkScreen';
 import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
@@ -56,7 +55,7 @@ export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'PORTFOLIO' | 'POR
 
 const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: string }[] = [
   { id: 'HOME', label: 'Home', icon: '⌂' },
-  { id: 'SEARCH', label: 'Catalog', icon: '⊞' },
+  { id: 'SEARCH', label: 'Search', icon: '⌕' },
   { id: 'BIDS', label: 'Bids', icon: '▤' },
   { id: 'AUCTIONS', label: 'Auctions', icon: '↘' },
   { id: 'MORE', label: 'More', icon: '⋯' },
@@ -84,7 +83,6 @@ const MainAppContent: React.FC = () => {
   const [lookupInput, setLookupInput] = useState<string>('');
   const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
-  const [viewerBid, setViewerBid] = useState<DeconstructedBidDoc | null>(null);
   const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
 
   // Hardware Back Button Navigation Stack Manager
@@ -92,10 +90,6 @@ const MainAppContent: React.FC = () => {
     let lastBackPressTime = 0;
 
     const onBackPress = () => {
-      if (viewerBid) {
-        setViewerBid(null);
-        return true;
-      }
       // 1. If inspection bid modal is open, close it
       if (selectedBid) {
         setSelectedBid(null);
@@ -140,7 +134,7 @@ const MainAppContent: React.FC = () => {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [viewerBid, selectedBid, showLookupModal, subScreen, activeTab]);
+  }, [selectedBid, showLookupModal, subScreen, activeTab]);
 
   // Subscribe to real-time live GeM public feed updates (Phone -> GeM directly)
   useEffect(() => {
@@ -325,26 +319,39 @@ const MainAppContent: React.FC = () => {
           </View>
         </Pressable>
 
-        {/* Right: Quick Bid Lookup + Document Prep Workspace */}
+        {/* Right: Notifications & Profile Avatar */}
         <View style={styles.headerRightActions}>
           <Pressable
-            style={[styles.headerActionPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}
+            style={styles.headerIconBtn}
             unstable_pressDelay={0}
             onPress={() => setShowLookupModal(true)}
-            hitSlop={6}
+            hitSlop={8}
             accessibilityLabel="Instant bid lookup"
           >
-            <Text style={[styles.headerActionText, { color: colors.textPrimary }]}>⌕ Bid ID</Text>
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>⌕</Text>
           </Pressable>
 
           <Pressable
-            style={[styles.headerPrimaryPill, { backgroundColor: colors.primary }]}
+            style={styles.headerIconBtn}
             unstable_pressDelay={0}
-            onPress={() => setSubScreen('PORTFOLIO')}
-            hitSlop={6}
-            accessibilityLabel="Document preparation workspace"
+            onPress={() => Alert.alert('Notifications', 'Public feed refreshes are available from the Bids tab. Private GeM notifications remain inside the official portal.')}
+            hitSlop={8}
+            accessibilityLabel="Notifications"
           >
-            <Text style={[styles.headerPrimaryPillText, { color: colors.textInverse }]}>Workspace</Text>
+            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>!</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.profileAvatar, { backgroundColor: colors.primary }]}
+            unstable_pressDelay={0}
+            onPress={() => {
+              setActiveTab('MORE');
+              setSubScreen('NONE');
+            }}
+            hitSlop={8}
+            accessibilityLabel="Profile menu"
+          >
+            <Text style={[styles.avatarInitial, { color: colors.textInverse }]}>S</Text>
           </Pressable>
         </View>
       </View>
@@ -423,11 +430,8 @@ const MainAppContent: React.FC = () => {
               <HomeScreen
                 bids={bids}
                 totalPortalBids={totalPortalBids}
-                isSyncing={isSyncing}
-                onRefresh={loadData}
                 onNavigateTab={handleHomeNavigate}
                 onSelectBid={(bid) => setSelectedBid(bid)}
-                onOpenBidPdf={(bid) => setViewerBid(bid)}
                 onOpenMyWork={() => setSubScreen('PORTFOLIO')}
                 onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
@@ -463,7 +467,7 @@ const MainAppContent: React.FC = () => {
         )}
       </View>
 
-      {/* Fixed 5-Tab Bottom Navigation Bar */}
+      {/* 64px Fixed Bottom Navigation Bar */}
       <View
         style={[
           styles.bottomNav,
@@ -479,26 +483,25 @@ const MainAppContent: React.FC = () => {
             <Pressable
               key={item.id}
               unstable_pressDelay={0}
-              android_ripple={{ color: 'rgba(0, 0, 0, 0.06)', borderless: false }}
+              android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
               onPress={() => {
                 setActiveTab(item.id);
                 setSubScreen('NONE');
               }}
-              style={styles.navItem}
+              style={[
+                styles.navItem,
+                isActive && {
+                  backgroundColor: colors.primaryTint,
+                },
+              ]}
               hitSlop={6}
             >
-              <View
-                style={[
-                  styles.navActiveBar,
-                  { backgroundColor: isActive ? colors.primary : 'transparent' },
-                ]}
-              />
               <Text
                 style={[
                   styles.navIcon,
                   {
                     color: isActive ? colors.primary : colors.textMuted,
-                    fontSize: isActive ? 17 : 15,
+                    fontSize: isActive ? 18 : 16,
                   },
                 ]}
               >
@@ -509,8 +512,8 @@ const MainAppContent: React.FC = () => {
                   styles.navLabel,
                   {
                     color: isActive ? colors.primary : colors.textMuted,
-                    fontWeight: isActive ? '800' : '500',
-                    fontSize: 10.5 * fontMultiplier,
+                    fontWeight: isActive ? '700' : '500',
+                    fontSize: 11 * fontMultiplier,
                   },
                 ]}
               >
@@ -581,13 +584,6 @@ const MainAppContent: React.FC = () => {
           onPrepareDocuments={openPreparation}
         />
       )}
-
-      {/* Direct Inline Bid Document Viewer (from Home cards) */}
-      <BidDocumentViewer
-        bid={viewerBid}
-        visible={Boolean(viewerBid)}
-        onClose={() => setViewerBid(null)}
-      />
     </SafeAreaView>
   );
 };
@@ -647,30 +643,25 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
-  headerActionPill: {
+  headerIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  headerIconText: {
+    fontSize: 16,
+  },
+  profileAvatar: {
+    width: 32,
     height: 32,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
-  headerActionText: {
-    fontSize: 11.5,
+  avatarInitial: {
+    fontSize: 14,
     fontWeight: '700',
-  },
-  headerPrimaryPill: {
-    height: 32,
-    paddingHorizontal: 11,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerPrimaryPillText: {
-    fontSize: 11.5,
-    fontWeight: '800',
   },
   screenBody: {
     flex: 1,
@@ -697,26 +688,19 @@ const styles = StyleSheet.create({
   bottomNav: {
     height: DESIGN_TOKENS.bottomNavHeight,
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 4,
-    position: 'relative',
-  },
-  navActiveBar: {
-    position: 'absolute',
-    top: 0,
-    left: 16,
-    right: 16,
-    height: 2.5,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
+    height: 52,
+    borderRadius: DESIGN_TOKENS.buttonRadius,
+    paddingVertical: 4,
   },
   navIcon: {
     marginBottom: 2,

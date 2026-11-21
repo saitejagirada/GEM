@@ -748,15 +748,12 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
               <Pressable
                 key={tab}
                 onPress={() => setActiveTypeTab(tab)}
-                style={[
-                  styles.underlineTab,
-                  active && { borderBottomColor: colors.primary },
-                ]}
+                style={[styles.underlineTab, active && styles.underlineTabActive]}
               >
                 <Text
                   style={[
                     styles.underlineTabText,
-                    { color: active ? colors.primary : colors.textSecondary },
+                    { color: active ? '#0B3B60' : colors.textSecondary },
                     active && styles.underlineTabTextActive,
                   ]}
                 >
@@ -831,24 +828,24 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                       isSelected && [styles.railItemActive, { backgroundColor: colors.surface }],
                     ]}
                   >
-                    {isSelected ? <View style={[styles.railActiveBar, { backgroundColor: colors.primary }]} /> : null}
+                    {isSelected ? <View style={styles.railActiveBar} /> : null}
                     <View
                       style={[
                         styles.railCodeBox,
                         {
-                          backgroundColor: isSelected ? colors.primary : colors.surface,
-                          borderColor: isSelected ? colors.primary : colors.border,
+                          backgroundColor: isSelected ? '#0B3B60' : colors.surface,
+                          borderColor: isSelected ? '#0B3B60' : colors.border,
                         },
                       ]}
                     >
-                      <Text style={[styles.railCodeText, { color: isSelected ? colors.textInverse : colors.textSecondary }]}>
+                      <Text style={[styles.railCodeText, { color: isSelected ? '#FFFFFF' : colors.textSecondary }]}>
                         {dept.shortCode || dept.icon}
                       </Text>
                     </View>
                     <Text
                       style={[
                         styles.railLabel,
-                        { color: isSelected ? colors.primary : colors.textSecondary },
+                        { color: isSelected ? '#0B3B60' : colors.textSecondary },
                         isSelected && styles.railLabelActive,
                       ]}
                       numberOfLines={2}
@@ -874,10 +871,10 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                   </Text>
                 </View>
                 <Pressable
-                  style={[styles.deptBrowseAllBtn, { backgroundColor: colors.primaryTint }]}
+                  style={styles.deptBrowseAllBtn}
                   onPress={() => openSubcategory(activeDept.name)}
                 >
-                  <Text style={[styles.deptBrowseAllText, { color: colors.primary }]}>View all ›</Text>
+                  <Text style={styles.deptBrowseAllText}>View all ›</Text>
                 </Pressable>
               </View>
 
@@ -903,7 +900,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                       <Text style={[styles.subTileUnit, { color: colors.textMuted }]} numberOfLines={1}>
                         {sub.priceUnit}
                       </Text>
-                      <Text style={[styles.subTileArrow, { color: colors.primary }]}>›</Text>
+                      <Text style={styles.subTileArrow}>›</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -958,7 +955,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
             {serviceFilter === 'All Live' ? (
               isLoadingServicesDir ? (
                 <View style={styles.servicesLoader}>
-                  <ActivityIndicator size="large" color={colors.primary} />
+                  <ActivityIndicator size="large" color="#0B3B60" />
                   <Text style={[styles.servicesLoaderTitle, { color: colors.textPrimary }]}>
                     Loading live GeM services…
                   </Text>
@@ -992,10 +989,10 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                       onPress={() => openServiceDetail(srv)}
                     >
                       {srv.imageUrl ? (
-                        <Image source={{ uri: srv.imageUrl }} style={[styles.liveServiceThumb, { backgroundColor: colors.surfaceSubtle }]} resizeMode="cover" />
+                        <Image source={{ uri: srv.imageUrl }} style={styles.liveServiceThumb} resizeMode="cover" />
                       ) : (
                         <View style={[styles.liveServiceThumbFallback, { backgroundColor: colors.surfaceSubtle }]}>
-                          <Text style={[styles.liveServiceThumbCode, { color: colors.primary }]}>SRV</Text>
+                          <Text style={styles.liveServiceThumbCode}>SRV</Text>
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -1007,7 +1004,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                             {srv.description}
                           </Text>
                         ) : null}
-                        <Text style={[styles.serviceOpenCue, { color: colors.primary }]}>Providers · Live Tenders · SLA ›</Text>
+                        <Text style={styles.serviceOpenCue}>Providers · Live Tenders · SLA ›</Text>
                       </View>
                     </Pressable>
                   ))}
@@ -1044,7 +1041,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                   onPress={() => openServiceDetail(srv)}
                 >
                   <View style={[styles.serviceCodeBadge, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                    <Text style={[styles.serviceCodeText, { color: colors.primary }]}>{srv.icon}</Text>
+                    <Text style={styles.serviceCodeText}>{srv.icon}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.serviceRowMeta}>
@@ -1058,7 +1055,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                     <Text style={[styles.serviceRowTitle, { color: colors.textPrimary }]} numberOfLines={2}>
                       {srv.name}
                     </Text>
-                    <Text style={[styles.serviceOpenCue, { color: colors.primary }]}>View Providers, Live Tenders &amp; SLA ›</Text>
+                    <Text style={styles.serviceOpenCue}>View Providers, Live Tenders &amp; SLA ›</Text>
                   </View>
                 </Pressable>
               ))
