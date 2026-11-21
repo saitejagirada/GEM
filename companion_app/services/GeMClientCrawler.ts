@@ -28,14 +28,14 @@ export interface GeMSubcategoryConfig {
 }
 
 export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
-  // IT Products
+  // IT Products (all live-verified against mkp.gem.gov.in)
   {
     id: 'desktop-computers',
     name: 'Desktop Computers',
     category: 'IT Products',
     slug: 'computers-entry-level-computer-cpu/search',
     priceUnit: 'per Desktop Set',
-    defaultEta: '⚡ 2-4 Days Delivery',
+    defaultEta: '2–4 Days Delivery',
   },
   {
     id: 'laptops-notebooks',
@@ -43,7 +43,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     category: 'IT Products',
     slug: 'computers-0806nb/search',
     priceUnit: 'per Laptop',
-    defaultEta: '⚡ 24-48 Hours Express',
+    defaultEta: '24–48 hrs Express',
   },
   {
     id: 'printers-mfm',
@@ -51,7 +51,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     category: 'IT Products',
     slug: 'computer-printer-0901print/search',
     priceUnit: 'per Printer',
-    defaultEta: '⚡ 2-3 Days Delivery',
+    defaultEta: '2–3 Days Delivery',
   },
   {
     id: 'tablets-v2',
@@ -59,77 +59,33 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     category: 'IT Products',
     slug: 'computers-0912tc/search',
     priceUnit: 'per Tablet',
-    defaultEta: '⚡ 2-4 Days Delivery',
+    defaultEta: '2–4 Days Delivery',
   },
 
-  // Furniture
-  {
-    id: 'revolving-chairs',
-    name: 'Revolving Chairs',
-    category: 'Furniture',
-    slug: 'furniture-and-furnishings-accommodation-furniture-furniture-revolving-chair-v5-/search',
-    priceUnit: 'per Chair',
-    defaultEta: '⚡ 3-5 Days Onsite',
-  },
-  {
-    id: 'executive-tables',
-    name: 'Executive Tables',
-    category: 'Furniture',
-    slug: 'furniture-executive-table/search',
-    priceUnit: 'per Table',
-    defaultEta: '⚡ 4-7 Days Onsite',
-  },
-  {
-    id: 'classroom-desking',
-    name: 'Class Room Desking',
-    category: 'Furniture',
-    slug: 'general-classroom-furnishing-class-room-desking-and-seating91/search',
-    priceUnit: 'per Desk Set',
-    defaultEta: '⚡ 5-10 Days Delivery',
-  },
-
-  // Stationery
-  {
-    id: 'copier-paper',
-    name: 'Copier & Maplitho Paper',
-    category: 'Stationery Items',
-    slug: 'maplitho-paper/search',
-    priceUnit: 'per Ream',
-    defaultEta: '⚡ 24-48 Hours Express',
-  },
-  {
-    id: 'gel-pens',
-    name: 'Gel Pens',
-    category: 'Stationery Items',
-    slug: 'drawing-tools-and-supplies-and-accessories-gel-pen-rev-/search',
-    priceUnit: 'per Box',
-    defaultEta: '⚡ 24 Hours Dispatch',
-  },
-  {
-    id: 'plain-registers',
-    name: 'Diaries & Registers',
-    category: 'Stationery Items',
-    slug: 'diaries-printed-plain--register-/search',
-    priceUnit: 'per Register',
-    defaultEta: '⚡ 2-3 Days Delivery',
-  },
-
-  // Automobiles
+  // Automobiles (all live-verified against mkp.gem.gov.in)
   {
     id: 'passenger-cars',
-    name: 'Cars',
+    name: 'Passenger Cars',
     category: 'Automobiles',
-    slug: '25101500-cars-version-2-/search',
+    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-passenger-motor-vehicles-passenger-car/search',
     priceUnit: 'per Vehicle',
-    defaultEta: '⚡ 7-14 Days Fleet Handover',
+    defaultEta: '7–14 Days Handover',
+  },
+  {
+    id: 'electric-cars',
+    name: 'Electric Cars',
+    category: 'Automobiles',
+    slug: '25101500-electric-cars-v4-/search',
+    priceUnit: 'per EV',
+    defaultEta: '7–14 Days Handover',
   },
   {
     id: 'utility-vehicles',
     name: 'Utility Vehicles',
     category: 'Automobiles',
-    slug: '25101500-utility-vehicles-version-2-/search',
+    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-passenger-motor-vehicles-utility-vehicle/search',
     priceUnit: 'per Vehicle',
-    defaultEta: '⚡ 7-14 Days Delivery',
+    defaultEta: '7–14 Days Delivery',
   },
   {
     id: 'buses-chassis',
@@ -137,131 +93,237 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     category: 'Automobiles',
     slug: 'buses/search',
     priceUnit: 'per Bus',
-    defaultEta: '⚡ 15-30 Days Handover',
+    defaultEta: '15–30 Days Handover',
   },
   {
     id: 'agricultural-tractors',
     name: 'Tractors',
     category: 'Automobiles',
-    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-specialized-and-recreational-vehicles-tractors-v1-/search',
+    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-specialized-and-recreational-vehicles-tractors-v3-/search',
     priceUnit: 'per Tractor',
-    defaultEta: '⚡ 10-20 Days Delivery',
+    defaultEta: '10–20 Days Delivery',
   },
 
-  // Furniture
+  // Furniture (all live-verified against mkp.gem.gov.in)
+  {
+    id: 'revolving-chairs',
+    name: 'Revolving Chairs',
+    category: 'Furniture',
+    slug: 'furniture-and-furnishings-accommodation-furniture-furniture-revolving-chair-v5-/search',
+    priceUnit: 'per Chair',
+    defaultEta: '3–5 Days Onsite',
+  },
+  {
+    id: 'executive-tables',
+    name: 'Executive Tables',
+    category: 'Furniture',
+    slug: 'furniture-and-furnishings-accommodation-furniture-furniture-executive-table-v4-/search',
+    priceUnit: 'per Table',
+    defaultEta: '4–7 Days Onsite',
+  },
+  {
+    id: 'classroom-desking',
+    name: 'Class Room Desking',
+    category: 'Furniture',
+    slug: 'general-classroom-furnishing-class-room-desking-and-seating91/search',
+    priceUnit: 'per Desk Set',
+    defaultEta: '5–10 Days Delivery',
+  },
+  {
+    id: 'modular-tables',
+    name: 'Modular Office Tables',
+    category: 'Furniture',
+    slug: 'furniture-and-furnishings-accommodation-furniture-office-furniture-modular-table-v2-/search',
+    priceUnit: 'per Table',
+    defaultEta: '5–8 Days Delivery',
+  },
   {
     id: 'movable-file-storage',
-    name: 'Movable File Storage System',
+    name: 'Heavy Duty Storage Racks',
     category: 'Furniture',
-    slug: 'movable-file-storage-system/search',
-    priceUnit: 'per Unit System',
-    defaultEta: '⚡ 7-10 Days Installation',
+    slug: 'shelving-and-storage-heavy-duty-storage-racks/search',
+    priceUnit: 'per Rack Unit',
+    defaultEta: '7–10 Days Delivery',
   },
 
-  // Electrical
+  // Medical Products (all live-verified against mkp.gem.gov.in)
+  {
+    id: 'hand-sanitizer',
+    name: 'Hand Sanitizer (IS 4148)',
+    category: 'Medical Products',
+    slug: 'bath-and-body-alcohol-based-hand-sanitizer/search',
+    priceUnit: 'per Container',
+    defaultEta: '24–48 hrs Express',
+  },
+  {
+    id: 'surgical-gloves',
+    name: 'Surgical Gloves (IS 13422)',
+    category: 'Medical Products',
+    slug: 'medical-gloves-and-accessories-single-use-sterile-rubber-surgical-gloves-conforming-to-is-13422/search',
+    priceUnit: 'per Box',
+    defaultEta: '24–48 hrs Express',
+  },
+  {
+    id: 'examination-gloves',
+    name: 'Examination Gloves',
+    category: 'Medical Products',
+    slug: 'medical-gloves-and-accessories-single-use-medical-examination-gloves-conforming-to-is-15354-part-1-/search',
+    priceUnit: 'per Box',
+    defaultEta: '24–48 hrs Express',
+  },
+  {
+    id: 'disposable-syringes',
+    name: 'Disposable Syringes',
+    category: 'Medical Products',
+    slug: 'syringes-and-accessories-single-use-sterile-hypodermic-syringes-for-human-use-conforming-to-is-10258-part-1-/search',
+    priceUnit: 'per Pack',
+    defaultEta: '24–48 hrs Express',
+  },
+
+  // Stationery Items (all live-verified against mkp.gem.gov.in)
+  {
+    id: 'copier-paper',
+    name: 'Copier & Maplitho Paper',
+    category: 'Stationery Items',
+    slug: 'maplitho-paper/search',
+    priceUnit: 'per Ream',
+    defaultEta: '24–48 hrs Express',
+  },
+  {
+    id: 'gel-pens',
+    name: 'Writing & Gel Pens',
+    category: 'Stationery Items',
+    slug: 'office-equipment-and-accessories-and-supplies-office-supply-writing-instruments-writing-pens/search',
+    priceUnit: 'per Box',
+    defaultEta: '24 hrs Dispatch',
+  },
+  {
+    id: 'plain-registers',
+    name: 'Registers & Diaries',
+    category: 'Stationery Items',
+    slug: 'planning-system-register-v2-/search',
+    priceUnit: 'per Register',
+    defaultEta: '2–3 Days Delivery',
+  },
+
+  // Electrical Appliances (all live-verified against mkp.gem.gov.in)
   {
     id: 'led-luminaires',
-    name: 'LED Luminaires',
+    name: 'LED Street Luminaires',
     category: 'Electrical Appliances',
-    slug: 'exterior-lighting-fixtures-and-accessories-led-luminaire-for-road-and-street-lights-/search',
+    slug: '-electrical-systems-and-lighting-and-components-and-accessories-and-supplies-lighting-fixtures-and-accessories-exterior-lighting-fixtures-and-accessories-led-luminaire-for-road-and-street-lights-v3-conforming-to-is-10322-part-5-section-3-/search',
     priceUnit: 'per Luminaire',
-    defaultEta: '⚡ 2-4 Days Dispatch',
+    defaultEta: '2–4 Days Dispatch',
   },
   {
     id: 'mccb-breakers',
     name: 'Circuit Breakers (MCCB)',
     category: 'Electrical Appliances',
-    slug: 'molded-case-circuit-breakers-mccb/search',
+    slug: 'circuit-protection-devices-and-accessories-molded-case-circuit-breakers-mccb-/search',
     priceUnit: 'per Breaker',
-    defaultEta: '⚡ 2-3 Days Delivery',
+    defaultEta: '2–3 Days Delivery',
   },
   {
     id: 'telecom-cables',
-    name: 'Telecommunication Cables',
+    name: 'XLPE Power Cables',
     category: 'Electrical Appliances',
-    slug: 'telecommunication-cable/search',
-    priceUnit: 'per Drum / 100m',
-    defaultEta: '⚡ 2-4 Days Delivery',
+    slug: 'electrical-cable-and-accessories-xlpe-cable-for-working-voltages-upto-and-including-1-1-kv-is-7098-part-1-/search',
+    priceUnit: 'per Drum / Roll',
+    defaultEta: '2–4 Days Delivery',
   },
 
-  // Electronic Equipments
+  // Electronic Equipments (all live-verified against mkp.gem.gov.in)
   {
     id: 'television-tv',
     name: 'Television TVs',
     category: 'Electronic Equipments',
     slug: 'domestic-appliances-and-supplies-and-consumer-electronic-products-consumer-electronics-audio-and-visual-equipmentold-television-tv-v2-/search',
     priceUnit: 'per TV Unit',
-    defaultEta: '⚡ 2-4 Days Delivery',
+    defaultEta: '2–4 Days Delivery',
+  },
+  {
+    id: 'split-ac',
+    name: 'Split Air Conditioners',
+    category: 'Electronic Equipments',
+    slug: 'heating-and-ventilation-and-air-circulation-cooling-equipment-and-parts-and-accessories-split-air-conditioner-ceiling-mount-type-v3-isi-marked-to-is-1391-part-2-/search',
+    priceUnit: 'per Unit',
+    defaultEta: '3–5 Days Delivery',
+  },
+  {
+    id: 'window-ac',
+    name: 'Window Air Conditioners',
+    category: 'Electronic Equipments',
+    slug: 'heating-and-ventilation-and-air-circulation-cooling-equipment-and-parts-and-accessories-unitary-air-conditioner-window-ac-v3-isi-marked-to-is-1391-part-1-/search',
+    priceUnit: 'per Unit',
+    defaultEta: '3–5 Days Delivery',
   },
   {
     id: 'domestic-refrigerators',
-    name: 'Domestic Refrigerators',
+    name: 'Cooling Refrigerators',
     category: 'Electronic Equipments',
-    slug: 'domestic-refrigerators-version-2/search',
-    priceUnit: 'per Refrigerator',
-    defaultEta: '⚡ 3-5 Days Delivery',
+    slug: 'laboratory-and-scientific-equipment-laboratory-cooling-equipment-laboratory-refrigerator-v3-/search',
+    priceUnit: 'per Unit',
+    defaultEta: '3–5 Days Delivery',
   },
 
-  // Textile Products
+  // Textile Products (all live-verified against mkp.gem.gov.in)
   {
     id: 'cotton-bed-sheets',
     name: 'Handloom Cotton Bed Sheets',
     category: 'Textile Products',
-    slug: 'handloom-cotton-bed-sheets-v2-per-745/search',
-    priceUnit: 'per Set of 2',
-    defaultEta: '⚡ 2-4 Days Express',
+    slug: 'bedclothes-handloom-cotton-bed-sheets-as-per-is-745-version-2-/search',
+    priceUnit: 'per Set',
+    defaultEta: '2–4 Days Express',
   },
   {
     id: 'cotton-towels',
     name: 'Cotton Towels (IS 7056)',
     category: 'Textile Products',
-    slug: 'cotton-towels-as-per-is-7056/search',
-    priceUnit: 'per Pack of 6',
-    defaultEta: '⚡ 24-48 Hours Express',
+    slug: 'towels-cotton-towelling-and-towels-v4-conforming-to-is-7056/search',
+    priceUnit: 'per Pack',
+    defaultEta: '24–48 hrs Express',
+  },
+  {
+    id: 'turkish-towels',
+    name: 'Handloom Turkish Towels',
+    category: 'Textile Products',
+    slug: 'towels-handloom-cotton-turkish-honeycomb-and-huckaback-towels-is-854-version-2-/search',
+    priceUnit: 'per Piece / Pack',
+    defaultEta: '2–4 Days Delivery',
   },
 
-  // Pipes and Fittings
+  // Pipes & Fittings (all live-verified against mkp.gem.gov.in)
   {
     id: 'steel-tubes-fittings',
-    name: 'Steel Tubes & Fittings',
+    name: 'ISI Steel Tubes (IS 1239)',
     category: 'Pipes & Fittings',
-    slug: 'steel-tubes/search',
-    priceUnit: 'per Metric Tonne',
-    defaultEta: '⚡ 5-7 Days Dispatch',
+    slug: 'seamless-steel-tubes-steel-tubes-tubulars-isi-marked-to-is-1239-part-1-v2/search',
+    priceUnit: 'per Length / MT',
+    defaultEta: '5–7 Days Dispatch',
   },
   {
     id: 'cpvc-pipe-fittings',
-    name: 'CPVC Pipe Fittings',
+    name: 'CPVC Water Pipes (IS 15778)',
     category: 'Pipes & Fittings',
-    slug: 'pipe-fittings/search',
-    priceUnit: 'per Carton of 50',
-    defaultEta: '⚡ 2-4 Days Delivery',
-  },
-
-  // Medical
-  {
-    id: 'hand-sanitizer',
-    name: 'Hand Sanitizer (IS 4148)',
-    category: 'Medical Products',
-    slug: 'bath-and-body-alcohol-based-hand-sanitizer/search',
-    priceUnit: 'per 5L Container',
-    defaultEta: '⚡ 24-48 Hours Express',
+    slug: 'commercial-pipe-and-piping-chlorinated-polyvinyl-chloride-cpvc-pipes-for-portable-hot-and-cold-water-distribution-supplies-v3-conforming-to-is-15778/search',
+    priceUnit: 'per Pipe / Lot',
+    defaultEta: '2–4 Days Delivery',
   },
   {
-    id: 'surgical-gloves',
-    name: 'Surgical Gloves',
-    category: 'Medical Products',
-    slug: 'surgical-gloves/search',
-    priceUnit: 'per Box of 100',
-    defaultEta: '⚡ 24-48 Hours Express',
+    id: 'structural-steel-tubes',
+    name: 'Structural Steel Tubes',
+    category: 'Pipes & Fittings',
+    slug: 'tubes-tubing-and-tube-fittings-welded-steel-tubes-steel-tubes-for-structural-purposes-v2-as-per-is-1161/search',
+    priceUnit: 'per MT / Lot',
+    defaultEta: '5–7 Days Dispatch',
   },
   {
-    id: 'disposable-syringes',
-    name: 'Disposable Syringes',
-    category: 'Medical Products',
-    slug: 'syringes-and-accessories-disposable-syringes52/search',
-    priceUnit: 'per Pack of 50',
-    defaultEta: '⚡ 24-48 Hours Express',
+    id: 'pipe-clamps',
+    name: 'Pipe Clamps & Hardware',
+    category: 'Pipes & Fittings',
+    slug: 'hardware-clamps-pipe-clamps-v2-/search',
+    priceUnit: 'per Pack',
+    defaultEta: '2–4 Days Delivery',
   },
 ];
 
@@ -326,30 +388,63 @@ export class GeMClientCrawler {
   }
 
   /**
+   * Extracts live GeM category slugs from `https://mkp.gem.gov.in/search?q=...` HTML.
+   * GeM appends `#/?q=...` exclusively to real search-result category links (not navbar items),
+   * enabling dynamic live discovery for arbitrary keywords outside our curated presets.
+   */
+  public static extractDiscoveredSearchSlugs(html: string): string[] {
+    if (!html) return [];
+    const seen = new Set<string>();
+    const results: string[] = [];
+    const regex = /href=["'](?:https:\/\/mkp\.gem\.gov\.in)?\/([a-z0-9_-]+)\/search#\/\?q=/gi;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(html)) !== null) {
+      const slug = `${match[1]}/search`;
+      if (!seen.has(slug)) {
+        seen.add(slug);
+        results.push(slug);
+      }
+    }
+    return results;
+  }
+
+  /**
    * Matches a free-text product search query against verified GeM category slugs
-   * so direct keyword search resolves straight to live mkp.gem.gov.in product listings.
+   * using exact / multi-token scoring so arbitrary queries fall through to GeM's
+   * live dynamic search discovery instead of hijacking unrelated categories.
    */
   public static resolveMatchingSubcategory(query: string): GeMSubcategoryConfig | undefined {
     const q = query.trim().toLowerCase();
     if (!q) return undefined;
-    const tokens = q.split(/\s+/).filter((t) => t.length >= 3);
 
-    return OFFICIAL_GEM_SUBCATEGORIES.find((sub) => {
-      const haystack = `${sub.name} ${sub.category} ${sub.id} ${sub.slug}`.toLowerCase();
-      if (haystack.includes(q)) return true;
-      return tokens.some((token) => haystack.includes(token));
+    // 1. Direct full-phrase match on name, id, or category
+    const exactMatch = OFFICIAL_GEM_SUBCATEGORIES.find((sub) => {
+      const haystack = `${sub.name} ${sub.category} ${sub.id}`.toLowerCase();
+      return haystack.includes(q);
     });
+    if (exactMatch) return exactMatch;
+
+    // 2. Multi-token match where ALL meaningful words appear in the subcategory
+    const tokens = q.split(/\s+/).filter((t) => t.length >= 3);
+    if (tokens.length === 0) return undefined;
+
+    const allTokenMatch = OFFICIAL_GEM_SUBCATEGORIES.find((sub) => {
+      const haystack = `${sub.name} ${sub.category} ${sub.id} ${sub.slug}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+    return allTokenMatch;
   }
 
   /**
-   * Searches live products across GeM using the official marketplace search endpoint,
-   * automatically falling back to the matching official category listing when GeM's
-   * generic /search page returns category links instead of direct variant cards.
+   * Searches live products across GeM using the official marketplace search endpoint.
+   * When GeM's `/search?q=...` returns matching category links instead of direct variant
+   * cards, automatically follows the top live category link(s) so ANY keyword returns
+   * genuine live seller listings directly from mkp.gem.gov.in.
    */
   public static async searchLiveProducts(
     query: string,
     page: number = 1,
-    timeoutMs: number = 8000,
+    timeoutMs: number = 9000,
     allowCategoryResolve: boolean = true
   ): Promise<{ items: MarketplaceItem[]; hasMore: boolean; page: number }> {
     if (!query || !query.trim()) {
@@ -389,10 +484,22 @@ export class GeMClientCrawler {
       }
 
       const html = await resp.text();
-      const items = this.parseGeMHtml(html, 'Marketplace Search', 'per Unit', '⚡ 2-4 Days GeM Delivery');
-      const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
+      const items = this.parseGeMHtml(html, 'Marketplace Search', 'per Unit', '2–4 Days Delivery');
+      if (items.length > 0) {
+        const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
+        return { items, hasMore, page };
+      }
 
-      return { items, hasMore, page };
+      // Dynamic category resolution: follow live category links returned by mkp.gem.gov.in/search?q=
+      const discoveredSlugs = this.extractDiscoveredSearchSlugs(html);
+      for (const discoveredSlug of discoveredSlugs.slice(0, 3)) {
+        const subResult = await this.fetchCategoryPage(discoveredSlug, page, timeoutMs, false);
+        if (subResult.items.length > 0) {
+          return subResult;
+        }
+      }
+
+      return { items: [], hasMore: false, page };
     } catch {
       return { items: [], hasMore: false, page };
     }

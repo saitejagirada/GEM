@@ -21,12 +21,14 @@ import type { DeconstructedBidDoc } from '../types/index';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { isNetworkOnline } from '../utils/network';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
+import { BidDocumentViewer } from './BidDocumentViewer';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
   SegmentedTabs,
   StatusBadge,
   PrimaryButton,
+  SecondaryButton,
 } from '../components/SharedUI';
 
 type TabMode = 'Live Reverse' | 'Forward e-Scrap';
@@ -44,6 +46,11 @@ export interface ReverseAuctionDetailItem {
   closingDateLabel?: string;
   docUrl: string;
   publishedQuantity: boolean;
+  sourceBid?: DeconstructedBidDoc;
+}
+
+interface AuctionsHubScreenProps {
+  onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
 }
 
 const getClosingLabel = (closingTimeUtc: string): string => {
@@ -62,7 +69,7 @@ const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc): ReverseAuctionDeta
   return {
     id: `ra-${bid.b_id || bid.bidNumber}`,
     contractNumber: bid.bidNumber,
-    originalBidNumber: bid.bidNumber,
+    originalBidNumber: bid.parentBidNumber || bid.bidNumber,
     title: bid.title,
     category: bid.categoryDomain || 'Category not published',
     department: bid.department,
@@ -72,16 +79,18 @@ const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc): ReverseAuctionDeta
     closingDateLabel: getClosingLabel(bid.closingTimeUtc),
     docUrl: bid.docUrl,
     publishedQuantity: bid.publishedFields?.quantity ?? totalQuantity !== undefined,
+    sourceBid: bid,
   };
 };
 
-export const AuctionsHubScreen: React.FC = () => {
+export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareDocuments }) => {
   const { colors, fontMultiplier } = useTheme();
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>([]);
   const [totalPortalRas, setTotalPortalRas] = useState<number>(0);
   const [selectedRa, setSelectedRa] = useState<ReverseAuctionDetailItem | null>(null);
+  const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOffline, setIsOffline] = useState<boolean>(false);
@@ -161,7 +170,13 @@ export const AuctionsHubScreen: React.FC = () => {
   }, [reverseAuctions, searchQuery]);
 
   if (selectedRa) {
-    return <ReverseAuctionScreen auction={selectedRa} onBack={() => setSelectedRa(null)} />;
+    return (
+      <ReverseAuctionScreen
+        auction={selectedRa}
+        onBack={() => setSelectedRa(null)}
+        onPrepareDocuments={onPrepareDocuments}
+      />
+    );
   }
 
   return (
@@ -227,15 +242,36 @@ export const AuctionsHubScreen: React.FC = () => {
                 </Text>
                 <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.metaCol}>
-                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>PUBLIC SOURCE</Text>
-                    <Text style={[styles.metaValue, { color: colors.primary }]}>GeM live feed</Text>
+                    <Text style={[styles.metaLabel, { color: colors.textMuted }]}>
+                      {ra.sourceBid?.parentBidNumber ? 'PARENT BID' : 'PUBLIC SOURCE'}
+                    </Text>
+                    <Text style={[styles.metaValue, { color: colors.primary }]} numberOfLines={1}>
+                      {ra.sourceBid?.parentBidNumber || 'GeM live feed'}
+                    </Text>
                   </View>
                   <View style={styles.metaCol}>
                     <Text style={[styles.metaLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-                    <Text style={[styles.metaValue, { color: colors.textPrimary }]}>{ra.publishedQuantity && ra.totalQuantity !== undefined ? ra.totalQuantity.toLocaleString() : 'Not published'}</Text>
+                    <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
+                      {ra.publishedQuantity && ra.totalQuantity !== undefined
+                        ? ra.totalQuantity.toLocaleString('en-IN')
+                        : 'In PDF'}
+                    </Text>
                   </View>
                 </View>
-                <PrimaryButton label="Review public auction" onPress={() => setSelectedRa(ra)} style={{ marginTop: 10 }} />
+                <View style={styles.cardActionsRow}>
+                  {ra.sourceBid ? (
+                    <SecondaryButton
+                      label="View PDF"
+                      onPress={() => setDocumentBid(ra.sourceBid || null)}
+                      style={{ flex: 1, marginRight: 8 }}
+                    />
+                  ) : null}
+                  <PrimaryButton
+                    label="Inspect Auction"
+                    onPress={() => setSelectedRa(ra)}
+                    style={{ flex: 1.4 }}
+                  />
+                </View>
               </View>
             ))
           )
@@ -256,6 +292,12 @@ export const AuctionsHubScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      <BidDocumentViewer
+        bid={documentBid}
+        visible={Boolean(documentBid)}
+        onClose={() => setDocumentBid(null)}
+      />
     </View>
   );
 };
@@ -274,6 +316,7 @@ const styles = StyleSheet.create({
   metaCol: { flex: 1 },
   metaLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 2 },
   metaValue: { fontSize: 13, fontWeight: '700' },
+  cardActionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   publicNote: { fontSize: 12, lineHeight: 17 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
   emptyEmoji: { fontSize: 32, marginBottom: 8 },

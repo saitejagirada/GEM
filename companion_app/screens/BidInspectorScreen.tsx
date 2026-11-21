@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
+  ActivityIndicator,
   Alert,
-  Share,
+  Modal,
+  Pressable,
   SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
@@ -38,7 +40,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   onClose,
   onPrepareDocuments,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
   const [isScanningPdf, setIsScanningPdf] = useState(false);
@@ -54,23 +56,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     setDocumentViewerVisible(false);
     setShowDealSheet(false);
     setSelectedDocumentId(undefined);
-    if (!bid) return;
+    if (!bid || !visible) return;
 
     let cancelled = false;
-    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
-    if (PortalDocService.isSafeGemUrl(targetUrl)) {
-      setIsScanningPdf(true);
-      LocalPdfScanner.scanOfficialBidPdf(bid.bidNumber, targetUrl)
-        .then((result) => {
-          if (!cancelled) setPdfScan(result);
-        })
-        .finally(() => {
-          if (!cancelled) setIsScanningPdf(false);
-        });
-    }
+    setIsScanningPdf(true);
+    LocalPdfScanner.scanBidDocuments(bid)
+      .then((result) => {
+        if (!cancelled) setPdfScan(result);
+      })
+      .finally(() => {
+        if (!cancelled) setIsScanningPdf(false);
+      });
 
-    if (bid.b_id) {
-      GeMLiveSyncService.fetchBidOtherDetails(bid.b_id).then((details) => {
+    const probeId = bid.b_id || bid.parentBidId;
+    if (probeId) {
+      GeMLiveSyncService.fetchBidOtherDetails(probeId).then((details) => {
         if (!cancelled && details) setOtherDetails(details);
       });
     }
@@ -78,13 +78,20 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [bid?.bidNumber, bid?.docUrl, bid?.b_id]);
+  }, [bid?.bidNumber, bid?.docUrl, bid?.b_id, bid?.parentBidId, visible]);
+
+  const officialDocuments = useMemo(
+    () => (bid ? PortalDocService.getOfficialDocuments(bid) : []),
+    [bid]
+  );
 
   if (!bid) return null;
 
   const effectiveBid = enrichBidWithPdfScan(bid, pdfScan);
   const fundamentals = BidDocService.getFundamentalsSummary(effectiveBid);
   const risks = BidDocService.assessTenderRisks(effectiveBid);
+  const ext = pdfScan?.details?.extendedDetails;
+  const scannedOk = pdfScan?.status === 'EXTRACTED';
 
   const requiredDocuments = Array.isArray(effectiveBid.requiredDocuments) ? effectiveBid.requiredDocuments : [];
   const boqItems = Array.isArray(effectiveBid.boqItems) ? effectiveBid.boqItems : [];
@@ -97,28 +104,17 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     }));
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `GeM Bid Summary: ${bid.bidNumber || 'N/A'}\n${bid.title || 'Untitled Bid'}\nEst Value: ${fundamentals.estimatedValueLabel}\nEMD: ${fundamentals.emdLabel}\nClosing: ${formatDateSafe(bid.closingTimeUtc)}`,
-      });
-    } catch {
-      Alert.alert('Share', `Sharing summary for ${bid.bidNumber || 'bid'}`);
-    }
-  };
-
   const handlePrepareDocuments = () => {
     if (onPrepareDocuments) {
-      onPrepareDocuments(bid);
+      onPrepareDocuments(effectiveBid);
       return;
     }
     Alert.alert('Document preparation', 'Choose this bid from the document preparation workspace.');
   };
 
-  const officialDocuments = PortalDocService.getOfficialDocuments(bid);
-
   const handleOpenDoc = (documentId = officialDocuments[0]?.id) => {
-    const targetDocument = officialDocuments.find((document) => document.id === documentId) || officialDocuments[0];
+    const targetDocument =
+      officialDocuments.find((document) => document.id === documentId) || officialDocuments[0];
     if (!targetDocument || !PortalDocService.isSafeGemUrl(targetDocument.url)) {
       Alert.alert('Security Notice', 'Document link is not from a verified official GeM domain.');
       return;
@@ -128,15 +124,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   };
 
   const handleScanPdfOnDevice = async () => {
-    const targetUrl = PortalDocService.resolvePdfUrl(bid.bidNumber, bid.docUrl);
-    if (!PortalDocService.isSafeGemUrl(targetUrl)) {
-      Alert.alert('Security Notice', 'The bid document is not from a verified official GeM domain.');
-      return;
-    }
-
     setIsScanningPdf(true);
     try {
-      const result = await LocalPdfScanner.scanOfficialBidPdf(bid.bidNumber, targetUrl);
+      const result = await LocalPdfScanner.scanBidDocuments(bid);
       setPdfScan(result);
       if (result.status === 'NO_TEXT_LAYER') {
         Alert.alert('No readable text layer', result.note);
@@ -150,38 +140,18 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     }
   };
 
-  const pdfFieldRows: Array<[string, string | number | undefined]> = [
-    ['Bid number', pdfScan?.details.bidNumber],
-    ['Title', pdfScan?.details.title],
-    ['Department', pdfScan?.details.department],
-    ['Ministry', pdfScan?.details.ministry],
-    ['Closing date', pdfScan?.details.closingDate],
-    [
-      'Estimated value',
-      pdfScan?.details.estimatedValueInr !== undefined
-        ? `₹${pdfScan.details.estimatedValueInr.toLocaleString('en-IN')}`
-        : undefined,
-    ],
-    [
-      'EMD amount',
-      pdfScan?.details.emdAmountInr !== undefined
-        ? `₹${pdfScan.details.emdAmountInr.toLocaleString('en-IN')}`
-        : undefined,
-    ],
-  ];
-
   const renderTypeBadge = () => {
     if (bid.isRa || bid.type === 'RA') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>RA · REVERSE AUCTION</Text>
+          <Text style={[styles.typeBadgeText, { color: '#DC2626' }]}>REVERSE AUCTION</Text>
         </View>
       );
     }
     if (bid.type === 'SERVICE') {
       return (
         <View style={[styles.typeBadge, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
-          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>SERVICE CONTRACT</Text>
+          <Text style={[styles.typeBadgeText, { color: '#059669' }]}>SERVICE BID</Text>
         </View>
       );
     }
@@ -214,356 +184,601 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const diffMs = isValidDate ? Math.max(0, closingDate.getTime() - Date.now()) : 0;
   const diffHours = Math.floor(diffMs / 3600000);
   const diffMins = Math.floor((diffMs % 3600000) / 60000);
+  const isClosingSoon = isValidDate && diffMs > 0 && diffHours < 24;
   const remainingLabel = !isValidDate
-    ? 'Closing date on portal'
-    : diffHours > 48
-    ? `${Math.floor(diffHours / 24)}d ${diffHours % 24}h remaining`
-    : `${diffHours}h ${diffMins}m remaining`;
+    ? 'See official PDF'
+    : diffMs === 0
+      ? 'Closing time elapsed'
+      : diffHours > 48
+        ? `${Math.floor(diffHours / 24)}d ${diffHours % 24}h left`
+        : `${diffHours}h ${diffMins}m left`;
+
+  // Honest, crystal-clear values for all 8 cells of the balanced 2x4 Fundamentals grid
+  const fallbackValue = isScanningPdf ? 'Scanning…' : scannedOk ? 'Not specified' : 'In PDF';
+
+  const estValueDisplay =
+    effectiveBid.estimatedBidValueInr !== undefined && effectiveBid.estimatedBidValueInr > 0
+      ? fundamentals.estimatedValueLabel
+      : effectiveBid.isHighValue
+        ? '≥ ₹2 Cr (High Value)'
+        : isScanningPdf
+          ? 'Scanning…'
+          : scannedOk
+            ? 'Not disclosed'
+            : 'In PDF';
+
+  const emdDisplay =
+    effectiveBid.emdAmountInr !== undefined
+      ? fundamentals.emdLabel
+      : effectiveBid.isEmdExemptForMse
+        ? 'MSE Exempt'
+        : fallbackValue;
+  const emdIsPositive =
+    effectiveBid.emdAmountInr === 0 || Boolean(effectiveBid.isEmdExemptForMse);
+
+  const epbgDisplay =
+    effectiveBid.epbgPercentage !== undefined
+      ? effectiveBid.epbgPercentage === 0
+        ? '0% (Not Required)'
+        : effectiveBid.epbgDurationMonths
+          ? `${effectiveBid.epbgPercentage}% (${effectiveBid.epbgDurationMonths} mo)`
+          : `${effectiveBid.epbgPercentage}%`
+      : fallbackValue;
+
+  const deliveryDisplay =
+    effectiveBid.deliveryPeriodDays !== undefined
+      ? `${effectiveBid.deliveryPeriodDays} Days`
+      : fallbackValue;
+
+  const turnoverDisplay =
+    effectiveBid.minAnnualTurnoverInr !== undefined
+      ? fundamentals.turnoverLabel
+      : ext?.mseExemptionForExpAndTurnover
+        ? 'MSE / Startup Relaxed'
+        : fallbackValue;
+
+  const experienceDisplay =
+    effectiveBid.yearsExperienceRequired !== undefined
+      ? fundamentals.experienceLabel
+      : ext?.mseExemptionForExpAndTurnover
+        ? 'MSE / Startup Relaxed'
+        : fallbackValue;
+
+  const splittingDisplay =
+    effectiveBid.splittingRatio ||
+    (effectiveBid.isSplittingApplied === false && scannedOk ? '100% to L1 (No Split)' : fallbackValue);
+
+  const bidFormatParts: string[] = [];
+  if (effectiveBid.typeOfBid) {
+    bidFormatParts.push(effectiveBid.typeOfBid.replace(/\s+Bid$/i, ''));
+  }
+  if (effectiveBid.bidValidityDays) {
+    bidFormatParts.push(`${effectiveBid.bidValidityDays}d valid`);
+  }
+  const totalQty = boqItems[0]?.quantity ?? ext?.totalQuantity;
+  const bidFormatDisplay =
+    bidFormatParts.length > 0
+      ? bidFormatParts.join(' · ')
+      : totalQty !== undefined
+        ? `${totalQty.toLocaleString('en-IN')} Units`
+        : fallbackValue;
+
+  // Compact policy tags extracted from official PDF(s)
+  const policyTags: Array<{ label: string; bg: string; color: string }> = [];
+  if (effectiveBid.isEmdExemptForMse || ext?.mseExemptionForExpAndTurnover) {
+    policyTags.push({ label: 'MSE Exemption', bg: '#DCFCE7', color: '#166534' });
+  }
+  if (effectiveBid.isEmdExemptForStartup || ext?.startupExemptionForExpAndTurnover) {
+    policyTags.push({ label: 'Startup Exemption', bg: '#DCFCE7', color: '#166534' });
+  }
+  if (effectiveBid.msePurchasePreference) {
+    policyTags.push({ label: 'MSE Purchase Pref', bg: '#E0F2FE', color: '#0369A1' });
+  }
+  if (effectiveBid.miiPurchasePreference) {
+    const miiLabel =
+      effectiveBid.makeInIndiaClass === 'CLASS_1'
+        ? 'MII Class-1 (≥50%)'
+        : effectiveBid.makeInIndiaClass === 'CLASS_2'
+          ? 'MII Class-2 (≥20%)'
+          : 'MII Preference';
+    policyTags.push({ label: miiLabel, bg: '#FEF3C7', color: '#92400E' });
+  }
+  if (effectiveBid.pastPerformancePercentage !== undefined) {
+    policyTags.push({
+      label: `Past Perf ${effectiveBid.pastPerformancePercentage}%`,
+      bg: '#F3E8FF',
+      color: '#6B21A8',
+    });
+  }
+  if (ext?.isRaEnabled || bid.isRa) {
+    policyTags.push({ label: 'Reverse Auction', bg: '#FEE2E2', color: '#B91C1C' });
+  }
 
   return (
     <>
       <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#0B3B60' }}>
+          <StatusBar barStyle="light-content" backgroundColor="#0B3B60" />
           <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Top Header Bar (GeM Ashoka Navy) */}
             <View style={styles.headerBar}>
-              <TouchableOpacity style={styles.closeBtn} onPress={onClose} accessibilityLabel="Close details">
-                <Text style={styles.closeBtnText}>✕</Text>
-              </TouchableOpacity>
+              <Pressable
+                style={({ pressed }) => [styles.headerBackBtn, pressed && { opacity: 0.75 }]}
+                onPress={onClose}
+                hitSlop={8}
+                accessibilityLabel="Close bid details"
+              >
+                <Text style={styles.headerBackIcon}>←</Text>
+              </Pressable>
               <View style={styles.headerCenter}>
-                <Text style={styles.headerBidNum}>{bid.bidNumber}</Text>
-                <Text style={styles.headerSubtitle}>Public GeM bid record</Text>
+                <Text style={styles.headerBidNum} numberOfLines={1}>{bid.bidNumber}</Text>
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {BidDocService.getProcurementTypeLabel(bid).label} · Direct GeM Feed
+                </Text>
               </View>
-              <TouchableOpacity style={styles.shareBtn} onPress={() => setShowDealSheet(true)} accessibilityLabel="Share WhatsApp Deal Sheet">
-                <Text style={styles.shareBtnText}>📲</Text>
-              </TouchableOpacity>
+              <Pressable
+                style={({ pressed }) => [styles.sharePillBtn, pressed && { opacity: 0.8 }]}
+                onPress={() => setShowDealSheet(true)}
+                hitSlop={6}
+                accessibilityLabel="Share WhatsApp Deal Sheet"
+              >
+                <Text style={styles.sharePillText}>Share ↗</Text>
+              </Pressable>
             </View>
 
             <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-              {/* WhatsApp Deal Sheet Hero Action */}
-              <TouchableOpacity
-                style={styles.whatsAppHeroBtn}
-                onPress={() => setShowDealSheet(true)}
-                activeOpacity={0.85}
-                accessibilityLabel="Generate WhatsApp Deal Sheet"
-              >
-                <Text style={{ fontSize: 20, marginRight: 10 }}>📲</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.whatsAppHeroTitle}>Share WhatsApp Deal Sheet</Text>
-                  <Text style={styles.whatsAppHeroSub}>Instant 1080×1350 summary • EMD waiver badge • Zero login</Text>
-                </View>
-                <View style={styles.whatsAppBadge}>
-                  <Text style={styles.whatsAppBadgeText}>FORWARD ↗</Text>
-                </View>
-              </TouchableOpacity>
-
               {/* Live GeM Corrigendum / Representation Probe Alert */}
               {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
-                <View style={[styles.cutoffBanner, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1 }]}>
-                  <View style={styles.cutoffLeft}>
-                    <Text style={[styles.cutoffIcon, { backgroundColor: '#D97706' }]}>!</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.cutoffTitle, { color: '#92400E' }]}>
-                        {otherDetails.hasCorrigendum ? 'Live Corrigendum Published on GeM' : 'Live Representation Recorded on GeM'}
+                <View style={styles.corrigendumBanner}>
+                  <View style={styles.corrigendumIconWrap}>
+                    <Text style={styles.corrigendumIconText}>!</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.corrigendumTitle}>
+                      {otherDetails.hasCorrigendum
+                        ? 'Live Corrigendum Published on GeM'
+                        : 'Live Representation Recorded on GeM'}
+                    </Text>
+                    <Text style={styles.corrigendumSubtitle}>
+                      Verified directly from bidplus.gem.gov.in. Review official PDF updates before quoting.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* 1. Hero Tender Summary Card */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.cardHeaderBadges}>
+                  {renderTypeBadge()}
+                  {bid.isHighValue ? (
+                    <View style={[styles.typeBadge, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
+                      <Text style={[styles.typeBadgeText, { color: '#15803D' }]}>≥ ₹2 Cr</Text>
+                    </View>
+                  ) : null}
+                  {bid.parentBidNumber ? (
+                    <View style={[styles.domainBadge, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                      <Text style={[styles.domainBadgeText, { color: colors.textSecondary }]}>
+                        Parent: {bid.parentBidNumber}
                       </Text>
-                      <Text style={[styles.cutoffSubtitle, { color: '#78350F' }]}>
-                        Verified directly from bidplus.gem.gov.in. Review the official bid page before submitting.
+                    </View>
+                  ) : null}
+                </View>
+
+                <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>
+                  {effectiveBid.title || 'Untitled Bid'}
+                </Text>
+                <Text style={[styles.deptText, { color: colors.textSecondary }]}>
+                  {[effectiveBid.department, effectiveBid.ministry !== effectiveBid.department ? effectiveBid.ministry : '']
+                    .filter(Boolean)
+                    .join(' • ')}
+                </Text>
+
+                {/* Closing Strip */}
+                <View
+                  style={[
+                    styles.closingStrip,
+                    {
+                      backgroundColor: isClosingSoon ? '#FEF2F2' : colors.surfaceSubtle,
+                      borderColor: isClosingSoon ? '#FECACA' : colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.closingLabel, { color: isClosingSoon ? '#991B1B' : colors.textMuted }]}>
+                      CLOSING TIME (IST)
+                    </Text>
+                    <Text style={[styles.closingDateText, { color: isClosingSoon ? '#B91C1C' : colors.textPrimary }]}>
+                      {formatDateSafe(bid.closingTimeUtc)}
+                    </Text>
+                  </View>
+                  <View style={[styles.remainingPill, { backgroundColor: isClosingSoon ? '#DC2626' : '#0B3B60' }]}>
+                    <Text style={styles.remainingPillText}>{remainingLabel}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* 2. Official Documents — Inline PDF Viewer Quick Access */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                    Official Tender PDFs
+                  </Text>
+                  <View style={styles.inlineTag}>
+                    <Text style={styles.inlineTagText}>INLINE VIEWER</Text>
+                  </View>
+                </View>
+                {officialDocuments.map((document, idx) => {
+                  const isParent = document.id === 'parent-bid-document';
+                  const isRa = /show(?:direct)?radocumentPdf/i.test(document.url);
+                  return (
+                    <Pressable
+                      key={document.id}
+                      style={({ pressed }) => [
+                        styles.docRow,
+                        idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                        pressed && { opacity: 0.75 },
+                      ]}
+                      onPress={() => handleOpenDoc(document.id)}
+                    >
+                      <View style={[styles.docPdfBadge, isParent && { backgroundColor: '#E0F2FE' }]}>
+                        <Text style={[styles.docPdfBadgeText, isParent && { color: '#0369A1' }]}>
+                          {isRa ? 'RA' : 'PDF'}
+                        </Text>
+                      </View>
+                      <View style={styles.docCopy}>
+                        <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                          {document.label}
+                        </Text>
+                        <Text style={[styles.docSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {isRa
+                            ? 'RA schedule, auto-extension & exemptions'
+                            : isParent
+                              ? 'Full technical specs, EMD, ePBG, consignees & ATC'
+                              : 'Official bid specifications, terms & ATC clauses'}
+                        </Text>
+                      </View>
+                      <View style={styles.docReadPill}>
+                        <Text style={styles.docReadPillText}>Read ›</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* 3. Key Procurement Fundamentals (Balanced 2x4 Grid powered by On-Device PDF Scan) */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                    Key Procurement Fundamentals
+                  </Text>
+                  {isScanningPdf ? (
+                    <View style={styles.scanStatusBusy}>
+                      <ActivityIndicator size="small" color="#0B3B60" />
+                      <Text style={styles.scanStatusBusyText}>Scanning…</Text>
+                    </View>
+                  ) : scannedOk ? (
+                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={styles.scanStatusOk}>
+                      <Text style={styles.scanStatusOkText}>
+                        ✓ {officialDocuments.length > 1 ? 'RA + Bid PDF' : 'From PDF'}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={handleScanPdfOnDevice} hitSlop={8} style={styles.scanRetryPill}>
+                      <Text style={styles.scanRetryText}>Scan PDF ↻</Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                {isScanningPdf ? (
+                  <View style={[styles.scanningBanner, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <ActivityIndicator size="small" color="#0B3B60" />
+                    <Text style={[styles.scanningBannerText, { color: colors.textSecondary }]}>
+                      Reading official GeM PDF{officialDocuments.length > 1 ? 's' : ''} locally on your phone to extract EMD, ePBG, turnover &amp; delivery terms…
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.grid2x4}>
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>ESTIMATED VALUE</Text>
+                    <Text style={[styles.cellValue, { color: effectiveBid.estimatedBidValueInr ? colors.primary : colors.textPrimary }]} numberOfLines={2}>
+                      {estValueDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>EMD GUARANTEE</Text>
+                    <Text style={[styles.cellValue, { color: emdIsPositive ? '#15803D' : colors.textPrimary }]} numberOfLines={2}>
+                      {emdDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>e-PBG SECURITY</Text>
+                    <Text
+                      style={[
+                        styles.cellValue,
+                        {
+                          color:
+                            effectiveBid.epbgPercentage === 0
+                              ? '#15803D'
+                              : effectiveBid.epbgPercentage !== undefined
+                                ? '#B45309'
+                                : colors.textPrimary,
+                        },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {epbgDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>DELIVERY TIMELINE</Text>
+                    <Text style={[styles.cellValue, { color: effectiveBid.deliveryPeriodDays ? '#1D4ED8' : colors.textPrimary }]} numberOfLines={2}>
+                      {deliveryDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>MIN ANNUAL TURNOVER</Text>
+                    <Text style={[styles.cellValue, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {turnoverDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>PAST EXPERIENCE</Text>
+                    <Text style={[styles.cellValue, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {experienceDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>SPLITTING RULE</Text>
+                    <Text style={[styles.cellValue, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {splittingDisplay}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.gridCell, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                    <Text style={[styles.cellLabel, { color: colors.textMuted }]}>BID FORMAT / VALIDITY</Text>
+                    <Text style={[styles.cellValue, { color: colors.textPrimary }]} numberOfLines={2}>
+                      {bidFormatDisplay}
+                    </Text>
+                  </View>
+                </View>
+
+                {policyTags.length > 0 ? (
+                  <View style={styles.policyTagsRow}>
+                    {policyTags.map((tag) => (
+                      <View key={tag.label} style={[styles.policyTag, { backgroundColor: tag.bg }]}>
+                        <Text style={[styles.policyTagText, { color: tag.color }]}>{tag.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {pdfScan && !isScanningPdf ? (
+                  <Text style={[styles.scanFootnote, { color: colors.textMuted }]}>
+                    {pdfScan.status === 'EXTRACTED'
+                      ? `${pdfScan.textLength.toLocaleString('en-IN')} chars parsed locally on device · ${pdfScan.note}`
+                      : pdfScan.note}
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* Service Contract Terms (only for service bids) */}
+              {(bid.serviceDetails || bid.type === 'SERVICE') && (
+                <View style={[styles.card, styles.serviceCard]}>
+                  <View style={styles.serviceHeader}>
+                    <Text style={styles.serviceHeaderTitle}>Service contract terms &amp; SLAs</Text>
+                    <Text style={styles.serviceSlaBadge}>GeM SLA Governed</Text>
+                  </View>
+                  <View style={styles.grid2x4}>
+                    <View style={styles.serviceCell}>
+                      <Text style={styles.serviceCellLabel}>Contract Duration</Text>
+                      <Text style={styles.serviceCellValue}>
+                        {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : 'See PDF'}
+                      </Text>
+                    </View>
+                    <View style={styles.serviceCell}>
+                      <Text style={styles.serviceCellLabel}>Manpower / Staffing</Text>
+                      <Text style={styles.serviceCellValue}>
+                        {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'See PDF'}
                       </Text>
                     </View>
                   </View>
                 </View>
               )}
 
-              {/* Bid Closing Cutoff & Freeze Protection Banner */}
-              <View style={styles.cutoffBanner}>
-                <View style={styles.cutoffLeft}>
-                  <Text style={styles.cutoffIcon}>C</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cutoffTitle}>Closing: {formatDateSafe(bid.closingTimeUtc)}</Text>
-                    <Text style={styles.cutoffSubtitle}>{remainingLabel} • GeM portal freezes in final 15 mins</Text>
-                  </View>
+              {/* 4. On-Device Pre-Bid Disqualification Shield */}
+              {ext ? (
+                <PreBidDisqualificationShield
+                  tenderDetails={ext}
+                  onPrepareDocuments={handlePrepareDocuments}
+                />
+              ) : null}
+
+              {/* 5. Risk Factors Assessment */}
+              {risks.flags.length > 0 && (
+                <View style={[styles.card, styles.riskCard]}>
+                  <Text style={styles.riskTitle}>OPERATIONAL RISK ASSESSMENT · {risks.riskLevel}</Text>
+                  {risks.flags.map((flag, idx) => (
+                    <Text key={idx} style={styles.riskFlagText}>• {flag}</Text>
+                  ))}
                 </View>
-                <View style={styles.cutoffBadge}>
-                  <Text style={styles.cutoffBadgeText}>SUBMIT EARLY</Text>
-                </View>
+              )}
+
+              {/* 6. Published Scope / Quantity */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 10 }]}>
+                  Published Scope
+                </Text>
+                {boqItems.length > 0 ? (
+                  boqItems.map((item, idx) => (
+                    <View
+                      key={idx}
+                      style={[styles.boqItemRow, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}
+                    >
+                      <View style={styles.boqTopRow}>
+                        <Text style={[styles.boqItemTitle, { color: colors.textPrimary }]}>{item.itemTitle}</Text>
+                        <Text style={styles.boqQtyBadge}>
+                          {item.quantity !== undefined
+                            ? `${item.quantity.toLocaleString('en-IN')} ${item.unit || 'Units'}`
+                            : 'See PDF'}
+                        </Text>
+                      </View>
+                      {item.specsSummary ? (
+                        <Text style={[styles.boqSpecsText, { color: colors.textSecondary }]}>
+                          {item.specsSummary}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={[styles.notPublishedText, { color: colors.textSecondary }]}>
+                    Tap Read PDF Inline above to view the complete technical specifications and BOQ schedule.
+                  </Text>
+                )}
               </View>
 
-              {/* Tender Title & Ministry */}
+              {/* 7. Consignee Destinations */}
               <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <View style={styles.cardHeaderBadges}>
-                  {renderTypeBadge()}
-                  {bid.categoryDomain ? (
-                    <View style={styles.domainBadge}>
-                      <Text style={styles.domainBadgeText}>{bid.categoryDomain}</Text>
-                    </View>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                    Delivery Locations
+                  </Text>
+                  {consignees.length > 0 ? (
+                    <Text style={[styles.countPillText, { color: colors.primary }]}>
+                      {consignees.length} Consignee{consignees.length === 1 ? '' : 's'}
+                    </Text>
                   ) : null}
                 </View>
-                {bid.department ? <Text style={styles.deptBadge}>{bid.department}</Text> : null}
-                <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>{bid.title || 'Untitled Bid'}</Text>
-                {bid.ministry ? <Text style={[styles.ministryText, { color: colors.textSecondary }]}>{bid.ministry}</Text> : null}
-              </View>
-
-          {/* Service Contract Terms & SLA Standards */}
-          {(bid.serviceDetails || bid.type === 'SERVICE') && (
-            <View style={[styles.card, styles.serviceCard]}>
-              <View style={styles.serviceHeader}>
-                <Text style={styles.serviceHeaderTitle}>Service contract terms &amp; SLAs</Text>
-                <Text style={styles.serviceSlaBadge}>GeM SLA Governed</Text>
-              </View>
-              <View style={styles.serviceGrid}>
-                <View style={styles.serviceCell}>
-                  <Text style={styles.serviceCellLabel}>Contract Duration</Text>
-                  <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.durationMonths ? `${bid.serviceDetails.durationMonths} Months` : 'Not published'}
-                  </Text>
-                </View>
-                <View style={styles.serviceCell}>
-                  <Text style={styles.serviceCellLabel}>Manpower / Staffing</Text>
-                  <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.manpowerCount ? `${bid.serviceDetails.manpowerCount} Personnel` : 'Not published'}
-                  </Text>
-                </View>
-                <View style={styles.serviceCell}>
-                  <Text style={styles.serviceCellLabel}>Billing Cycle</Text>
-                  <Text style={styles.serviceCellValue}>
-                    {bid.serviceDetails?.billingCycle || 'Not published'}
-                  </Text>
-                </View>
-                <View style={styles.serviceCell}>
-                  <Text style={styles.serviceCellLabel}>Statutory Compliance</Text>
-                  <Text style={[styles.serviceCellValue, { color: '#059669' }]}>
-                    {bid.serviceDetails?.minimumWageCompliance === true ? 'Published compliance term' : 'Not published'}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.serviceNote}>
-                • Monthly billing subject to attendance muster roll &amp; PF/ESI challan verification prior to CRAC sign-off.
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Commercial guidance</Text>
-            <Text style={styles.notPublishedText}>
-              Bid ranking, L1 benchmarks, seller eligibility, and account-specific participation data are not available in the public feed. Confirm commercial terms on the official GeM document.
-            </Text>
-          </View>
-
-          {/* 2x2 Key Fundamentals Grid */}
-          <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Key Procurement Fundamentals</Text>
-            <View style={styles.grid2x2}>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>Estimated Value</Text>
-                <Text style={styles.cellValuePrimary}>{fundamentals.estimatedValueLabel}</Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>EMD Guarantee</Text>
-                <Text style={[styles.cellValueSecondary, { color: '#00C853' }]}>
-                  {fundamentals.emdLabel}
-                </Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>Min Annual Turnover</Text>
-                <Text style={styles.cellValuePrimary}>{fundamentals.turnoverLabel}</Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>Past Experience</Text>
-                <Text style={styles.cellValuePrimary}>{fundamentals.experienceLabel}</Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>Delivery Timeline</Text>
-                <Text style={styles.cellValueSecondary}>{fundamentals.deliveryPeriodLabel}</Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>e-PBG Bank Guarantee</Text>
-                <Text style={[styles.cellValueSecondary, { color: '#B45309' }]}>
-                  {bid.epbgPercentage === undefined ? 'Not published' : `${bid.epbgPercentage}%`}
-                </Text>
-              </View>
-              <View style={styles.gridCell}>
-                <Text style={styles.cellLabel}>Splitting Rule</Text>
-                <Text style={styles.cellValueSecondary}>{bid.splittingRatio || 'Not published'}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Official bid PDF and verified attachments */}
-          <View style={styles.card}>
-            <View style={styles.pdfScanHeader}>
-              <Text style={styles.sectionHeading}>Official bid documents</Text>
-              <Text style={styles.pdfScanBadge}>GeM SOURCE</Text>
-            </View>
-            <Text style={styles.notPublishedText}>
-              Read the official document in this app. Published specifications and ATC sections are shown inside the main PDF; separate attachments appear only when GeM provides a verified document link.
-            </Text>
-            {officialDocuments.map((document) => (
-              <TouchableOpacity
-                key={document.id}
-                style={styles.officialDocumentRow}
-                onPress={() => handleOpenDoc(document.id)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.officialDocumentIcon}>
-                  <Text style={styles.officialDocumentIconText}>{document.kind === 'BID' ? 'PDF' : 'DOC'}</Text>
-                </View>
-                <View style={styles.officialDocumentCopy}>
-                  <Text style={styles.officialDocumentTitle}>{document.label}</Text>
-                  <Text style={styles.officialDocumentSubtitle}>
-                    {document.kind === 'BID' ? 'Published bid, specifications and ATC sections when included' : 'Verified GeM attachment'}
-                  </Text>
-                </View>
-                <Text style={styles.officialDocumentAction}>View</Text>
-              </TouchableOpacity>
-            ))}
-            {officialDocuments.length === 1 ? (
-              <Text style={styles.documentAvailabilityNote}>
-                The current public GeM feed does not expose separate specification or corrigendum URLs for this bid.
-              </Text>
-            ) : null}
-          </View>
-
-          {/* Optional, bounded, device-only PDF analysis */}
-          <View style={styles.card}>
-            <View style={styles.pdfScanHeader}>
-              <Text style={styles.sectionHeading}>PDF details on this device</Text>
-              <Text style={styles.pdfScanBadge}>DEVICE ONLY</Text>
-            </View>
-            <Text style={styles.notPublishedText}>
-              Scan the official bid PDF only when needed. The raw file is processed on this device, removed after scanning, and never uploaded by the companion.
-            </Text>
-            <TouchableOpacity
-              style={[styles.pdfScanButton, isScanningPdf && styles.pdfScanButtonDisabled]}
-              onPress={handleScanPdfOnDevice}
-              disabled={isScanningPdf}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pdfScanButtonText}>
-                {isScanningPdf ? 'Scanning on device…' : pdfScan ? 'Scan again on device' : 'Scan bid PDF on device'}
-              </Text>
-            </TouchableOpacity>
-            {pdfScan ? (
-              <View style={styles.pdfScanResult}>
-                <Text style={styles.pdfScanStatus}>
-                  {pdfScan.status === 'EXTRACTED'
-                    ? `Read ${pdfScan.textLength.toLocaleString('en-IN')} characters locally`
-                    : pdfScan.status.replace(/_/g, ' ')}
-                </Text>
-                {pdfFieldRows
-                  .filter(([, value]) => value !== undefined && value !== '')
-                  .map(([label, value]) => (
-                    <View key={label} style={styles.pdfFieldRow}>
-                      <Text style={styles.pdfFieldLabel}>{label}</Text>
-                      <Text style={styles.pdfFieldValue}>{String(value)}</Text>
+                {consignees.length > 0 ? (
+                  consignees.map((c, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.consigneeRow,
+                        idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                      ]}
+                    >
+                      <View style={styles.consigneeLeft}>
+                        <Text style={[styles.consigneeLocation, { color: colors.textPrimary }]}>{c.location}</Text>
+                        <Text style={[styles.consigneeOfficer, { color: colors.textSecondary }]}>
+                          {c.reportingOfficer || 'Consignee Reporting Officer'}
+                        </Text>
+                      </View>
+                      <View style={styles.consigneeRight}>
+                        <Text style={styles.stateBadge}>
+                          {c.state || 'India'}{c.pincode ? ` · ${c.pincode}` : ''}
+                        </Text>
+                        <Text style={[styles.consigneeQty, { color: colors.textPrimary }]}>
+                          {c.quantity !== undefined ? `${c.quantity.toLocaleString('en-IN')} Units` : 'See PDF'}
+                        </Text>
+                      </View>
                     </View>
-                  ))}
-                <Text style={styles.pdfScanNote}>{pdfScan.note}</Text>
+                  ))
+                ) : (
+                  <Text style={[styles.notPublishedText, { color: colors.textSecondary }]}>
+                    {isScanningPdf
+                      ? 'Extracting consignee table from official GeM PDF…'
+                      : 'Consignee locations were not detected in text. Check the official PDF inline.'}
+                  </Text>
+                )}
               </View>
-            ) : null}
-          </View>
 
-          {/* On-Device Pre-Bid Disqualification Shield */}
-          {pdfScan?.details?.extendedDetails ? (
-            <PreBidDisqualificationShield
-              tenderDetails={pdfScan.details.extendedDetails}
-              onPrepareDocuments={handlePrepareDocuments}
-            />
-          ) : null}
-
-          {/* Risk Factors Assessment */}
-          {risks.flags.length > 0 && (
-            <View style={[styles.card, styles.riskCard]}>
-              <View style={styles.riskHeader}>
-                <Text style={styles.riskTitle}>OPERATIONAL RISK ASSESSMENT: {risks.riskLevel}</Text>
-              </View>
-              {risks.flags.map((flag, idx) => (
-                <Text key={idx} style={styles.riskFlagText}>• {flag}</Text>
-              ))}
-            </View>
-          )}
-
-          {/* BOQ Technical Scope */}
-          <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Published scope</Text>
-            {boqItems.length > 0 ? boqItems.map((item, idx) => (
-              <View key={idx} style={styles.boqItemRow}>
-                <View style={styles.boqTopRow}>
-                  <Text style={styles.boqItemTitle}>{item.itemTitle}</Text>
-                  <Text style={styles.boqQtyBadge}>
-                    {item.quantity !== undefined ? `${item.quantity} ${item.unit || 'Units'}` : 'Quantity unstated'}
+              {/* 8. Interactive Document Readiness Checklist */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                    Required Document Checklist
+                  </Text>
+                  <Text style={[styles.countPillText, { color: colors.primary }]}>
+                    {requiredDocuments.length > 0 ? `${checkedCount}/${requiredDocuments.length}` : 'See PDF'}
                   </Text>
                 </View>
-                {item.specsSummary ? <Text style={styles.boqSpecsText}>{item.specsSummary}</Text> : null}
+                {requiredDocuments.length > 0 ? (
+                  requiredDocuments.map((doc, idx) => {
+                    const isChecked = !!checkedDocs[doc];
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[
+                          styles.checkRow,
+                          idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border },
+                        ]}
+                        onPress={() => toggleDoc(doc)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.checkbox, isChecked && styles.checkboxActive]}>
+                          <Text style={styles.checkMark}>{isChecked ? '✓' : ''}</Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.checkLabel,
+                            { color: isChecked ? colors.textPrimary : colors.textSecondary },
+                            isChecked && { fontWeight: '700' },
+                          ]}
+                        >
+                          {doc}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                ) : (
+                  <Text style={[styles.notPublishedText, { color: colors.textSecondary }]}>
+                    {isScanningPdf
+                      ? 'Extracting required seller documents from official PDF…'
+                      : 'Confirm document checklist inside the official PDF viewer.'}
+                  </Text>
+                )}
               </View>
-            )) : <Text style={styles.notPublishedText}>Detailed scope is not included in the public listing. Open the official bid document before preparing a response.</Text>}
-          </View>
 
-          {/* Consignee Destinations */}
-          <View style={styles.card}>
-            <Text style={styles.sectionHeading}>Delivery locations</Text>
-            {consignees.length > 0 ? consignees.map((c, idx) => (
-              <View key={idx} style={styles.consigneeRow}>
-                <View style={styles.consigneeLeft}>
-                  <Text style={styles.consigneeLocation}>{c.location}</Text>
-                  <Text style={styles.consigneeOfficer}>{c.reportingOfficer || 'Consignee Officer'}</Text>
+              {/* 9. Compact Share Deal Sheet CTA */}
+              <Pressable
+                style={({ pressed }) => [styles.whatsAppCardBtn, pressed && { opacity: 0.85 }]}
+                onPress={() => setShowDealSheet(true)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.whatsAppCardTitle}>Forward Tender Deal Sheet</Text>
+                  <Text style={styles.whatsAppCardSub}>
+                    Share formatted summary with EMD, ePBG &amp; deadline on WhatsApp
+                  </Text>
                 </View>
-                <View style={styles.consigneeRight}>
-                  <Text style={styles.stateBadge}>{c.state || 'India'}{c.pincode ? ` (${c.pincode})` : ''}</Text>
-                  <Text style={styles.consigneeQty}>{c.quantity !== undefined ? `${c.quantity} Units` : 'Scope not published'}</Text>
+                <View style={styles.whatsAppBadge}>
+                  <Text style={styles.whatsAppBadgeText}>SHARE ↗</Text>
                 </View>
-              </View>
-            )) : <Text style={styles.notPublishedText}>Consignee locations are not included in the public listing.</Text>}
-          </View>
+              </Pressable>
 
-          {/* Interactive Document Readiness Checklist */}
-          <View style={styles.card}>
-            <View style={styles.checklistHeader}>
-              <Text style={styles.sectionHeading}>Required document checklist</Text>
-              <Text style={styles.checkRatio}>
-                {requiredDocuments.length > 0 ? `${checkedCount}/${requiredDocuments.length} added` : 'Open official document'}
+              {/* Compact muted footer note (replaces giant top disclaimer) */}
+              <Text style={[styles.footerDisclaimer, { color: colors.textMuted }]}>
+                Public GeM feed + local on-device PDF extraction. Account-specific L1 pricing, rank, and bid submission stay on the official GeM portal.
               </Text>
-            </View>
-            {requiredDocuments.length > 0 ? requiredDocuments.map((doc, idx) => {
-              const isChecked = !!checkedDocs[doc];
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.checkRow}
-                  onPress={() => toggleDoc(doc)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.checkbox, isChecked && styles.checkboxActive]}>
-                    <Text style={styles.checkMark}>{isChecked ? '✓' : ''}</Text>
-                  </View>
-                  <Text style={[styles.checkLabel, isChecked && styles.checkLabelActive]}>
-                    {doc}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }) : <Text style={styles.notPublishedText}>The public listing does not expose a document checklist. Confirm every requirement in the official GeM bid document.</Text>}
-          </View>
-        </ScrollView>
+            </ScrollView>
 
-        {/* Sticky Bottom Actions Bar (GeM Ashoka Navy) */}
-        <View style={styles.stickyFooter}>
-          <TouchableOpacity
-            style={styles.addPortfolioBtn}
-            onPress={handlePrepareDocuments}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addPortfolioText}>Prepare documents</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.officialLinkBtn}
-            onPress={() => handleOpenDoc()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.officialLinkText}>View bid PDF</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      </SafeAreaView>
+            {/* Sticky Bottom Actions Bar */}
+            <View style={[styles.stickyFooter, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.secondaryFooterBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}
+                onPress={handlePrepareDocuments}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.secondaryFooterText, { color: colors.textPrimary }]}>Prepare Docs</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryFooterBtn}
+                onPress={() => handleOpenDoc()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryFooterText}>Read PDF Inline</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
       </Modal>
+
       {showDealSheet && bid && (
         <TenderDealSheetCard
           bid={effectiveBid}
@@ -571,6 +786,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           onClose={() => setShowDealSheet(false)}
         />
       )}
+
       <BidDocumentViewer
         bid={bid}
         visible={documentViewerVisible}
@@ -582,279 +798,64 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  container: { flex: 1 },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     backgroundColor: '#0B3B60',
+    gap: 10,
   },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  headerBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerBidNum: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  headerSubtitle: { color: '#E9D5FF', fontSize: 11, fontWeight: '500' },
-  shareBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  headerBackIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
+  headerCenter: { flex: 1 },
+  headerBidNum: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  headerSubtitle: { color: '#BFDBFE', fontSize: 11, fontWeight: '500', marginTop: 1 },
+  sharePillBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
-  shareBtnText: { fontSize: 16 },
+  sharePillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   scrollArea: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 24 },
-  verdictBanner: {
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1.5,
-  },
-  verdictHigh: { backgroundColor: '#E8F5E9', borderColor: '#00C853' },
-  verdictModerate: { backgroundColor: '#FFF3E0', borderColor: '#FF6D00' },
-  verdictDisqualified: { backgroundColor: '#FFEBEE', borderColor: '#D32F2F' },
-  verdictTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  verdictPill: { color: '#111827', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  matchScoreText: {
-    color: '#00C853',
-    fontSize: 13,
-    fontWeight: '800',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  verdictSummary: { color: '#374151', fontSize: 13, lineHeight: 18 },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  deptBadge: { color: '#0B3B60', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 },
-  bidTitle: { color: '#111827', fontSize: 15, fontWeight: '800', lineHeight: 20, marginBottom: 4 },
-  ministryText: { color: '#6B7280', fontSize: 12 },
-  benchmarkCard: {
-    backgroundColor: '#F3E8FF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-  },
-  benchmarkHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  benchmarkLabel: { color: '#0B3B60', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  benchmarkHint: { color: '#6B7280', fontSize: 10 },
-  benchmarkRange: { color: '#111827', fontSize: 22, fontWeight: '900', marginVertical: 4 },
-  benchmarkSub: { color: '#4B5563', fontSize: 11, lineHeight: 15 },
-  sectionHeading: { color: '#111827', fontSize: 14, fontWeight: '800', marginBottom: 12 },
-  notPublishedText: { color: '#6B7280', fontSize: 12, lineHeight: 17 },
-  grid2x2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  gridCell: {
-    width: '48%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cellLabel: { color: '#6B7280', fontSize: 10, fontWeight: '600', marginBottom: 2 },
-  cellValuePrimary: { color: '#111827', fontSize: 13, fontWeight: '800' },
-  cellValueSecondary: { color: '#2563EB', fontSize: 13, fontWeight: '700' },
-  riskCard: { borderColor: '#F59E0B', backgroundColor: '#FFFBEB' },
-  riskHeader: { marginBottom: 4 },
-  riskTitle: { color: '#B45309', fontSize: 11, fontWeight: '800' },
-  riskFlagText: { color: '#78350F', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  boqItemRow: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  boqTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  boqItemTitle: { color: '#111827', fontSize: 13, fontWeight: '700', flex: 1, marginRight: 8 },
-  boqQtyBadge: { color: '#00C853', fontSize: 11, fontWeight: '800', backgroundColor: '#E8F5E9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  boqSpecsText: { color: '#6B7280', fontSize: 11, lineHeight: 16 },
-  consigneeRow: {
+  scrollContent: { padding: 14, paddingBottom: 28 },
+  corrigendumBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  consigneeLeft: { flex: 1, marginRight: 8 },
-  consigneeLocation: { color: '#111827', fontSize: 13, fontWeight: '700' },
-  consigneeOfficer: { color: '#6B7280', fontSize: 11, marginTop: 2 },
-  consigneeRight: { alignItems: 'flex-end' },
-  stateBadge: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
-  consigneeQty: { color: '#374151', fontSize: 12, fontWeight: '800', marginTop: 2 },
-  checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  checkRatio: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
-  pdfScanHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  pdfScanBadge: { color: '#0B4F71', fontSize: 9, fontWeight: '800', letterSpacing: 0.7 },
-  officialDocumentRow: { flexDirection: 'row', alignItems: 'center', minHeight: 58, borderTopWidth: 1, borderTopColor: '#EEF1F4', paddingVertical: 9 },
-  officialDocumentIcon: { width: 38, height: 38, borderRadius: 9, backgroundColor: '#EAF4F8', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  officialDocumentIconText: { color: '#0B5577', fontSize: 10, fontWeight: '900' },
-  officialDocumentCopy: { flex: 1, marginRight: 8 },
-  officialDocumentTitle: { color: '#1F2937', fontSize: 12, fontWeight: '800' },
-  officialDocumentSubtitle: { color: '#6B7280', fontSize: 10, lineHeight: 14, marginTop: 2 },
-  officialDocumentAction: { color: '#0B5577', fontSize: 12, fontWeight: '900' },
-  documentAvailabilityNote: { color: '#6B7280', fontSize: 10, lineHeight: 15, borderTopWidth: 1, borderTopColor: '#EEF1F4', paddingTop: 9, marginTop: 2 },
-  pdfScanButton: { minHeight: 44, borderRadius: 6, backgroundColor: '#0B4F71', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, marginTop: 14 },
-  pdfScanButtonDisabled: { opacity: 0.6 },
-  pdfScanButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  pdfScanResult: { borderTopWidth: 1, borderTopColor: '#D6DDE3', marginTop: 14, paddingTop: 12 },
-  pdfScanStatus: { color: '#047857', fontSize: 11, fontWeight: '800', marginBottom: 6 },
-  pdfFieldRow: { flexDirection: 'row', gap: 8, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#EEF1F4' },
-  pdfFieldLabel: { width: 104, color: '#6B7280', fontSize: 11, fontWeight: '700' },
-  pdfFieldValue: { flex: 1, color: '#1F2937', fontSize: 11, lineHeight: 16 },
-  pdfScanNote: { color: '#6B7280', fontSize: 10, lineHeight: 15, marginTop: 9 },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#9CA3AF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  checkboxActive: { backgroundColor: '#0B3B60', borderColor: '#0B3B60' },
-  checkMark: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  checkLabel: { color: '#374151', fontSize: 12, flex: 1 },
-  checkLabelActive: { color: '#111827', fontWeight: '600' },
-  stickyFooter: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  addPortfolioBtn: {
-    flex: 1.3,
-    minHeight: 48,
-    backgroundColor: '#0B3B60',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPortfolioText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  officialLinkBtn: {
-    flex: 1,
-    minHeight: 48,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  officialLinkText: { color: '#374151', fontSize: 13, fontWeight: '700' },
-  cutoffBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
     borderWidth: 1,
-    borderColor: '#FCD34D',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
+    gap: 10,
   },
-  cutoffLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
-  cutoffIcon: { fontSize: 22, marginRight: 8 },
-  cutoffTitle: { color: '#92400E', fontSize: 13, fontWeight: '800' },
-  cutoffSubtitle: { color: '#B45309', fontSize: 11, fontWeight: '600', marginTop: 1 },
-  cutoffBadge: {
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  cutoffBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
-  oemWarningCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  oemWarningIcon: { fontSize: 20, marginRight: 8, marginTop: 1 },
-  oemWarningTitle: { color: '#991B1B', fontSize: 13, fontWeight: '800', marginBottom: 2 },
-  oemWarningText: { color: '#B91C1C', fontSize: 11, lineHeight: 16 },
-  pastPerfCard: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  pastPerfHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  corrigendumIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#D97706',
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'center',
   },
-  pastPerfBadge: { color: '#166534', fontSize: 12, fontWeight: '800' },
-  pastPerfStatus: {
-    backgroundColor: '#DCFCE7',
-    color: '#15803D',
-    fontSize: 10,
-    fontWeight: '800',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  corrigendumIconText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  corrigendumTitle: { color: '#92400E', fontSize: 13, fontWeight: '800' },
+  corrigendumSubtitle: { color: '#78350F', fontSize: 11, lineHeight: 15, marginTop: 2 },
+  card: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
   },
-  pastPerfDesc: { color: '#15803D', fontSize: 12, lineHeight: 17, marginBottom: 8 },
-  pastPerfFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#DCFCE7',
-    paddingTop: 8,
-  },
-  pastPerfContract: { color: '#166534', fontSize: 11, fontWeight: '700', flex: 1, marginRight: 8 },
-  copyProofBtn: {
-    backgroundColor: '#166534',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  copyProofBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   cardHeaderBadges: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -871,105 +872,269 @@ const styles = StyleSheet.create({
   typeBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   domainBadge: {
-    backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   domainBadgeText: {
-    color: '#374151',
     fontSize: 10,
     fontWeight: '700',
   },
-  serviceCard: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
+  bidTitle: { fontSize: 16, fontWeight: '800', lineHeight: 22, marginBottom: 4 },
+  deptText: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  closingStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 8,
   },
+  closingLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  closingDateText: { fontSize: 13, fontWeight: '800', marginTop: 1 },
+  remainingPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  remainingPillText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 8,
+  },
+  sectionHeading: { fontSize: 14, fontWeight: '800', flex: 1 },
+  inlineTag: {
+    backgroundColor: '#EAF4F8',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  inlineTagText: { color: '#0B5577', fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 10,
+  },
+  docPdfBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 9,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docPdfBadgeText: { color: '#DC2626', fontSize: 11, fontWeight: '900' },
+  docCopy: { flex: 1 },
+  docTitle: { fontSize: 13, fontWeight: '700' },
+  docSubtitle: { fontSize: 11, marginTop: 2 },
+  docReadPill: {
+    backgroundColor: '#0B3B60',
+    borderRadius: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  docReadPillText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  scanStatusBusy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scanStatusBusyText: { color: '#0B3B60', fontSize: 10, fontWeight: '800' },
+  scanStatusOk: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scanStatusOkText: { color: '#15803D', fontSize: 10, fontWeight: '800' },
+  scanRetryPill: {
+    backgroundColor: '#EAF4F8',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scanRetryText: { color: '#0B5577', fontSize: 10, fontWeight: '800' },
+  scanningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 10,
+  },
+  scanningBannerText: { flex: 1, fontSize: 11, lineHeight: 16 },
+  grid2x4: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+  },
+  gridCell: {
+    width: '48.5%',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    minHeight: 62,
+    justifyContent: 'center',
+  },
+  cellLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4, marginBottom: 4 },
+  cellValue: { fontSize: 13, fontWeight: '800', lineHeight: 17 },
+  policyTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 10,
+  },
+  policyTag: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  policyTagText: { fontSize: 10, fontWeight: '800' },
+  scanFootnote: { fontSize: 10, lineHeight: 14, marginTop: 10 },
+  serviceCard: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
   serviceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  serviceHeaderTitle: {
-    color: '#166534',
-    fontSize: 13,
-    fontWeight: '800',
-  },
+  serviceHeaderTitle: { color: '#166534', fontSize: 13, fontWeight: '800' },
   serviceSlaBadge: {
     backgroundColor: '#DCFCE7',
     color: '#15803D',
     fontSize: 10,
     fontWeight: '800',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  serviceCell: {
+    width: '48.5%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 9,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  serviceCellLabel: { color: '#64748B', fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  serviceCellValue: { color: '#0F172A', fontSize: 12, fontWeight: '800' },
+  riskCard: { borderColor: '#F59E0B', backgroundColor: '#FFFBEB' },
+  riskTitle: { color: '#B45309', fontSize: 11, fontWeight: '800', marginBottom: 4 },
+  riskFlagText: { color: '#78350F', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  notPublishedText: { fontSize: 12, lineHeight: 17 },
+  boqItemRow: {
+    borderRadius: 10,
+    padding: 11,
+    marginBottom: 6,
+    borderWidth: 1,
+  },
+  boqTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  boqItemTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  boqQtyBadge: {
+    color: '#15803D',
+    fontSize: 11,
+    fontWeight: '800',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  serviceGrid: {
+  boqSpecsText: { fontSize: 11, lineHeight: 16, marginTop: 4 },
+  countPillText: { fontSize: 11, fontWeight: '800' },
+  consigneeRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingVertical: 9,
     gap: 8,
-    marginBottom: 8,
   },
-  serviceCell: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  serviceCellLabel: {
-    color: '#6B7280',
-    fontSize: 10,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  serviceCellValue: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  serviceNote: {
-    color: '#15803D',
-    fontSize: 11,
-    lineHeight: 15,
-    fontStyle: 'italic',
-  },
-  whatsAppHeroBtn: {
+  consigneeLeft: { flex: 1 },
+  consigneeLocation: { fontSize: 13, fontWeight: '700' },
+  consigneeOfficer: { fontSize: 11, marginTop: 2 },
+  consigneeRight: { alignItems: 'flex-end' },
+  stateBadge: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
+  consigneeQty: { fontSize: 12, fontWeight: '800', marginTop: 2 },
+  checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F2C59',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#1E3A8A',
+    minHeight: 42,
+    paddingVertical: 7,
   },
-  whatsAppHeroTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  whatsAppHeroSub: {
-    color: '#93C5FD',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  whatsAppBadge: {
-    backgroundColor: '#25D366',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  checkbox: {
+    width: 22,
+    height: 22,
     borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#94A3B8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  whatsAppBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
+  checkboxActive: { backgroundColor: '#0B3B60', borderColor: '#0B3B60' },
+  checkMark: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  checkLabel: { fontSize: 12, flex: 1, lineHeight: 17 },
+  whatsAppCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0B3B60',
+    borderRadius: 12,
+    padding: 13,
+    marginBottom: 12,
+    gap: 10,
   },
+  whatsAppCardTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  whatsAppCardSub: { color: '#BFDBFE', fontSize: 11, marginTop: 2 },
+  whatsAppBadge: {
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  whatsAppBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  footerDisclaimer: {
+    fontSize: 10.5,
+    lineHeight: 15,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  stickyFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  secondaryFooterBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryFooterText: { fontSize: 13, fontWeight: '700' },
+  primaryFooterBtn: {
+    flex: 1.4,
+    minHeight: 46,
+    backgroundColor: '#0B3B60',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryFooterText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });

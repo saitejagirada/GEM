@@ -308,6 +308,84 @@ export function fastDecompress(buffer: Uint8Array): string {
   return out;
 }
 
+const PIN_PREFIX_TO_STATE: Array<[number, number, string]> = [
+  [11, 11, 'Delhi'],
+  [12, 13, 'Haryana'],
+  [14, 16, 'Punjab'],
+  [17, 17, 'Himachal Pradesh'],
+  [18, 19, 'Jammu and Kashmir'],
+  [20, 28, 'Uttar Pradesh'],
+  [30, 34, 'Rajasthan'],
+  [36, 39, 'Gujarat'],
+  [40, 44, 'Maharashtra'],
+  [45, 48, 'Madhya Pradesh'],
+  [49, 49, 'Chhattisgarh'],
+  [50, 50, 'Telangana'],
+  [51, 53, 'Andhra Pradesh'],
+  [56, 59, 'Karnataka'],
+  [60, 64, 'Tamil Nadu'],
+  [67, 69, 'Kerala'],
+  [70, 74, 'West Bengal'],
+  [75, 77, 'Odisha'],
+  [78, 78, 'Assam'],
+  [80, 85, 'Bihar'],
+];
+
+function inferStateFromPincode(pincode: string): string {
+  const prefix = parseInt(pincode.slice(0, 2), 10);
+  if (!Number.isFinite(prefix)) return 'India';
+  for (const [min, max, state] of PIN_PREFIX_TO_STATE) {
+    if (prefix >= min && prefix <= max) return state;
+  }
+  return 'India';
+}
+
+function decodePdfHexString(rawHex: string): string {
+  const hex = rawHex.replace(/\s+/g, '');
+  if (!hex || hex.length < 2) return '';
+
+  // Detect UTF-16BE hex strings used by TCPDF (e.g., GeM RA PDFs: <005200410020...>)
+  let isUtf16Be = false;
+  if (hex.length >= 4 && hex.length % 4 === 0) {
+    if (/^feff/i.test(hex)) {
+      isUtf16Be = true;
+    } else {
+      const pairs = hex.length / 4;
+      let zeroHighBytes = 0;
+      for (let i = 0; i < hex.length; i += 4) {
+        const hi = parseInt(hex.slice(i, i + 2), 16);
+        if (hi === 0x00 || hi === 0x09 || hi === 0x20) {
+          zeroHighBytes += 1;
+        }
+      }
+      if (zeroHighBytes / pairs >= 0.6) {
+        isUtf16Be = true;
+      }
+    }
+  }
+
+  if (isUtf16Be) {
+    let start = /^feff/i.test(hex) ? 4 : 0;
+    let decoded = '';
+    for (let i = start; i + 3 < hex.length; i += 4) {
+      const code = parseInt(hex.slice(i, i + 4), 16);
+      if (code === 0) continue;
+      // Strip Devanagari bilingual headers so ASCII English key/values align cleanly
+      if (code >= 0x0900 && code <= 0x097f) continue;
+      decoded += String.fromCharCode(code);
+    }
+    return decoded;
+  }
+
+  let decoded = '';
+  for (let i = 0; i + 1 < hex.length; i += 2) {
+    const code = parseInt(hex.slice(i, i + 2), 16);
+    if (code === 0) continue;
+    decoded += String.fromCharCode(code);
+  }
+  return decoded;
+}
+
 function stringToUint8Array(str: string): Uint8Array {
   const arr = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) {
@@ -579,6 +657,7 @@ export class GemPdfExtractor {
 
   /**
    * Parses BT ... ET blocks and decodes Tj and TJ operators into text lines.
+   * Handles literal strings, ASCII hex strings, and TCPDF UTF-16BE hex strings.
    */
   private static extractTextFromOperatorStream(stream: string, output: string[]): void {
     const btMatches = stream.matchAll(/BT([\s\S]*?)ET/g);
@@ -589,32 +668,35 @@ export class GemPdfExtractor {
       let tjMatch: RegExpExecArray | null;
       while ((tjMatch = tjArrayRegex.exec(scope)) !== null) {
         const inner = tjMatch[1];
-        const literalPattern = /\(((?:\\.|[^\\)])*)\)/g;
-        let litMatch: RegExpExecArray | null;
+        const tokenPattern = /\(((?:\\.|[^\\)])*)\)|<([0-9a-f\s]+)>/gi;
+        let tokMatch: RegExpExecArray | null;
         const lineParts: string[] = [];
-        while ((litMatch = literalPattern.exec(inner)) !== null) {
-          lineParts.push(this.decodePdfLiteral(litMatch[1]));
+        while ((tokMatch = tokenPattern.exec(inner)) !== null) {
+          if (tokMatch[1] !== undefined) {
+            lineParts.push(this.decodePdfLiteral(tokMatch[1]));
+          } else if (tokMatch[2] !== undefined) {
+            const decodedHex = decodePdfHexString(tokMatch[2]);
+            if (decodedHex) lineParts.push(decodedHex);
+          }
         }
-        if (lineParts.length > 0) {
-          output.push(lineParts.join(''));
+        const joined = lineParts.join('').trim();
+        if (joined) {
+          output.push(joined);
         }
       }
 
       const tjSimpleRegex = /\(((?:\\.|[^\\)])*)\)\s*Tj/gi;
       let simpleMatch: RegExpExecArray | null;
       while ((simpleMatch = tjSimpleRegex.exec(scope)) !== null) {
-        output.push(this.decodePdfLiteral(simpleMatch[1]));
+        const decoded = this.decodePdfLiteral(simpleMatch[1]);
+        if (decoded) output.push(decoded);
       }
 
       const hexRegex = /<([0-9a-f\s]+)>\s*T[jJ]/gi;
       let hexMatch: RegExpExecArray | null;
       while ((hexMatch = hexRegex.exec(scope)) !== null) {
-        const hex = hexMatch[1].replace(/\s+/g, '');
-        let decoded = '';
-        for (let i = 0; i + 1 < hex.length; i += 2) {
-          decoded += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
-        }
-        output.push(decoded);
+        const decoded = decodePdfHexString(hexMatch[1]).trim();
+        if (decoded) output.push(decoded);
       }
     }
   }
@@ -674,9 +756,15 @@ export class GemPdfExtractor {
     const ministry = this.extractLabeledField(text, ['ministry/state name', 'ministry']);
     const organisation = this.extractLabeledField(text, ['organisation name', 'organization']);
     const officeName = this.extractLabeledField(text, ['office name']);
-    const closingDate = this.extractLabeledField(text, ['bid end date/time', 'bid closing date', 'end date']);
+    const closingDate = this.extractLabeledField(text, [
+      'bid end date/time',
+      'ra end date/time',
+      'bid closing date',
+      'end date',
+    ]);
     const bidOpeningDate = this.extractLabeledField(text, [
       'bid opening date/time',
+      'ra start date/time',
       'bid opening date',
       'bid opening',
     ]);
@@ -684,22 +772,37 @@ export class GemPdfExtractor {
     const validityMatch = text.match(/Bid\s+Offer[\s\S]{0,40}?(\d+)\s*\(\s*Days\s*\)/i);
     const bidValidityDays = validityMatch ? parseInt(validityMatch[1], 10) : undefined;
 
-    const qtyMatch = text.match(/Total\s+Quantity\s*[:\-]?\s*(\d+)/i);
+    const qtyMatch = text.match(/Total\s+Quantity\s*[:\-\n]?\s*(\d+)/i);
     const totalQuantity = qtyMatch ? parseInt(qtyMatch[1], 10) : undefined;
 
     const typeOfBid = this.extractLabeledField(text, ['type of bid']);
 
-    // 2. Turnover Extraction (supports single-line AND wkhtmltopdf wrapped label)
-    const turnoverLine =
+    // 2. Turnover Extraction (supports single-line, wkhtmltopdf wrapped label, and bilingual Hindi/English row wrap)
+    const turnoverCandidates = [
       this.extractLabeledField(text, [
         'minimum average annual turnover of the bidder',
         'minimum average annual turnover',
         'minimum average annual',
         'bidder turnover',
         'annual turnover of bidder',
-      ]) ||
-      text.match(/Minimum\s+Average\s+Annual[\s\S]{0,60}?([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)/i)?.[1];
-    const minAnnualTurnoverInr = turnoverLine ? this.parseIndianCurrency(turnoverLine) : undefined;
+        'oem average turnover',
+      ]),
+      text.match(/Minimum\s+Average\s+Annual[\s\S]{0,60}?([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)/i)?.[1],
+      text.match(
+        /:\s*([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)\s*\n[^\n]{0,40}(?:Minimum\s+Average\s+Annual|Bidder\s+Turnover|OEM\s+Average\s+Turnover)/i
+      )?.[1],
+    ];
+    let turnoverLine: string | undefined;
+    let minAnnualTurnoverInr: number | undefined;
+    for (const candidate of turnoverCandidates) {
+      if (!candidate) continue;
+      const parsed = this.parseIndianCurrency(candidate);
+      if (parsed !== undefined) {
+        turnoverLine = candidate;
+        minAnnualTurnoverInr = parsed;
+        break;
+      }
+    }
 
     // 3. Past Experience Extraction (supports single-line AND wkhtmltopdf wrapped label)
     const expMatch = text.match(/Years\s+of\s+Past\s+Experience\s+Required[^\d]{0,35}(\d+(?:\.\d+)?)\s*Year/i);
@@ -708,14 +811,14 @@ export class GemPdfExtractor {
     const pastPerfMatch = text.match(/Past\s+Performance\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*%/i);
     const pastPerformancePercentage = pastPerfMatch ? parseFloat(pastPerfMatch[1]) : undefined;
 
-    // 4. MSE & Startup Exemptions
+    // 4. MSE & Startup Exemptions (handles both single-line, wkhtmltopdf wrapped, and TCPDF RA multiline layouts)
     const mseExemptionMatch = text.match(
-      /MSE\s+(?:Exemption|Relaxation)\s+(?:for\s+Years\s+Of(?:\s+Experience\s+and\s+Turnover)?)?\s*[:\-]?\s*(Yes|No)/i
+      /MSE\s+(?:Exemption|Relaxation)\s+for\s+Years[\s\S]{0,65}?[:\-\n]\s*(Yes|No)\b/i
     );
     const mseExemptionForExpAndTurnover = mseExemptionMatch ? mseExemptionMatch[1].toLowerCase() === 'yes' : false;
 
     const startupExemptionMatch = text.match(
-      /Startup\s+(?:Exemption|Relaxation)\s+(?:for\s+Years\s+Of(?:\s+Experience\s+and\s+Turnover)?)?\s*[:\-]?\s*(Yes|No)/i
+      /Startup\s+(?:Exemption|Relaxation)\s+for\s+Years[\s\S]{0,65}?[:\-\n]\s*(Yes|No)\b/i
     );
     const startupExemptionForExpAndTurnover = startupExemptionMatch
       ? startupExemptionMatch[1].toLowerCase() === 'yes'
@@ -775,7 +878,7 @@ export class GemPdfExtractor {
       epbgPercentage = 0;
     }
 
-    const epbgDurationMatch = text.match(/Duration\s+of\s+ePBG\s+required[^\d]{0,30}(\d+)/i);
+    const epbgDurationMatch = text.match(/Duration\s+of\s+ePBG(?:\s+required)?[^\d]{0,35}(\d+)/i);
     const epbgDurationMonths = epbgDurationMatch ? parseInt(epbgDurationMatch[1], 10) : undefined;
 
     // 7. Delivery & Splitting
@@ -785,7 +888,11 @@ export class GemPdfExtractor {
       : /Splitting\s*[:\-]?\s*Yes/i.test(text);
 
     const splitRatioMatch = text.match(/Splitting\s*(?:Ratio)?\s*[:\-]?\s*(\d+\s*:\s*\d+)/i);
-    const splittingRatio = splitRatioMatch ? splitRatioMatch[1].replace(/\s+/g, '') : undefined;
+    const splittingRatio = splitRatioMatch
+      ? splitRatioMatch[1].replace(/\s+/g, '')
+      : splittingAppliedMatch && splittingAppliedMatch[1].toLowerCase().includes('not')
+        ? '100% to L1 (No Split)'
+        : undefined;
 
     const consignees = this.extractConsigneesTable(text);
     const consigneeDeliveryDays = consignees.find((c) => c.deliveryDays !== undefined)?.deliveryDays;
@@ -884,18 +991,40 @@ export class GemPdfExtractor {
       const lineStart = scope.lastIndexOf('\n', matchIndex);
       const lineEnd = scope.indexOf('\n', matchIndex + 6);
       const rowScope = scope.slice(lineStart === -1 ? 0 : lineStart + 1, lineEnd === -1 ? scope.length : lineEnd);
+      const nextLineEnd = lineEnd === -1 ? -1 : scope.indexOf('\n', lineEnd + 1);
+      const nextLine =
+        lineEnd === -1
+          ? ''
+          : scope.slice(lineEnd + 1, nextLineEnd === -1 ? scope.length : nextLineEnd);
+      // Only merge the continuation line if it does not start another consignee pincode
+      const hasNextRowContinuation = Boolean(nextLine && !/\b[1-9][0-9]{5}\b/.test(nextLine));
+      const combinedRow = hasNextRowContinuation ? `${rowScope} ${nextLine}` : rowScope;
 
       let matchedState = 'India';
       for (const st of INDIAN_STATES_AND_UTS) {
-        if (new RegExp(`\\b${st}\\b`, 'i').test(rowScope)) {
+        if (new RegExp(`\\b${st}\\b`, 'i').test(combinedRow)) {
           matchedState = st;
           break;
         }
       }
+      if (matchedState === 'India') {
+        matchedState = inferStateFromPincode(pin);
+      }
 
       const pinPosInRow = rowScope.indexOf(pin);
       const afterPin = rowScope.slice(pinPosInRow + 6);
-      const numbersAfter = Array.from(afterPin.matchAll(/\b(\d+)\b/g)).map((m) => parseInt(m[1], 10));
+      let numbersAfter = Array.from(afterPin.matchAll(/\b(\d+)\b/g)).map((m) => parseInt(m[1], 10));
+      if (numbersAfter.length === 0 && hasNextRowContinuation) {
+        // wkhtmltopdf wraps ": <qty> <deliveryDays>" onto the line immediately following the pincode
+        const rightColMatch = nextLine.match(/:\s*(\d+)\s+(\d+)\b/);
+        if (rightColMatch) {
+          numbersAfter = [parseInt(rightColMatch[1], 10), parseInt(rightColMatch[2], 10)];
+        } else {
+          numbersAfter = Array.from(nextLine.matchAll(/\b(\d+)\b/g))
+            .map((m) => parseInt(m[1], 10))
+            .filter((n) => n > 1);
+        }
+      }
 
       let quantity = 1;
       let deliveryDays: number | undefined;
@@ -908,7 +1037,8 @@ export class GemPdfExtractor {
       }
 
       const beforePin = rowScope.slice(0, pinPosInRow);
-      const officerMatch = beforePin.match(/(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
+      const officerSource = beforePin.trim() ? beforePin : hasNextRowContinuation ? nextLine : '';
+      const officerMatch = officerSource.match(/(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
       const officer = officerMatch ? officerMatch[0] : undefined;
 
       consignees.push({
@@ -960,10 +1090,12 @@ export class GemPdfExtractor {
         .filter(
           (l) =>
             l.length > 3 &&
+            l.length < 95 &&
             !/^\d+$/.test(l) &&
             !/^\d+\s*\/\s*\d+$/.test(l) &&
             !/^\([^)]*\)$/.test(l) &&
-            !/^from\s+seller\b/i.test(l)
+            !/^from\s+seller\b/i.test(l) &&
+            !/eligibility\s+for\s+exemption|uploaded\s+for\s+evaluation|supporting\s+documents\s+to\s+prove/i.test(l)
         );
 
       for (const line of lines) {
@@ -977,6 +1109,10 @@ export class GemPdfExtractor {
       'Experience Criteria',
       'Bidder Turnover',
       'Certificate (Requested in ATC)',
+      'Additional Doc 1 (Requested in ATC)',
+      'Additional Doc 2 (Requested in ATC)',
+      'Additional Doc 3 (Requested in ATC)',
+      'Additional Doc 4 (Requested in ATC)',
       'OEM Authorization Certificate',
       'OEM Annual Turnover',
       'Compliance of BoQ specification and supporting document',

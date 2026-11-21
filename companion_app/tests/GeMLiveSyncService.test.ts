@@ -90,6 +90,7 @@ describe('GeMLiveSyncService', () => {
   it('maps national bidplus service RAs and high-value flags accurately without guessing values', () => {
     const bid = GeMLiveSyncService.mapPortalBid({
       b_id: [10172181],
+      b_id_parent: [9812036],
       b_bid_number: ['GEM/2026/R/771126'],
       b_bid_number_parent: ['GEM/2026/B/8100001'],
       b_category_name: ['Manpower Outsourcing Service'],
@@ -108,7 +109,12 @@ describe('GeMLiveSyncService', () => {
     assert.equal(bid?.isRa, true);
     assert.equal(bid?.isHighValue, true);
     assert.equal(bid?.parentBidNumber, 'GEM/2026/B/8100001');
+    assert.equal(bid?.parentBidId, '9812036');
     assert.equal(bid?.estimatedBidValueInr, undefined);
     assert.equal(bid?.docUrl, 'https://bidplus.gem.gov.in/showradocumentPdf/10172181');
+    assert.equal(
+      bid?.relatedDocuments?.[0]?.url,
+      'https://bidplus.gem.gov.in/showbidDocument/9812036'
+    );
   });
 });

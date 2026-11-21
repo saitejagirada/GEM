@@ -1,34 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
+import { SearchField } from '../components/SharedUI';
 import {
-  SearchField,
-  SegmentedTabs,
-} from '../components/SharedUI';
-import { MarketplaceService, type MarketplaceCategory } from '../services/MarketplaceService';
+  MarketplaceService,
+  type MarketplaceCategory,
+} from '../services/MarketplaceService';
+import { OFFICIAL_GEM_SUBCATEGORIES } from '../services/GeMClientCrawler';
 
 export interface CategoriesScreenProps {
   onSelectCategory: (category: MarketplaceCategory) => void;
   onBack?: () => void;
 }
-
-const CATEGORY_PALETTE: Record<string, { bg: string; text: string }> = {
-  'it-products': { bg: '#E8F1FF', text: '#174EA6' },
-  'automobiles': { bg: '#E7F8EE', text: '#16834A' },
-  'office-furniture': { bg: '#FFF4DB', text: '#B96A0B' },
-  'medical': { bg: '#FDECEC', text: '#C62828' },
-  'appliances': { bg: '#F0EAFE', text: '#7048C8' },
-  'stationery': { bg: '#FFF0DE', text: '#F28C28' },
-  'defense': { bg: '#E0F2FE', text: '#0284C7' },
-  'solar': { bg: '#FEF3C7', text: '#D97706' },
-  'heavy-engineering': { bg: '#F1F5FB', text: '#475569' },
-};
 
 export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
   onSelectCategory,
@@ -44,7 +33,7 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
   const displayedList = useMemo(() => {
     const list = activeTab === 'Products' ? productCats : serviceCats;
     if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
     return list.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
@@ -54,84 +43,104 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Top Header bar with Back button */}
+      {/* Clean Header Bar */}
       <View style={[styles.headerBar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
         {onBack && (
-          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Go back">
             <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
           </Pressable>
         )}
-        <Text style={[styles.headerTitle, { color: colors.textPrimary, fontSize: 18 * fontMultiplier }]}>
-          Categories
+        <Text style={[styles.headerTitle, { color: colors.textPrimary, fontSize: 17 * fontMultiplier }]}>
+          Browse Directory
         </Text>
       </View>
 
-      <View style={styles.controlsSection}>
-        {/* Search Field */}
+      {/* Search + Underline Tabs */}
+      <View style={[styles.controlsBlock, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Find a category, e.g. Laptops, AMC..."
-          style={{ marginBottom: 10 }}
+          placeholder="Filter product or service categories..."
         />
 
-        {/* Segmented Tabs: Products | Services */}
-        <SegmentedTabs
-          options={['Products', 'Services']}
-          selected={activeTab}
-          onSelect={(opt) => setActiveTab(opt as 'Products' | 'Services')}
-        />
+        <View style={styles.tabsRow}>
+          {(['Products', 'Services'] as const).map((tab) => {
+            const active = activeTab === tab;
+            return (
+              <Pressable
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                style={[styles.tabBtn, active && styles.tabBtnActive]}
+              >
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    { color: active ? '#0B3B60' : colors.textSecondary },
+                    active && styles.tabLabelActive,
+                  ]}
+                >
+                  {tab} ({tab === 'Products' ? productCats.length : serviceCats.length})
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      {/* Category List */}
+      {/* Crisp Editorial Directory List */}
       <ScrollView
         style={styles.listContainer}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
         {displayedList.map((cat) => {
-          const colorPair = CATEGORY_PALETTE[cat.id] || { bg: colors.primaryTint, text: colors.primary };
-          const subText = cat.subcategories.slice(0, 3).join(', ');
+          const liveSubCount =
+            cat.type === 'PRODUCT'
+              ? OFFICIAL_GEM_SUBCATEGORIES.filter(
+                  (s) => s.category.toLowerCase() === cat.name.toLowerCase()
+                ).length
+              : cat.subcategories.length;
 
           return (
             <Pressable
               key={cat.id}
-              style={[
-                styles.categoryCard,
+              style={({ pressed }) => [
+                styles.directoryRow,
                 {
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
+                  opacity: pressed ? 0.8 : 1,
                 },
               ]}
               onPress={() => onSelectCategory(cat)}
             >
-              <View style={[styles.iconBox, { backgroundColor: colorPair.bg }]}>
-                <Text style={styles.iconEmoji}>{cat.icon}</Text>
+              <View style={[styles.codeBox, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+                <Text style={styles.codeText}>{cat.shortCode || cat.icon}</Text>
               </View>
 
               <View style={styles.infoCol}>
-                <Text style={[styles.categoryName, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}>
-                  {cat.name}
-                </Text>
-                <Text style={[styles.subText, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {subText}
+                <View style={styles.titleRow}>
+                  <Text style={[styles.categoryName, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}>
+                    {cat.name}
+                  </Text>
+                  <Text style={[styles.metaCount, { color: colors.textMuted }]}>
+                    {liveSubCount} {cat.type === 'PRODUCT' ? 'live feeds' : 'domains'}
+                  </Text>
+                </View>
+                <Text style={[styles.subText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {cat.subcategories.join(' · ')}
                 </Text>
               </View>
 
-              <View style={styles.endCol}>
-                <Text style={[styles.countBadge, { color: colors.textMuted }]}>
-                  {cat.itemCount.toLocaleString()} items
-                </Text>
-                <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
-              </View>
+              <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
             </Pressable>
           );
         })}
 
         {displayedList.length === 0 && (
           <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              No categories found matching &quot;{searchQuery}&quot;
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No categories found for &quot;{searchQuery}&quot;
             </Text>
           </View>
         )}
@@ -141,87 +150,70 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   headerBar: {
-    height: 52,
+    height: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
   },
-  backBtn: {
-    marginRight: 12,
-    padding: 4,
+  backBtn: { marginRight: 10, padding: 4 },
+  backArrow: { fontSize: 20, fontWeight: '700' },
+  headerTitle: { fontWeight: '800' },
+  controlsBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    borderBottomWidth: 1,
   },
-  backArrow: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  headerTitle: {
-    fontWeight: '700',
-  },
-  controlsSection: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
-    paddingBottom: 8,
-  },
-  listContainer: {
+  tabsRow: { flexDirection: 'row', marginTop: 8 },
+  tabBtn: {
     flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  listContent: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
-    paddingTop: 4,
-    paddingBottom: 32,
-  },
-  categoryCard: {
-    borderRadius: 12,
-    borderWidth: DESIGN_TOKENS.borderWidth,
+  tabBtnActive: { borderBottomColor: '#0B3B60' },
+  tabLabel: { fontSize: 13, fontWeight: '600' },
+  tabLabelActive: { fontWeight: '800' },
+  listContainer: { flex: 1 },
+  listContent: { padding: 14, paddingBottom: 32 },
+  directoryRow: {
+    borderRadius: 10,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 9,
+    gap: 12,
   },
-  iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+  codeBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  iconEmoji: {
-    fontSize: 20,
+  codeText: {
+    color: '#0B3B60',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
-  infoCol: {
-    flex: 1,
-    marginRight: 8,
-  },
-  categoryName: {
-    fontWeight: '600',
+  infoCol: { flex: 1 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 3,
+    gap: 8,
   },
-  subText: {
-    fontSize: 11,
-  },
-  endCol: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  countBadge: {
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  chevron: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 13,
-  },
+  categoryName: { fontWeight: '800', flex: 1 },
+  metaCount: { fontSize: 10.5, fontWeight: '600' },
+  subText: { fontSize: 11.5, lineHeight: 16 },
+  chevron: { fontSize: 18, fontWeight: '700' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 44 },
+  emptyText: { fontSize: 13 },
 });

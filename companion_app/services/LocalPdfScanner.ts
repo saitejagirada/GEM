@@ -9,9 +9,12 @@
 
 import type { DeconstructedBidDoc } from '../types/index.ts';
 import { GemPdfExtractor, type ExtractedGeMTenderDetails } from './GemPdfExtractor.ts';
+import { PortalDocService } from './PortalDocService.ts';
 
-const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v1';
+const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v2';
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
+const PDF_FETCH_USER_AGENT =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36';
 
 export type LocalPdfScanStatus =
   | 'EXTRACTED'
@@ -165,14 +168,21 @@ export function enrichBidWithPdfScan(
       ? true
       : ext?.isEmdExemptForMse;
   const epbgPercentage = bid.epbgPercentage ?? d.epbgPercentage ?? ext?.epbgPercentage;
+  const epbgDurationMonths = bid.epbgDurationMonths ?? ext?.epbgDurationMonths;
   const minAnnualTurnoverInr = bid.minAnnualTurnoverInr ?? d.minAnnualTurnoverInr ?? ext?.minAnnualTurnoverInr;
   const yearsExperienceRequired =
     bid.yearsExperienceRequired ?? d.yearsExperienceRequired ?? ext?.yearsExperienceRequired;
   const pastPerformancePercentage =
     bid.pastPerformancePercentage ?? d.pastPerformancePercentage ?? ext?.pastPerformancePercentage;
   const deliveryPeriodDays = bid.deliveryPeriodDays ?? d.deliveryPeriodDays ?? ext?.deliveryPeriodDays;
+  const isSplittingApplied = bid.isSplittingApplied ?? ext?.isSplittingApplied;
   const splittingRatio = bid.splittingRatio ?? d.splittingRatio ?? ext?.splittingRatio;
   const makeInIndiaClass = bid.makeInIndiaClass ?? d.miiClass ?? ext?.miiClass;
+  const msePurchasePreference = bid.msePurchasePreference ?? d.msePurchasePreference ?? ext?.msePurchasePreference;
+  const miiPurchasePreference = bid.miiPurchasePreference ?? d.miiPurchasePreference ?? ext?.miiPurchasePreference;
+  const isEmdExemptForStartup = bid.isEmdExemptForStartup ?? d.isEmdExemptForStartup ?? ext?.isEmdExemptForStartup;
+  const bidValidityDays = bid.bidValidityDays ?? ext?.bidValidityDays;
+  const typeOfBid = bid.typeOfBid ?? ext?.typeOfBid;
 
   const requiredDocuments =
     bid.requiredDocuments && bid.requiredDocuments.length > 0
@@ -218,13 +228,20 @@ export function enrichBidWithPdfScan(
     estimatedBidValueInr,
     emdAmountInr,
     isEmdExemptForMse,
+    isEmdExemptForStartup,
     epbgPercentage,
+    epbgDurationMonths,
     minAnnualTurnoverInr,
     yearsExperienceRequired,
     pastPerformancePercentage,
     deliveryPeriodDays,
+    isSplittingApplied,
     splittingRatio,
     makeInIndiaClass,
+    msePurchasePreference,
+    miiPurchasePreference,
+    bidValidityDays,
+    typeOfBid,
     requiredDocuments,
     consignees,
     boqItems,
@@ -305,6 +322,96 @@ export class LocalPdfScanner {
     }
   }
 
+  /**
+   * Scans the official PDF(s) for a bid or Reverse Auction locally on device.
+   * For Reverse Auctions that link to a Parent Bid PDF (`showbidDocument/{b_id_parent}`),
+   * scans BOTH the Parent Bid PDF (which contains commercial terms, EMD, ePBG,
+   * turnover, consignees, and ATC) and the RA PDF (which contains RA dates &
+   * RA-specific MSE/Startup exemptions), merging them cleanly.
+   */
+  public static async scanBidDocuments(bid: DeconstructedBidDoc): Promise<LocalPdfScanResult> {
+    const documents = PortalDocService.getOfficialDocuments(bid);
+    const primaryDoc = documents[0];
+    if (!primaryDoc || !PortalDocService.isSafeGemUrl(primaryDoc.url)) {
+      return this.unavailableResult(
+        bid.bidNumber,
+        bid.docUrl || '',
+        'No verified official GeM PDF URL is available for this tender.'
+      );
+    }
+
+    const parentDoc = documents.find(
+      (doc) => doc.id === 'parent-bid-document' || (doc.id !== primaryDoc.id && /showbidDocument/i.test(doc.url))
+    );
+
+    if (!parentDoc || !PortalDocService.isSafeGemUrl(parentDoc.url)) {
+      return this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url);
+    }
+
+    const [parentScan, raScan] = await Promise.all([
+      this.scanOfficialBidPdf(bid.parentBidNumber || `${bid.bidNumber}-parent`, parentDoc.url),
+      this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url),
+    ]);
+
+    if (parentScan.status !== 'EXTRACTED' && raScan.status !== 'EXTRACTED') {
+      return raScan.status !== 'UNAVAILABLE' ? raScan : parentScan;
+    }
+    if (parentScan.status !== 'EXTRACTED') return raScan;
+    if (raScan.status !== 'EXTRACTED') {
+      return {
+        ...parentScan,
+        bidNumber: bid.bidNumber,
+        note: `Commercial terms extracted locally from Original Bid PDF (${bid.parentBidNumber || 'parent tender'}).`,
+      };
+    }
+
+    const pDetails = parentScan.details;
+    const rDetails = raScan.details;
+    const pExt = pDetails.extendedDetails;
+    const rExt = rDetails.extendedDetails;
+
+    const mergedExtended: ExtractedGeMTenderDetails | undefined = pExt
+      ? {
+          ...pExt,
+          bidNumber: bid.bidNumber,
+          closingDate: rExt?.closingDate || pExt.closingDate,
+          totalQuantity: rExt?.totalQuantity ?? pExt.totalQuantity,
+          isEmdExemptForMse: Boolean(pExt.isEmdExemptForMse || rExt?.isEmdExemptForMse),
+          isEmdExemptForStartup: Boolean(pExt.isEmdExemptForStartup || rExt?.isEmdExemptForStartup),
+          mseExemptionForExpAndTurnover: Boolean(
+            pExt.mseExemptionForExpAndTurnover || rExt?.mseExemptionForExpAndTurnover
+          ),
+          startupExemptionForExpAndTurnover: Boolean(
+            pExt.startupExemptionForExpAndTurnover || rExt?.startupExemptionForExpAndTurnover
+          ),
+          isRaEnabled: true,
+        }
+      : rExt;
+
+    const mergedDetails: LocalPdfDetails = {
+      ...pDetails,
+      bidNumber: bid.bidNumber,
+      title: rDetails.title || pDetails.title,
+      department: rDetails.department || pDetails.department,
+      ministry: rDetails.ministry || pDetails.ministry,
+      closingDate: rDetails.closingDate || pDetails.closingDate,
+      isEmdExemptForMse: pDetails.isEmdExemptForMse || rDetails.isEmdExemptForMse || undefined,
+      isEmdExemptForStartup: pDetails.isEmdExemptForStartup || rDetails.isEmdExemptForStartup || undefined,
+      extendedDetails: mergedExtended,
+    };
+
+    return {
+      bidNumber: bid.bidNumber,
+      documentUrl: primaryDoc.url,
+      sourceUri: parentDoc.url,
+      status: 'EXTRACTED',
+      details: mergedDetails,
+      textLength: parentScan.textLength + raScan.textLength,
+      scannedAtUtc: new Date().toISOString(),
+      note: `Extracted locally from RA PDF + Original Bid PDF (${bid.parentBidNumber || 'Parent Bid'}). Confirm all clauses before bidding.`,
+    };
+  }
+
   public static async scanOfficialBidPdf(
     bidNumber: string,
     documentUrl: string
@@ -317,6 +424,7 @@ export class LocalPdfScanner {
       const response = await fetch(documentUrl, {
         method: 'GET',
         headers: {
+          'User-Agent': PDF_FETCH_USER_AGENT,
           Accept: 'application/pdf,*/*',
         },
       });

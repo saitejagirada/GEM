@@ -164,4 +164,64 @@ endobj
     assert.ok(extracted.includes('Bid Number: GEM/2026/B/888123'));
     assert.ok(extracted.includes('Total Quantity: 500'));
   });
+
+  it('decodes TCPDF UTF-16BE hex strings used in GeM RA PDFs without null spacing', () => {
+    const toUtf16BeHex = (str: string) =>
+      Array.from(str)
+        .map((ch) => ch.charCodeAt(0).toString(16).padStart(4, '0'))
+        .join('');
+    const mockRaPdf = `
+1 0 obj
+<< /Length 120 >>
+stream
+BT
+/F1 10 Tf
+<${toUtf16BeHex('RA Number: GEM/2026/R/771831')}> Tj
+<${toUtf16BeHex('Total Quantity: 1000')}> Tj
+ET
+endstream
+endobj
+`;
+    const extracted = GemPdfExtractor.extractTextFromPdfSource(mockRaPdf);
+    assert.ok(extracted.includes('RA Number: GEM/2026/R/771831'));
+    assert.ok(extracted.includes('Total Quantity: 1000'));
+    const parsed = GemPdfExtractor.parseGeMTenderText(extracted);
+    assert.equal(parsed.bidNumber, 'GEM/2026/R/771831');
+    assert.equal(parsed.totalQuantity, 1000);
+  });
+
+  it('parses wrapped wkhtmltopdf exemptions, bilingual turnover, and multi-line consignee rows', () => {
+    const wrappedText = `
+Bid Number : GEM/2026/B/7966240
+Total Quantity : 1000
+( 3 : 6 Lakh (s)
+) OEM Average Turnover (Last 3 Years)
+MSE Relaxation for Years Of Experience : Yes | Complete
+and Turnover
+Startup Relaxation for Years Of : Yes | Complete
+Experience and Turnover
+EMD Detail
+Required : No
+ePBG Detail
+(%) ePBG Percentage(%) : 5.00
+( ) Duration of ePBG : 17
+required (Months).
+Bid splitting not applied.
+Consignees/Reporting Officer and Quantity
+571130,BARC (M), RMP,
+1 Salil Kumar N HUNSAR HIGHWAY, RATNAHALLY COMPLEX, : 1000 90
+Buyer Added Bid Specific Terms and Conditions
+`;
+    const parsed = GemPdfExtractor.parseGeMTenderText(wrappedText);
+    assert.equal(parsed.emdAmountInr, 0);
+    assert.equal(parsed.epbgPercentage, 5);
+    assert.equal(parsed.epbgDurationMonths, 17);
+    assert.equal(parsed.minAnnualTurnoverInr, 600000);
+    assert.equal(parsed.isEmdExemptForMse, true);
+    assert.equal(parsed.isEmdExemptForStartup, true);
+    assert.equal(parsed.splittingRatio, '100% to L1 (No Split)');
+    assert.equal(parsed.deliveryPeriodDays, 90);
+    assert.equal(parsed.consignees[0]?.state, 'Karnataka');
+    assert.equal(parsed.consignees[0]?.quantity, 1000);
+  });
 });

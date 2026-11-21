@@ -442,6 +442,7 @@ const MainAppContent: React.FC = () => {
                 initialQuery={marketNavQuery}
                 initialTypeTab={marketNavTypeTab}
                 navTrigger={marketNavTrigger}
+                onPrepareDocuments={openPreparation}
               />
             )}
             {activeTab === 'BIDS' && (
@@ -454,7 +455,7 @@ const MainAppContent: React.FC = () => {
                 onPrepareDocuments={openPreparation}
               />
             )}
-            {activeTab === 'AUCTIONS' && <AuctionsHubScreen />}
+            {activeTab === 'AUCTIONS' && <AuctionsHubScreen onPrepareDocuments={openPreparation} />}
             {activeTab === 'MORE' && (
               <MoreProfileScreen
                 onNavigateTab={handleHomeNavigate}

@@ -11,7 +11,7 @@
  * stays strictly inside the official GeM portal browser session.
  */
 
-import type { BidDocType, BidLifecycleStatus, DeconstructedBidDoc } from '../types/index.ts';
+import type { BidDocType, BidLifecycleStatus, DeconstructedBidDoc, OfficialBidDocument } from '../types/index.ts';
 import { markNetworkOnline } from '../utils/network.ts';
 
 const NATIONAL_PORTAL_ORIGIN = 'https://bidplus.gem.gov.in';
@@ -387,7 +387,7 @@ export class GeMLiveSyncService {
 
     const bidType = numberValue(portalBid.b_bid_type) ?? 1;
     const isService = numberValue(portalBid.b_type) === 1;
-    const isRa = bidType === 2 || bidType === 5 || boolValue(portalBid.b_bid_to_ra);
+    const isRa = bidType === 2 || bidType === 5 || boolValue(portalBid.b_bid_to_ra) || /\/R\//i.test(bidNumber);
     const isCustom = boolValue(portalBid.b_is_custom_item);
     const isBoq = boolValue(portalBid.b_is_boq) || boolValue(portalBid.is_boq_item);
     const isHighValue = boolValue(portalBid.is_high_value);
@@ -412,6 +412,17 @@ export class GeMLiveSyncService {
     const estimatedValue = numberValue(portalBid.b_estimated_value) || numberValue(portalBid.estimated_value);
     const startTimeUtc = stringValue(portalBid.final_start_date_sort);
     const parentBidNumber = stringValue(portalBid.b_bid_number_parent);
+    const parentBidId = stringValue(portalBid.b_id_parent);
+    const relatedDocuments: OfficialBidDocument[] = [];
+    if (parentBidId && parentBidId !== bidId) {
+      relatedDocuments.push({
+        id: 'parent-bid-document',
+        label: parentBidNumber ? `Original Bid (${parentBidNumber})` : 'Original Bid PDF',
+        kind: 'BID',
+        url: `${NATIONAL_PORTAL_ORIGIN}/showbidDocument/${parentBidId}`,
+        source: 'PUBLIC_GEM_FEED',
+      });
+    }
 
     return {
       bidNumber,
@@ -424,6 +435,7 @@ export class GeMLiveSyncService {
       isCancelled,
       isHighValue,
       parentBidNumber,
+      parentBidId,
       b_id: bidId,
       estimatedBidValueInr: estimatedValue,
       emdAmountInr: undefined,
@@ -442,6 +454,7 @@ export class GeMLiveSyncService {
       startTimeUtc,
       closingTimeUtc,
       docUrl: this.buildDocumentUrl(portalBid, bidId, bidType),
+      relatedDocuments: relatedDocuments.length > 0 ? relatedDocuments : undefined,
       publishedFields: {
         estimatedValue: estimatedValue !== undefined,
         quantity: quantity !== undefined,

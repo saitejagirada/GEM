@@ -14,6 +14,31 @@ describe('GeMClientCrawler & Live Multi-Seller Parsing', () => {
     assert.ok(laptopConfig);
     assert.strictEqual(laptopConfig.slug, 'computers-0806nb/search');
     assert.strictEqual(GeMClientCrawler.resolveMatchingSubcategory('laptop')?.id, 'laptops-notebooks');
+
+    // Verify Textile Products, Automobiles, and Pipes & Fittings all use verified live slugs
+    const textiles = OFFICIAL_GEM_SUBCATEGORIES.filter((c) => c.category === 'Textile Products');
+    const autos = OFFICIAL_GEM_SUBCATEGORIES.filter((c) => c.category === 'Automobiles');
+    const pipes = OFFICIAL_GEM_SUBCATEGORIES.filter((c) => c.category === 'Pipes & Fittings');
+    assert.ok(textiles.length >= 3);
+    assert.ok(autos.length >= 4);
+    assert.ok(pipes.length >= 3);
+    assert.ok(textiles.some((t) => t.slug.includes('bedclothes-handloom-cotton-bed-sheets')));
+    assert.ok(pipes.some((p) => p.slug.includes('is-1239')));
+    assert.ok(pipes.some((p) => p.slug.includes('is-15778')));
+  });
+
+  it('extracts dynamic live category slugs from GeM /search?q= HTML results', () => {
+    const mockSearchHtml = `
+      <a href="/computers-desktop-computer/search">Navbar link without query hash</a>
+      <a href="/bedclothes-handloom-cotton-bed-sheets-as-per-is-745-version-2-/search#/?q=bed+sheet">Result 1</a>
+      <a href="/towels-cotton-towelling-and-towels-v4-conforming-to-is-7056/search#/?q=towels">Result 2</a>
+      <a href="/bedclothes-handloom-cotton-bed-sheets-as-per-is-745-version-2-/search#/?q=bed+sheet">Duplicate</a>
+    `;
+    const slugs = GeMClientCrawler.extractDiscoveredSearchSlugs(mockSearchHtml);
+    assert.deepStrictEqual(slugs, [
+      'bedclothes-handloom-cotton-bed-sheets-as-per-is-745-version-2-/search',
+      'towels-cotton-towelling-and-towels-v4-conforming-to-is-7056/search',
+    ]);
   });
 
   it('parses live GeM HTML card variants with multi-seller, discounts, and badges', () => {

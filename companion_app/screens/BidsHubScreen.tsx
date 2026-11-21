@@ -358,25 +358,31 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             </Text>
           </View>
           <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>TERMS / EMD</Text>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+              {item.parentBidNumber ? 'ORIGINAL BID' : 'TERMS / EMD'}
+            </Text>
             <Text
               style={[
                 styles.metricValue,
                 {
-                  color:
-                    item.isEmdExemptForMse === undefined
+                  color: item.parentBidNumber
+                    ? colors.primary
+                    : item.isEmdExemptForMse === undefined
                       ? colors.textMuted
                       : item.isEmdExemptForMse
-                      ? colors.success
-                      : colors.warning,
+                        ? colors.success
+                        : colors.warning,
                 },
               ]}
+              numberOfLines={1}
             >
-              {item.isEmdExemptForMse === undefined
-                ? 'Scan PDF on device'
-                : item.isEmdExemptForMse
-                ? 'MSE exempt'
-                : 'Applicable'}
+              {item.parentBidNumber
+                ? item.parentBidNumber
+                : item.isEmdExemptForMse === undefined
+                  ? 'Tap to scan PDF'
+                  : item.isEmdExemptForMse
+                    ? 'MSE exempt'
+                    : 'Applicable'}
             </Text>
           </View>
         </View>

@@ -243,13 +243,20 @@ export interface DeconstructedBidDoc {
   estimatedBidValueInr?: number;
   emdAmountInr?: number;
   isEmdExemptForMse?: boolean;
+  isEmdExemptForStartup?: boolean;
   epbgPercentage?: number;
+  epbgDurationMonths?: number;
   minAnnualTurnoverInr?: number;
   yearsExperienceRequired?: number;
   pastPerformancePercentage?: number;
   deliveryPeriodDays?: number;
+  isSplittingApplied?: boolean;
   splittingRatio?: string; // e.g. "100% to L1" or "70:30 MSE"
   makeInIndiaClass?: MiiClass;
+  msePurchasePreference?: boolean;
+  miiPurchasePreference?: boolean;
+  bidValidityDays?: number;
+  typeOfBid?: string;
   boqItems?: BoqLineItem[];
   consignees?: ConsigneeDestination[];
   requiredDocuments?: string[];
@@ -257,6 +264,7 @@ export interface DeconstructedBidDoc {
   closingTimeUtc: string;
   isHighValue?: boolean;
   parentBidNumber?: string;
+  parentBidId?: string;
   hasCorrigendum?: boolean;
   hasRepresentation?: boolean;
   docUrl: string;

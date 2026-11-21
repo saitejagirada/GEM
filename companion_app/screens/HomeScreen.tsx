@@ -303,8 +303,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           >
             <View style={styles.oppHeaderRow}>
               <StatusBadge
-                label={bid.type === 'SERVICE' ? 'SERVICES' : 'GOODS'}
-                tone={bid.type === 'SERVICE' ? 'violet' : 'neutral'}
+                label={bid.isRa || bid.type === 'RA' ? 'RA' : bid.type === 'SERVICE' ? 'SERVICES' : 'GOODS'}
+                tone={bid.isRa || bid.type === 'RA' ? 'warning' : bid.type === 'SERVICE' ? 'violet' : 'neutral'}
               />
               <Text style={[styles.oppBidNum, { color: colors.textSecondary }]}>{bid.bidNumber}</Text>
               <StatusBadge label="ACTIVE" tone="success" dot />
@@ -325,7 +325,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <Text style={[styles.oppMetaLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
                 <Text style={[styles.oppMetaVal, { color: colors.primary }]}>
                   {bid.estimatedBidValueInr === undefined || bid.publishedFields?.estimatedValue === false
-                    ? 'Not published'
+                    ? bid.isHighValue
+                      ? '≥ ₹2 Cr'
+                      : 'Tap to inspect'
                     : formatLakhs(bid.estimatedBidValueInr)}
                 </Text>
               </View>
