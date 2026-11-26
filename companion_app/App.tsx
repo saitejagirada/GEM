@@ -1,36 +1,30 @@
 /**
- * GeM Mobile Companion App - official-style procurement companion
- * Conforms to the GeM Mobile UI Specification & 10-Screen Blueprint:
- * - Clean 56px Header: India flag mark, GeM wordmark, subtitle, notifications bell, profile avatar
- * - 64px 5-Tab Fixed Bottom Bar: Home, Search, Bids, Auctions, More with pale blue active surface
- * - 10-Screen Route Hierarchy:
- *   1. Home (/home) -> HomeScreen
- *   2. Search / Products (/marketplace) -> MarketplaceScreen
- *   3. Bids (/bids) -> BidsHubScreen
- *   4. Auctions (/auctions) -> AuctionsHubScreen & ReverseAuctionScreen
- *   5. Executed Contracts (/contracts) -> OrdersKnowledgeScreen
- *   6. Categories (/categories) -> CategoriesScreen
- *   7. Buyer Registration (/registration/buyer) -> PortalRegistrationScreen
- *   8. Seller KYC (/registration/seller) -> PortalRegistrationScreen
- *   9. Help & Resources (/help) -> HelpScreen
- *   10. More / Profile (/more) -> MoreProfileScreen
+ * GeM Mobile Companion App
+ *
+ * - Branded GeM startup launch screen (replaces blank screen while initial live feeds boot)
+ * - Clean 54px Top Header with official GeM Pinwheel Logo + instant Find Bid search
+ * - 60px 5-Tab Fixed Bottom Bar: Home, Search, Bids, Auctions, More with crisp geometric icons
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  BackHandler,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
   SafeAreaView,
   StatusBar,
-  Modal,
-  Alert,
+  StyleSheet,
+  Text,
   TextInput,
-  Pressable,
-  BackHandler,
-  Platform,
+  View,
 } from 'react-native';
 import { ThemeProvider, useTheme, DESIGN_TOKENS } from './theme/ThemeContext';
+import { AppIcon, type AppIconName } from './components/AppIcons';
 import { HomeScreen, type HomeNavigateParams } from './screens/HomeScreen';
 import { MarketplaceScreen } from './screens/MarketplaceScreen';
 import { BidsHubScreen } from './screens/BidsHubScreen';
@@ -45,24 +39,42 @@ import { MyWorkScreen } from './screens/MyWorkScreen';
 import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network';
-import type {
-  DeconstructedBidDoc,
-} from './types/index';
+import type { DeconstructedBidDoc } from './types/index';
 import type { MarketplaceCategory } from './services/MarketplaceService';
 
-export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
-export type SubScreen = 'NONE' | 'CATEGORIES' | 'CONTRACTS' | 'PORTFOLIO' | 'PORTAL' | 'REG_BUYER' | 'REG_SELLER' | 'HELP';
+// Official GeM brand assets bundled locally for instant 0ms rendering
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const GEM_MARK_IMG = require('./assets/gem-mark.png');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const GEM_LOGO_LIGHT_IMG = require('./assets/gem-logo-full.png');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const GEM_LOGO_DARK_IMG = require('./assets/gem-logo-dark.png');
 
-const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: string }[] = [
-  { id: 'HOME', label: 'Home', icon: '⌂' },
-  { id: 'SEARCH', label: 'Search', icon: '⌕' },
-  { id: 'BIDS', label: 'Bids', icon: '▤' },
-  { id: 'AUCTIONS', label: 'Auctions', icon: '↘' },
-  { id: 'MORE', label: 'More', icon: '⋯' },
+export type MainTab = 'HOME' | 'SEARCH' | 'BIDS' | 'AUCTIONS' | 'MORE';
+export type SubScreen =
+  | 'NONE'
+  | 'CATEGORIES'
+  | 'CONTRACTS'
+  | 'PORTFOLIO'
+  | 'PORTAL'
+  | 'REG_BUYER'
+  | 'REG_SELLER'
+  | 'HELP';
+
+const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: AppIconName }[] = [
+  { id: 'HOME', label: 'Home', icon: 'home' },
+  { id: 'SEARCH', label: 'Search', icon: 'search' },
+  { id: 'BIDS', label: 'Bids', icon: 'bids' },
+  { id: 'AUCTIONS', label: 'Auctions', icon: 'auctions' },
+  { id: 'MORE', label: 'More', icon: 'more' },
 ];
 
 const MainAppContent: React.FC = () => {
   const { colors, fontMultiplier, isDark } = useTheme();
+
+  // Branded GeM startup launch splash (eliminates blank white flash on startup)
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
 
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
   const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
@@ -85,32 +97,39 @@ const MainAppContent: React.FC = () => {
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
   const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
 
+  // Dismiss branded GeM splash smoothly after brief launch reveal
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(splashOpacity, {
+        toValue: 0,
+        duration: 280,
+        useNativeDriver: true,
+      }).start(() => setShowSplash(false));
+    }, 1050);
+    return () => clearTimeout(timer);
+  }, [splashOpacity]);
+
   // Hardware Back Button Navigation Stack Manager
   useEffect(() => {
     let lastBackPressTime = 0;
 
     const onBackPress = () => {
-      // 1. If inspection bid modal is open, close it
       if (selectedBid) {
         setSelectedBid(null);
         return true;
       }
-      // 2. If quick bid lookup modal is open, close it
       if (showLookupModal) {
         setShowLookupModal(false);
         return true;
       }
-      // 3. If in a sub-screen, navigate back to previous screen
       if (subScreen !== 'NONE') {
         setSubScreen('NONE');
         return true;
       }
-      // 4. If on a tab other than HOME, navigate back to HOME
       if (activeTab !== 'HOME') {
         setActiveTab('HOME');
         return true;
       }
-      // 5. If on HOME root, double-press back to exit with confirmation
       const now = Date.now();
       if (now - lastBackPressTime < 2000) {
         BackHandler.exitApp();
@@ -158,7 +177,6 @@ const MainAppContent: React.FC = () => {
         return;
       }
 
-      // Direct Phone -> bidplus.gem.gov.in live sync. Zero backend, zero mock fallback.
       const res = await GeMLiveSyncService.syncFromPortal(3);
       setBids(GeMLiveSyncService.getLiveBids());
       if (res.totalPortalBids) {
@@ -178,7 +196,10 @@ const MainAppContent: React.FC = () => {
   const handleQuickLookup = useCallback(async () => {
     const trimmed = lookupInput.trim();
     if (!trimmed) {
-      Alert.alert('Enter Bid Number', 'Please enter a valid GeM Bid Number (e.g. GEM/2026/B/8229586)');
+      Alert.alert(
+        'Enter Bid Number',
+        'Please enter a valid GeM Bid Number (e.g. GEM/2026/B/8229586)'
+      );
       return;
     }
 
@@ -187,8 +208,7 @@ const MainAppContent: React.FC = () => {
         (b) =>
           b.bidNumber.toLowerCase().includes(trimmed.toLowerCase()) ||
           b.title.toLowerCase().includes(trimmed.toLowerCase())
-      ) ||
-      GeMLiveSyncService.getBidById(trimmed);
+      ) || GeMLiveSyncService.getBidById(trimmed);
 
     if (localMatch) {
       setShowLookupModal(false);
@@ -197,7 +217,6 @@ const MainAppContent: React.FC = () => {
       return;
     }
 
-    // Live direct lookup on bidplus.gem.gov.in
     setIsLookingUp(true);
     try {
       const liveMatches = await GeMLiveSyncService.lookupBidOnPortal(trimmed);
@@ -212,7 +231,10 @@ const MainAppContent: React.FC = () => {
         );
       }
     } catch {
-      Alert.alert('Lookup failed', 'Unable to reach bidplus.gem.gov.in right now. Check your connection and try again.');
+      Alert.alert(
+        'Lookup failed',
+        'Unable to reach bidplus.gem.gov.in right now. Check your connection and try again.'
+      );
     } finally {
       setIsLookingUp(false);
     }
@@ -270,30 +292,23 @@ const MainAppContent: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.surface }]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.surface}
       />
 
-      {/* Tricolor National Accent Micro-bar */}
-      <View style={styles.tricolorBar}>
-        <View style={{ flex: 1, backgroundColor: '#FF9933' }} />
-        <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
-        <View style={{ flex: 1, backgroundColor: '#138808' }} />
-      </View>
-
-      {/* Compact GeM-style portal header */}
+      {/* Compact Official GeM Header */}
       <View
         style={[
           styles.headerBar,
           {
             backgroundColor: colors.surface,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.borderSubtle,
           },
         ]}
       >
-        {/* Left: GeM Brand */}
+        {/* Left: Real Official GeM Pinwheel Logo + Wordmark */}
         <Pressable
           style={styles.brandRow}
           unstable_pressDelay={0}
@@ -303,11 +318,7 @@ const MainAppContent: React.FC = () => {
             setSubScreen('NONE');
           }}
         >
-          <View style={styles.tricolorMark}>
-            <View style={{ flex: 1, backgroundColor: colors.saffron }} />
-            <View style={{ flex: 1, backgroundColor: colors.surface }} />
-            <View style={{ flex: 1, backgroundColor: colors.emerald }} />
-          </View>
+          <Image source={GEM_MARK_IMG} style={styles.gemLogoMark} resizeMode="contain" />
           <View style={styles.brandTextCol}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={[styles.brandGeM, { color: colors.primary }]}>GeM</Text>
@@ -319,46 +330,46 @@ const MainAppContent: React.FC = () => {
           </View>
         </Pressable>
 
-        {/* Right: Notifications & Profile Avatar */}
+        {/* Right: Clear 1-Tap Bid Lookup + Portal Quick Action */}
         <View style={styles.headerRightActions}>
           <Pressable
-            style={styles.headerIconBtn}
+            style={({ pressed }) => [
+              styles.findBidPill,
+              {
+                backgroundColor: colors.surfaceSubtle,
+                borderColor: colors.borderSubtle,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
             unstable_pressDelay={0}
             onPress={() => setShowLookupModal(true)}
-            hitSlop={8}
-            accessibilityLabel="Instant bid lookup"
+            hitSlop={6}
+            accessibilityLabel="Find bid by number"
           >
-            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>⌕</Text>
+            <AppIcon name="search" color={colors.primary} size={14} />
+            <Text style={[styles.findBidText, { color: colors.textPrimary }]}>Find Bid</Text>
           </Pressable>
 
           <Pressable
-            style={styles.headerIconBtn}
+            style={({ pressed }) => [
+              styles.portalQuickBtn,
+              {
+                backgroundColor: colors.primaryTint,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
             unstable_pressDelay={0}
-            onPress={() => Alert.alert('Notifications', 'Public feed refreshes are available from the Bids tab. Private GeM notifications remain inside the official portal.')}
-            hitSlop={8}
-            accessibilityLabel="Notifications"
+            onPress={() => setSubScreen('PORTAL')}
+            hitSlop={6}
+            accessibilityLabel="Open official GeM portal"
           >
-            <Text style={[styles.headerIconText, { color: colors.textSecondary }]}>!</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.profileAvatar, { backgroundColor: colors.primary }]}
-            unstable_pressDelay={0}
-            onPress={() => {
-              setActiveTab('MORE');
-              setSubScreen('NONE');
-            }}
-            hitSlop={8}
-            accessibilityLabel="Profile menu"
-          >
-            <Text style={[styles.avatarInitial, { color: colors.textInverse }]}>S</Text>
+            <Text style={[styles.portalQuickText, { color: colors.primary }]}>Portal ↗</Text>
           </Pressable>
         </View>
       </View>
 
       {/* Screen Body */}
       <View style={[styles.screenBody, { backgroundColor: colors.background }]}>
-        {/* Sub-screens taking full overlay view */}
         {subScreen === 'CATEGORIES' && (
           <CategoriesScreen
             onSelectCategory={handleSelectCategory}
@@ -367,7 +378,12 @@ const MainAppContent: React.FC = () => {
         )}
         {subScreen === 'CONTRACTS' && (
           <View style={{ flex: 1 }}>
-            <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <View
+              style={[
+                styles.subHeaderBar,
+                { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+              ]}
+            >
               <Pressable
                 onPress={() => setSubScreen('NONE')}
                 unstable_pressDelay={0}
@@ -376,7 +392,9 @@ const MainAppContent: React.FC = () => {
               >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
-              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Concluded Bids &amp; Contracts</Text>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>
+                Concluded Bids &amp; Contracts
+              </Text>
             </View>
             <OrdersKnowledgeScreen
               initialSearch={contractsNavSearch}
@@ -384,12 +402,15 @@ const MainAppContent: React.FC = () => {
             />
           </View>
         )}
-        {subScreen === 'PORTAL' && (
-          <OfficialPortalScreen onBack={() => setSubScreen('NONE')} />
-        )}
+        {subScreen === 'PORTAL' && <OfficialPortalScreen onBack={() => setSubScreen('NONE')} />}
         {subScreen === 'PORTFOLIO' && (
           <View style={{ flex: 1 }}>
-            <View style={[styles.subHeaderBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <View
+              style={[
+                styles.subHeaderBar,
+                { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+              ]}
+            >
               <Pressable
                 onPress={() => setSubScreen('NONE')}
                 unstable_pressDelay={0}
@@ -398,7 +419,9 @@ const MainAppContent: React.FC = () => {
               >
                 <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
               </Pressable>
-              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>Document preparation</Text>
+              <Text style={[styles.subHeaderTitle, { color: colors.textPrimary }]}>
+                Document Preparation
+              </Text>
             </View>
             <MyWorkScreen
               availableBids={bids}
@@ -408,22 +431,13 @@ const MainAppContent: React.FC = () => {
           </View>
         )}
         {subScreen === 'REG_BUYER' && (
-          <PortalRegistrationScreen
-            initialMode="BUYER"
-            onBack={() => setSubScreen('NONE')}
-          />
+          <PortalRegistrationScreen initialMode="BUYER" onBack={() => setSubScreen('NONE')} />
         )}
         {subScreen === 'REG_SELLER' && (
-          <PortalRegistrationScreen
-            initialMode="SELLER"
-            onBack={() => setSubScreen('NONE')}
-          />
+          <PortalRegistrationScreen initialMode="SELLER" onBack={() => setSubScreen('NONE')} />
         )}
-        {subScreen === 'HELP' && (
-          <HelpScreen onBack={() => setSubScreen('NONE')} />
-        )}
+        {subScreen === 'HELP' && <HelpScreen onBack={() => setSubScreen('NONE')} />}
 
-        {/* Primary Tab Views */}
         {subScreen === 'NONE' && (
           <>
             {activeTab === 'HOME' && (
@@ -455,7 +469,9 @@ const MainAppContent: React.FC = () => {
                 onPrepareDocuments={openPreparation}
               />
             )}
-            {activeTab === 'AUCTIONS' && <AuctionsHubScreen onPrepareDocuments={openPreparation} />}
+            {activeTab === 'AUCTIONS' && (
+              <AuctionsHubScreen onPrepareDocuments={openPreparation} />
+            )}
             {activeTab === 'MORE' && (
               <MoreProfileScreen
                 onNavigateTab={handleHomeNavigate}
@@ -467,13 +483,13 @@ const MainAppContent: React.FC = () => {
         )}
       </View>
 
-      {/* 64px Fixed Bottom Navigation Bar */}
+      {/* Fixed Bottom Navigation Bar */}
       <View
         style={[
           styles.bottomNav,
           {
             backgroundColor: colors.surface,
-            borderTopColor: colors.border,
+            borderTopColor: colors.borderSubtle,
           },
         ]}
       >
@@ -496,17 +512,13 @@ const MainAppContent: React.FC = () => {
               ]}
               hitSlop={6}
             >
-              <Text
-                style={[
-                  styles.navIcon,
-                  {
-                    color: isActive ? colors.primary : colors.textMuted,
-                    fontSize: isActive ? 18 : 16,
-                  },
-                ]}
-              >
-                {item.icon}
-              </Text>
+              <View style={styles.navIconWrap}>
+                <AppIcon
+                  name={item.icon}
+                  color={isActive ? colors.primary : colors.textMuted}
+                  size={18}
+                />
+              </View>
               <Text
                 style={[
                   styles.navLabel,
@@ -525,17 +537,30 @@ const MainAppContent: React.FC = () => {
       </View>
 
       {/* Quick Bid Lookup Modal */}
-      <Modal visible={showLookupModal} animationType="slide" transparent onRequestClose={() => setShowLookupModal(false)}>
+      <Modal
+        visible={showLookupModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowLookupModal(false)}
+      >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.lookupCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.lookupCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.lookupHeader}>
-              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>Quick Bid Search</Text>
+              <Text style={[styles.lookupTitle, { color: colors.textPrimary }]}>
+                Find GeM Bid or RA
+              </Text>
               <Pressable onPress={() => setShowLookupModal(false)} hitSlop={10}>
                 <Text style={[styles.lookupClose, { color: colors.textMuted }]}>✕</Text>
               </Pressable>
             </View>
             <Text style={[styles.lookupDesc, { color: colors.textSecondary }]}>
-              Enter any GeM Bid Number to instantly inspect specifications and requirements.
+              Enter any GeM Bid or RA number to inspect terms, buyer specifications, drawings, and
+              ATC documents immediately.
             </Text>
             <TextInput
               style={[
@@ -546,7 +571,7 @@ const MainAppContent: React.FC = () => {
                   color: colors.textPrimary,
                 },
               ]}
-              placeholder="e.g. GEM/2026/B/890123"
+              placeholder="e.g. GEM/2026/B/8160154"
               placeholderTextColor={colors.textMuted}
               value={lookupInput}
               onChangeText={setLookupInput}
@@ -562,12 +587,15 @@ const MainAppContent: React.FC = () => {
                 <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.lookupSubmitBtn, { backgroundColor: colors.primary, opacity: isLookingUp ? 0.7 : 1 }]}
+                style={[
+                  styles.lookupSubmitBtn,
+                  { backgroundColor: colors.primary, opacity: isLookingUp ? 0.7 : 1 },
+                ]}
                 onPress={handleQuickLookup}
                 disabled={isLookingUp}
               >
                 <Text style={{ color: colors.textInverse, fontWeight: '700' }}>
-                  {isLookingUp ? 'Querying GeM...' : 'Search Live on GeM'}
+                  {isLookingUp ? 'Searching GeM…' : 'Search Live on GeM'}
                 </Text>
               </Pressable>
             </View>
@@ -583,6 +611,43 @@ const MainAppContent: React.FC = () => {
           onClose={() => setSelectedBid(null)}
           onPrepareDocuments={openPreparation}
         />
+      )}
+
+      {/* Branded GeM Startup Launch Overlay (Zero blank screen on app start) */}
+      {showSplash && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.splashOverlay,
+            {
+              backgroundColor: colors.surface,
+              opacity: splashOpacity,
+            },
+          ]}
+        >
+          <View style={styles.splashCenter}>
+            <Image
+              source={isDark ? GEM_LOGO_DARK_IMG : GEM_LOGO_LIGHT_IMG}
+              style={styles.splashLogo}
+              resizeMode="contain"
+            />
+            <View style={styles.splashAccentBar}>
+              <View style={{ flex: 1, backgroundColor: '#F58220', borderRadius: 2 }} />
+              <View style={{ flex: 1, backgroundColor: '#78BE20', borderRadius: 2 }} />
+              <View style={{ flex: 1, backgroundColor: '#0B4F71', borderRadius: 2 }} />
+            </View>
+            <Text style={[styles.splashTagline, { color: colors.textSecondary }]}>
+              Efficient · Transparent · Inclusive
+            </Text>
+          </View>
+
+          <View style={styles.splashFooter}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.splashFooterText, { color: colors.textMuted }]}>
+              Connecting directly to live GeM feeds…
+            </Text>
+          </View>
+        </Animated.View>
       )}
     </SafeAreaView>
   );
@@ -600,35 +665,28 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  tricolorBar: {
-    height: 2,
-    flexDirection: 'row',
-  },
   headerBar: {
     height: DESIGN_TOKENS.headerHeight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  tricolorMark: {
-    width: 18,
-    height: 18,
-    borderRadius: 2,
-    overflow: 'hidden',
-    flexDirection: 'column',
-    marginRight: 8,
+  gemLogoMark: {
+    width: 30,
+    height: 30,
   },
   brandTextCol: {},
   brandGeM: {
     fontSize: 17,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   liveDot: {
     width: 6,
@@ -643,25 +701,31 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  headerIconBtn: {
-    padding: 6,
-    marginLeft: 4,
+  findBidPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  headerIconText: {
-    fontSize: 16,
+  findBidText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
-  profileAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
+  portalQuickBtn: {
+    paddingHorizontal: 10,
+    minHeight: 34,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
   },
-  avatarInitial: {
-    fontSize: 14,
-    fontWeight: '700',
+  portalQuickText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   screenBody: {
     flex: 1,
@@ -691,19 +755,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingBottom: 4,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 52,
-    borderRadius: DESIGN_TOKENS.buttonRadius,
+    height: 50,
+    borderRadius: 8,
     paddingVertical: 4,
   },
-  navIcon: {
-    marginBottom: 2,
+  navIconWrap: {
+    marginBottom: 3,
   },
   navLabel: {},
   modalBackdrop: {
@@ -713,7 +777,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   lookupCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
+    borderRadius: 12,
     borderWidth: 1,
     padding: 18,
   },
@@ -724,21 +788,21 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   lookupTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
   },
   lookupClose: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   lookupDesc: {
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 17,
     marginBottom: 12,
   },
   lookupInput: {
     height: 44,
-    borderRadius: DESIGN_TOKENS.inputRadius,
+    borderRadius: 8,
     borderWidth: 1,
     paddingHorizontal: 12,
     fontSize: 14,
@@ -760,5 +824,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
+  },
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 99,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 64,
+    paddingHorizontal: 28,
+  },
+  splashCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  splashLogo: {
+    width: 248,
+    height: 98,
+  },
+  splashAccentBar: {
+    flexDirection: 'row',
+    width: 156,
+    height: 3.5,
+    gap: 6,
+    marginTop: 18,
+    marginBottom: 12,
+  },
+  splashTagline: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+  },
+  splashFooter: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  splashFooterText: {
+    fontSize: 11.5,
+    fontWeight: '600',
   },
 });

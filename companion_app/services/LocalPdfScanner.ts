@@ -7,14 +7,41 @@
  * stores a small extracted summary, and never uploads PDF bytes or text to any server.
  */
 
-import type { DeconstructedBidDoc } from '../types/index.ts';
-import { GemPdfExtractor, type ExtractedGeMTenderDetails } from './GemPdfExtractor.ts';
+import type { DeconstructedBidDoc, OfficialBidDocument } from '../types/index.ts';
+import {
+  GemPdfExtractor,
+  type ExtractedGeMTenderDetails,
+  type ExtractedLinkedDocument,
+} from './GemPdfExtractor.ts';
 import { PortalDocService } from './PortalDocService.ts';
 
-const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v2';
+const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v3';
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
+const PDF_FETCH_TIMEOUT_MS = 15000;
 const PDF_FETCH_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36';
+const PDF_FETCH_HEADERS: Record<string, string> = {
+  'User-Agent': PDF_FETCH_USER_AGENT,
+  Accept: 'application/pdf,*/*',
+  Referer: 'https://bidplus.gem.gov.in/',
+};
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return new Promise<T>((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise.then(
+      (val) => {
+        if (timer) clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        if (timer) clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 export type LocalPdfScanStatus =
   | 'EXTRACTED'
@@ -47,6 +74,7 @@ export interface LocalPdfDetails {
   requiredDocuments?: string[];
   consigneesCount?: number;
   deliveryPeriodDays?: number;
+  linkedDocuments?: ExtractedLinkedDocument[];
   extendedDetails?: ExtractedGeMTenderDetails;
 }
 
@@ -69,7 +97,11 @@ interface LocalFileInfo {
 interface LocalFileSystem {
   cacheDirectory?: string | null;
   documentDirectory?: string | null;
-  downloadAsync(url: string, fileUri: string): Promise<{ uri?: string }>;
+  downloadAsync(
+    url: string,
+    fileUri: string,
+    options?: { headers?: Record<string, string> }
+  ): Promise<{ uri?: string; status?: number }>;
   getInfoAsync(uri: string): Promise<LocalFileInfo>;
   readAsStringAsync(uri: string, options?: { encoding?: string }): Promise<string>;
   deleteAsync(uri: string, options?: { idempotent?: boolean }): Promise<void>;
@@ -216,6 +248,29 @@ export function enrichBidWithPdfScan(
         ]
       : [];
 
+  const discoveredLinks = d.linkedDocuments ?? ext?.linkedDocuments ?? [];
+  const mergedRelatedDocuments: OfficialBidDocument[] = [...(bid.relatedDocuments ?? [])];
+  const seenRelatedUrls = new Set(
+    [bid.docUrl, ...mergedRelatedDocuments.map((doc) => doc.url)]
+      .filter(Boolean)
+      .map((u) => u.trim().replace(/#.*$/, '').toLowerCase())
+  );
+  for (const link of discoveredLinks) {
+    if (!link?.url || !PortalDocService.isSafeGemUrl(link.url)) continue;
+    const norm = link.url.trim().replace(/#.*$/, '').toLowerCase();
+    if (seenRelatedUrls.has(norm)) continue;
+    seenRelatedUrls.add(norm);
+    mergedRelatedDocuments.push({
+      id: link.id,
+      label: link.label,
+      subtitle: link.subtitle,
+      kind: link.kind,
+      fileFormat: link.fileFormat,
+      url: link.url,
+      source: 'EXTRACTED_FROM_PDF',
+    });
+  }
+
   return {
     ...bid,
     title: bid.title && bid.title !== 'Bid title not published' ? bid.title : d.title || bid.title,
@@ -245,6 +300,7 @@ export function enrichBidWithPdfScan(
     requiredDocuments,
     consignees,
     boqItems,
+    relatedDocuments: mergedRelatedDocuments,
     publishedFields: {
       estimatedValue: estimatedBidValueInr !== undefined,
       quantity: boqItems.length > 0,
@@ -268,6 +324,9 @@ function scanSource(
   const text = extractPdfText(source);
   const details = extractPdfDetails(text, bidNumber);
   const extended = extractExtendedPdfDetails(text, bidNumber);
+  const linkedDocuments = GemPdfExtractor.extractLinkedDocumentsFromPdf(source, [documentUrl]);
+  details.linkedDocuments = linkedDocuments;
+  extended.linkedDocuments = linkedDocuments;
   details.extendedDetails = extended;
 
   const scannedAtUtc = new Date().toISOString();
@@ -349,8 +408,12 @@ export class LocalPdfScanner {
     }
 
     const [parentScan, raScan] = await Promise.all([
-      this.scanOfficialBidPdf(bid.parentBidNumber || `${bid.bidNumber}-parent`, parentDoc.url),
-      this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url),
+      this.scanOfficialBidPdf(bid.parentBidNumber || `${bid.bidNumber}-parent`, parentDoc.url).catch(
+        () => this.unavailableResult(bid.parentBidNumber || bid.bidNumber, parentDoc.url, 'Original Bid PDF timed out.')
+      ),
+      this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url).catch(() =>
+        this.unavailableResult(bid.bidNumber, primaryDoc.url, 'RA PDF timed out.')
+      ),
     ]);
 
     if (parentScan.status !== 'EXTRACTED' && raScan.status !== 'EXTRACTED') {
@@ -370,6 +433,20 @@ export class LocalPdfScanner {
     const pExt = pDetails.extendedDetails;
     const rExt = rDetails.extendedDetails;
 
+    const mergedLinkedDocs: ExtractedLinkedDocument[] = [];
+    const seenLinkedUrls = new Set(
+      [primaryDoc.url, parentDoc.url].map((u) => u.trim().replace(/#.*$/, '').toLowerCase())
+    );
+    for (const doc of [
+      ...(pDetails.linkedDocuments ?? pExt?.linkedDocuments ?? []),
+      ...(rDetails.linkedDocuments ?? rExt?.linkedDocuments ?? []),
+    ]) {
+      const norm = doc.url.trim().replace(/#.*$/, '').toLowerCase();
+      if (seenLinkedUrls.has(norm)) continue;
+      seenLinkedUrls.add(norm);
+      mergedLinkedDocs.push(doc);
+    }
+
     const mergedExtended: ExtractedGeMTenderDetails | undefined = pExt
       ? {
           ...pExt,
@@ -385,8 +462,11 @@ export class LocalPdfScanner {
             pExt.startupExemptionForExpAndTurnover || rExt?.startupExemptionForExpAndTurnover
           ),
           isRaEnabled: true,
+          linkedDocuments: mergedLinkedDocs,
         }
-      : rExt;
+      : rExt
+        ? { ...rExt, linkedDocuments: mergedLinkedDocs }
+        : undefined;
 
     const mergedDetails: LocalPdfDetails = {
       ...pDetails,
@@ -397,6 +477,7 @@ export class LocalPdfScanner {
       closingDate: rDetails.closingDate || pDetails.closingDate,
       isEmdExemptForMse: pDetails.isEmdExemptForMse || rDetails.isEmdExemptForMse || undefined,
       isEmdExemptForStartup: pDetails.isEmdExemptForStartup || rDetails.isEmdExemptForStartup || undefined,
+      linkedDocuments: mergedLinkedDocs,
       extendedDetails: mergedExtended,
     };
 
@@ -419,15 +500,83 @@ export class LocalPdfScanner {
     const cached = await this.getCachedScan(bidNumber, documentUrl);
     if (cached && cached.status === 'EXTRACTED') return cached;
 
-    // 1. Primary path: Direct binary fetch -> ArrayBuffer -> Uint8Array (zero UTF-8 corruption, works in Hermes & Node)
+    // 1. Native fast path (Android/iOS): expo-file-system with browser User-Agent headers.
+    // bidplus.gem.gov.in stalls bare okhttp User-Agents, and RN's fetch().arrayBuffer() is
+    // unavailable on Hermes 0.74, so downloading once via expo-file-system with explicit headers
+    // avoids double-downloading and completes in ~1-3 seconds.
+    const fileSystem = await this.getFileSystem();
+    const temporaryDirectory = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
+    if (fileSystem && temporaryDirectory) {
+      const safeName = bidNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const temporaryUri = `${temporaryDirectory.replace(/\/?$/, '/')}gem-pdf-scan-${safeName}-${nonce}.pdf`;
+      let downloadedUri = temporaryUri;
+
+      try {
+        const download = await withTimeout(
+          fileSystem.downloadAsync(documentUrl, temporaryUri, {
+            headers: PDF_FETCH_HEADERS,
+          }),
+          PDF_FETCH_TIMEOUT_MS,
+          'PDF download'
+        );
+        downloadedUri = download.uri || temporaryUri;
+        if (typeof download.status === 'number' && download.status >= 400) {
+          return this.unavailableResult(
+            bidNumber,
+            documentUrl,
+            `GeM returned HTTP ${download.status} while downloading this PDF.`
+          );
+        }
+        const info = await fileSystem.getInfoAsync(downloadedUri);
+        if (info.exists) {
+          if (typeof info.size === 'number' && info.size > MAX_SCAN_BYTES) {
+            return {
+              bidNumber,
+              documentUrl,
+              sourceUri: documentUrl,
+              status: 'TOO_LARGE',
+              details: {},
+              textLength: 0,
+              scannedAtUtc: new Date().toISOString(),
+              note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
+            };
+          }
+          if (typeof info.size !== 'number' || info.size > 0) {
+            let source: string | Uint8Array;
+            try {
+              const b64 = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'base64' });
+              source = decodeBase64ToUint8Array(b64);
+            } catch {
+              source = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'utf8' });
+            }
+            const result = scanSource(source, bidNumber, documentUrl, documentUrl);
+            await this.saveScan(result);
+            return result;
+          }
+        }
+      } catch {
+        // Fall through to bounded fetch fallback below
+      } finally {
+        await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
+      }
+    }
+
+    // 2. Direct binary fetch path (Node.js / Web / fallback when native download fails)
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const abortTimer = controller
+      ? setTimeout(() => controller.abort(), PDF_FETCH_TIMEOUT_MS)
+      : undefined;
     try {
-      const response = await fetch(documentUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': PDF_FETCH_USER_AGENT,
-          Accept: 'application/pdf,*/*',
-        },
-      });
+      const response = await withTimeout(
+        fetch(documentUrl, {
+          method: 'GET',
+          headers: PDF_FETCH_HEADERS,
+          signal: controller?.signal,
+        }),
+        PDF_FETCH_TIMEOUT_MS,
+        'PDF fetch'
+      );
       if (response.ok && typeof response.arrayBuffer === 'function') {
         const contentLen = Number(response.headers?.get?.('content-length') || 0);
         if (contentLen > MAX_SCAN_BYTES) {
@@ -442,7 +591,9 @@ export class LocalPdfScanner {
             note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
           };
         }
-        const bytes = new Uint8Array(await response.arrayBuffer());
+        const bytes = new Uint8Array(
+          await withTimeout(response.arrayBuffer(), PDF_FETCH_TIMEOUT_MS, 'PDF buffer read')
+        );
         if (bytes.byteLength > MAX_SCAN_BYTES) {
           return {
             bidNumber,
@@ -462,55 +613,16 @@ export class LocalPdfScanner {
         }
       }
     } catch {
-      // Fall back to expo-file-system download if direct fetch is unavailable
-    }
-
-    // 2. Fallback path: expo-file-system downloadAsync
-    const fileSystem = await this.getFileSystem();
-    const temporaryDirectory = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
-    if (!fileSystem || !temporaryDirectory) {
-      return this.unavailableResult(bidNumber, documentUrl, 'Device file storage is unavailable for local scanning.');
-    }
-
-    const safeName = bidNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const temporaryUri = `${temporaryDirectory.replace(/\/?$/, '/')}gem-pdf-scan-${safeName}.pdf`;
-    let downloadedUri = temporaryUri;
-
-    try {
-      const download = await fileSystem.downloadAsync(documentUrl, temporaryUri);
-      downloadedUri = download.uri || temporaryUri;
-      const info = await fileSystem.getInfoAsync(downloadedUri);
-      if (!info.exists) {
-        return this.unavailableResult(bidNumber, documentUrl, 'The official PDF could not be downloaded to this device.');
-      }
-      if (typeof info.size === 'number' && info.size > MAX_SCAN_BYTES) {
-        return {
-          bidNumber,
-          documentUrl,
-          sourceUri: documentUrl,
-          status: 'TOO_LARGE',
-          details: {},
-          textLength: 0,
-          scannedAtUtc: new Date().toISOString(),
-          note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
-        };
-      }
-
-      let source: string | Uint8Array;
-      try {
-        const b64 = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'base64' });
-        source = decodeBase64ToUint8Array(b64);
-      } catch {
-        source = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'utf8' });
-      }
-      const result = scanSource(source, bidNumber, documentUrl, documentUrl);
-      await this.saveScan(result);
-      return result;
-    } catch {
-      return this.unavailableResult(bidNumber, documentUrl, 'The PDF could not be read locally on this device.');
+      // Bounded failure — return clean unavailable result so UI never hangs
     } finally {
-      await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
+      if (abortTimer) clearTimeout(abortTimer);
     }
+
+    return this.unavailableResult(
+      bidNumber,
+      documentUrl,
+      'GeM took too long to return this PDF. Tap Scan PDF to retry or open the document inline.'
+    );
   }
 
   public static async scanLocalPdf(

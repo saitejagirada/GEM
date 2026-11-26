@@ -1,32 +1,48 @@
 /**
- * GeM Mobile Companion App - Pre-Bid Disqualification Shield Component
- * 
- * Interactive pre-submission checklist and compliance verification card.
- * Protects vendors against technical disqualification by cross-referencing
- * on-device extracted tender clauses against seller profile and uploaded files.
+ * GeM Mobile Companion App - Eligibility & Bid Watchouts Component
+ *
+ * Clean, honest pre-bid compliance breakdown built strictly from clauses extracted
+ * locally from the official GeM PDF.
+ * - When no seller profile is configured, shows transparent tender requirements and
+ *   practical GeM watchouts without fabricating failure/rejection alarms against
+ *   dummy profile data.
+ * - When an explicit seller profile is provided, runs DisqualificationShieldEngine
+ *   against the user's real profile and attached documents.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+  Alert,
   Modal,
+  Pressable,
   ScrollView,
   Share,
-  Alert,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useTheme } from '../theme/ThemeContext.tsx';
-import type { UserAgentProfile, WorkspaceDocument } from '../types/index.ts';
-import type { ExtractedGeMTenderDetails } from '../services/GemPdfExtractor.ts';
-import { DisqualificationShieldEngine, type DisqualificationShieldReport } from '../services/DisqualificationShieldEngine.ts';
+import { useTheme } from '../theme/ThemeContext';
+import type { UserAgentProfile, WorkspaceDocument } from '../types/index';
+import type { ExtractedGeMTenderDetails } from '../services/GemPdfExtractor';
+import {
+  DisqualificationShieldEngine,
+  type DisqualificationShieldReport,
+} from '../services/DisqualificationShieldEngine';
+import { formatInr } from '../utils/formatters';
 
 interface PreBidDisqualificationShieldProps {
   tenderDetails: ExtractedGeMTenderDetails;
   profile?: UserAgentProfile;
   attachedDocs?: WorkspaceDocument[];
   onPrepareDocuments?: () => void;
+}
+
+interface RequirementBullet {
+  id: string;
+  tag: string;
+  tone: 'info' | 'caution' | 'positive';
+  title: string;
+  detail: string;
 }
 
 export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShieldProps> = ({
@@ -38,62 +54,128 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
   const { colors } = useTheme();
   const [activeTemplate, setActiveTemplate] = useState<{ title: string; content: string } | null>(null);
 
-  const safeProfile: UserAgentProfile = profile || {
-    id: 'default-profile',
-    organizationName: 'Verified Enterprise',
-    msmeCategory: 'MICRO',
-    annualTurnoverInr: 5000000,
-    yearsExperience: 3,
-    productCategories: ['LED Luminaire', 'IT', 'Solar'],
-    targetStates: ['Delhi', 'Uttar Pradesh', 'Maharashtra'],
-    isOem: false,
-    hasUdyamCertificate: true,
-  };
+  // Run profile-matched compliance engine ONLY when a real user profile is provided
+  const profileReport: DisqualificationShieldReport | null = useMemo(() => {
+    if (!profile) return null;
+    return DisqualificationShieldEngine.evaluateShield(tenderDetails, profile, attachedDocs);
+  }, [tenderDetails, profile, attachedDocs]);
 
-  const report: DisqualificationShieldReport = DisqualificationShieldEngine.evaluateShield(
-    tenderDetails,
-    safeProfile,
-    attachedDocs
-  );
+  // Generate clean ready-to-share compliance letters without fabricating seller stats
+  const draftTemplates = useMemo(() => {
+    const templateProfile: UserAgentProfile = profile || {
+      id: 'template-only',
+      organizationName: '[Your Company Name]',
+      msmeCategory: 'MICRO',
+      annualTurnoverInr: 0,
+      yearsExperience: 0,
+      productCategories: [],
+      targetStates: [],
+      isOem: true,
+      hasUdyamCertificate: false,
+    };
+    return {
+      mii: DisqualificationShieldEngine.generateMiiTemplate(tenderDetails, templateProfile),
+      ca: DisqualificationShieldEngine.generateCaRequestTemplate(tenderDetails, templateProfile),
+      oem: DisqualificationShieldEngine.generateOemMafTemplate(tenderDetails, templateProfile),
+    };
+  }, [tenderDetails, profile]);
 
-  const getStatusColor = (status: DisqualificationShieldReport['overallStatus']) => {
-    switch (status) {
-      case 'BATTLE_READY':
-        return '#059669'; // Emerald
-      case 'ELEVATED_RISK':
-        return '#D97706'; // Saffron Gold
-      case 'CRITICAL_DISQUALIFICATION_RISK':
-        return '#DC2626'; // Crimson Red
+  // Honest tender-derived requirements & GeM rule watchouts (when no user profile is set)
+  const publishedWatchouts = useMemo<RequirementBullet[]>(() => {
+    const items: RequirementBullet[] = [];
+
+    if (tenderDetails.emdAmountInr && tenderDetails.emdAmountInr > 0) {
+      items.push({
+        id: 'emd-rule',
+        tag: 'EMD',
+        tone: 'caution',
+        title: `EMD of ₹${formatInr(tenderDetails.emdAmountInr)} required`,
+        detail: tenderDetails.isEmdExemptForMse
+          ? 'MSE EMD exemption on goods applies only to OEM Manufacturers with valid Udyam — traders/resellers must submit EMD.'
+          : 'Confirm EMD bank guarantee or exemption eligibility in the tender PDF before quoting.',
+      });
+    } else if (tenderDetails.emdAmountInr === 0) {
+      items.push({
+        id: 'emd-free',
+        tag: 'EMD',
+        tone: 'positive',
+        title: 'No EMD required',
+        detail: 'Official PDF indicates EMD is not required for this tender.',
+      });
     }
-  };
 
-  const getStatusBadgeText = (status: DisqualificationShieldReport['overallStatus']) => {
-    switch (status) {
-      case 'BATTLE_READY':
-        return `SHIELD ACTIVE · ${report.shieldScore}% PASS`;
-      case 'ELEVATED_RISK':
-        return `CAUTION · ${report.shieldScore}% READINESS`;
-      case 'CRITICAL_DISQUALIFICATION_RISK':
-        return `CRITICAL RISK · ${report.shieldScore}% (DISQUALIFICATION LIKELY)`;
+    if (tenderDetails.minAnnualTurnoverInr && tenderDetails.minAnnualTurnoverInr > 0) {
+      const lakhs = (tenderDetails.minAnnualTurnoverInr / 100000).toFixed(1);
+      items.push({
+        id: 'turnover',
+        tag: 'TURNOVER',
+        tone: 'info',
+        title: `Minimum ₹${lakhs} Lakhs average annual turnover`,
+        detail: tenderDetails.mseExemptionForExpAndTurnover
+          ? 'Buyer enabled MSE/Startup turnover relaxation — verify exact supporting document clause in PDF.'
+          : 'Keep audited balance sheets or a CA Turnover Certificate with valid ICAI UDIN ready.',
+      });
     }
-  };
 
-  const handleOpenTemplate = (action?: string) => {
-    if (!action) return;
-    if (action === 'MII_DECLARATION' && report.generatedTemplates.miiSelfDeclaration) {
+    if (tenderDetails.yearsExperienceRequired && tenderDetails.yearsExperienceRequired > 0) {
+      items.push({
+        id: 'experience',
+        tag: 'EXPERIENCE',
+        tone: 'info',
+        title: `${tenderDetails.yearsExperienceRequired} year${tenderDetails.yearsExperienceRequired === 1 ? '' : 's'} past experience required`,
+        detail: 'Attach past government/PSU purchase orders along with CRAC or completion certificates.',
+      });
+    }
+
+    if (tenderDetails.miiPurchasePreference || tenderDetails.requiresMiiDeclaration) {
+      const pct = tenderDetails.miiLocalContentPercentage || 50;
+      items.push({
+        id: 'mii',
+        tag: 'MII',
+        tone: 'info',
+        title: `Make in India (≥${pct}% local content)`,
+        detail: 'Upload signed MII local content self-declaration on company letterhead during technical bid.',
+      });
+    }
+
+    if (tenderDetails.requiresOemAuthorization) {
+      items.push({
+        id: 'oem',
+        tag: 'OEM MAF',
+        tone: 'caution',
+        title: 'OEM Authorization (MAF) requested',
+        detail: 'Authorized resellers/dealers must attach a bid-specific Manufacturer Authorization Form.',
+      });
+    }
+
+    if (tenderDetails.epbgPercentage && tenderDetails.epbgPercentage > 0) {
+      items.push({
+        id: 'epbg',
+        tag: 'e-PBG',
+        tone: 'info',
+        title: `${tenderDetails.epbgPercentage}% Performance Security${tenderDetails.epbgDurationMonths ? ` (${tenderDetails.epbgDurationMonths} months)` : ''}`,
+        detail: 'Winning L1 bidder must furnish e-PBG after contract award.',
+      });
+    }
+
+    return items;
+  }, [tenderDetails]);
+
+  const handleOpenTemplate = (action?: 'MII_DECLARATION' | 'CA_UDIN_REQUEST' | 'OEM_MAF_REQUEST') => {
+    if (action === 'MII_DECLARATION') {
       setActiveTemplate({
         title: 'Make in India (MII) Self-Declaration',
-        content: report.generatedTemplates.miiSelfDeclaration,
+        content: draftTemplates.mii,
       });
-    } else if (action === 'CA_UDIN_REQUEST' && report.generatedTemplates.caTurnoverRequest) {
+    } else if (action === 'CA_UDIN_REQUEST') {
       setActiveTemplate({
-        title: 'Requisition for CA Turnover Certificate with UDIN',
-        content: report.generatedTemplates.caTurnoverRequest,
+        title: 'CA Turnover Certificate (UDIN) Request',
+        content: draftTemplates.ca,
       });
-    } else if (action === 'OEM_MAF_REQUEST' && report.generatedTemplates.oemMafRequest) {
+    } else if (action === 'OEM_MAF_REQUEST') {
       setActiveTemplate({
-        title: 'OEM Authorization Form (MAF) Requisition',
-        content: report.generatedTemplates.oemMafRequest,
+        title: 'OEM Authorization (MAF) Request',
+        content: draftTemplates.oem,
       });
     }
   };
@@ -106,130 +188,254 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
         message: activeTemplate.content,
       });
     } catch {
-      Alert.alert('Copy Template', 'Template text ready.');
+      Alert.alert('Template Ready', 'You can copy this compliance draft from the screen.');
     }
   };
 
+  const stateEntries = Object.entries(tenderDetails.consigneeStateDistribution || {});
+
+  if (!profileReport && publishedWatchouts.length === 0 && stateEntries.length === 0) {
+    return null;
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      {/* Header Bar */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.shieldIcon}>🛡️</Text>
-          <View>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Pre-Bid Disqualification Shield</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>On-Device Technical Evaluation Verification</Text>
-          </View>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(report.overallStatus) + '20', borderColor: getStatusColor(report.overallStatus) }]}>
-          <Text style={[styles.statusBadgeText, { color: getStatusColor(report.overallStatus) }]}>
-            {getStatusBadgeText(report.overallStatus)}
+    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>
+            {profileReport ? 'Eligibility Check' : 'Eligibility & Key Watchouts'}
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {profileReport
+              ? 'Matched against your saved seller profile'
+              : 'Key rules extracted directly from the official GeM PDF'}
           </Text>
         </View>
+        {profileReport ? (
+          <View
+            style={[
+              styles.scoreBadge,
+              {
+                backgroundColor:
+                  profileReport.overallStatus === 'BATTLE_READY'
+                    ? colors.successTint
+                    : profileReport.overallStatus === 'ELEVATED_RISK'
+                      ? colors.warningTint
+                      : colors.dangerTint,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.scoreBadgeText,
+                {
+                  color:
+                    profileReport.overallStatus === 'BATTLE_READY'
+                      ? colors.success
+                      : profileReport.overallStatus === 'ELEVATED_RISK'
+                        ? colors.warning
+                        : colors.danger,
+                },
+              ]}
+            >
+              {profileReport.shieldScore}% Ready
+            </Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Summary Banner */}
-      <View style={[styles.summaryBanner, { backgroundColor: getStatusColor(report.overallStatus) + '15', borderColor: getStatusColor(report.overallStatus) + '40' }]}>
-        <Text style={[styles.summaryText, { color: getStatusColor(report.overallStatus) }]}>
-          {report.summaryHeading}
-        </Text>
-      </View>
+      {/* Mode 1: Honest published rules (default when no seller profile is configured) */}
+      {!profileReport ? (
+        <View style={styles.listWrap}>
+          {publishedWatchouts.map((item, idx) => {
+            const tagBg =
+              item.tone === 'positive'
+                ? colors.successTint
+                : item.tone === 'caution'
+                  ? colors.warningTint
+                  : colors.primaryTint;
+            const tagFg =
+              item.tone === 'positive'
+                ? colors.success
+                : item.tone === 'caution'
+                  ? colors.warning
+                  : colors.primary;
 
-      {/* Metrics Row */}
-      <View style={styles.metricsRow}>
-        <View style={[styles.metricCell, { backgroundColor: '#F0FDF4' }]}>
-          <Text style={[styles.metricCount, { color: '#059669' }]}>{report.passedCount}</Text>
-          <Text style={styles.metricLabel}>Passed</Text>
-        </View>
-        <View style={[styles.metricCell, { backgroundColor: '#FEF3C7' }]}>
-          <Text style={[styles.metricCount, { color: '#D97706' }]}>{report.warningCount}</Text>
-          <Text style={styles.metricLabel}>Warnings</Text>
-        </View>
-        <View style={[styles.metricCell, { backgroundColor: '#FEF2F2' }]}>
-          <Text style={[styles.metricCount, { color: '#DC2626' }]}>{report.criticalDisqualificationCount}</Text>
-          <Text style={styles.metricLabel}>Blocking</Text>
-        </View>
-      </View>
-
-      {/* Checks List */}
-      <View style={styles.checklist}>
-        {report.checks.map((check) => {
-          const isCritical = check.severity === 'CRITICAL';
-          const isWarning = check.severity === 'WARNING';
-          const icon = isCritical ? '✕' : isWarning ? '⚠' : '✓';
-          const iconBg = isCritical ? '#FEF2F2' : isWarning ? '#FEF3C7' : '#ECFDF5';
-          const iconColor = isCritical ? '#DC2626' : isWarning ? '#D97706' : '#059669';
-
-          return (
-            <View key={check.id} style={[styles.checkCard, { borderColor: isCritical ? '#FECACA' : colors.border }]}>
-              <View style={styles.checkHeader}>
-                <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-                  <Text style={[styles.iconText, { color: iconColor }]}>{icon}</Text>
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.watchoutRow,
+                  idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle },
+                ]}
+              >
+                <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
+                  <Text style={[styles.tagPillText, { color: tagFg }]}>{item.tag}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.checkTitle, { color: colors.textPrimary }]}>{check.title}</Text>
-                  <Text style={[styles.checkReason, { color: colors.textSecondary }]}>{check.reason}</Text>
+                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{item.title}</Text>
+                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>{item.detail}</Text>
                 </View>
               </View>
+            );
+          })}
+        </View>
+      ) : (
+        /* Mode 2: Real profile comparison (clean, calm, zero emojis) */
+        <View style={styles.listWrap}>
+          {profileReport.checks.map((check, idx) => {
+            const isCritical = check.severity === 'CRITICAL';
+            const isWarning = check.severity === 'WARNING';
+            const tagBg = isCritical
+              ? colors.dangerTint
+              : isWarning
+                ? colors.warningTint
+                : colors.successTint;
+            const tagFg = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
+            const tagText = isCritical ? 'ACTION' : isWarning ? 'CHECK' : 'OK';
 
-              {check.remediation ? (
-                <View style={styles.remediationBox}>
-                  <Text style={styles.remediationText}>💡 Remediation: {check.remediation}</Text>
-                  {check.templateAction ? (
-                    <TouchableOpacity
-                      style={styles.templateButton}
-                      onPress={() => handleOpenTemplate(check.templateAction)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.templateButtonText}>Draft Compliance Letter ↗</Text>
-                    </TouchableOpacity>
+            return (
+              <View
+                key={check.id}
+                style={[
+                  styles.watchoutRow,
+                  idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle },
+                ]}
+              >
+                <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
+                  <Text style={[styles.tagPillText, { color: tagFg }]}>{tagText}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{check.title}</Text>
+                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>{check.reason}</Text>
+                  {check.remediation ? (
+                    <Text style={[styles.remediationLine, { color: colors.primary }]}>
+                      Next step: {check.remediation}
+                    </Text>
                   ) : null}
                 </View>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
-      {/* Consignee Logistics Distribution Matrix */}
-      {tenderDetails.consignees && tenderDetails.consignees.length > 0 ? (
-        <View style={styles.logisticsCard}>
-          <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>Consignee Delivery Split</Text>
-          <View style={styles.stateTagsRow}>
-            {Object.entries(tenderDetails.consigneeStateDistribution).map(([state, data]) => (
-              <View key={state} style={styles.stateTag}>
-                <Text style={styles.stateTagTitle}>{state}</Text>
-                <Text style={styles.stateTagMeta}>{data.quantity} Units ({data.percentage}%)</Text>
+      {/* Delivery State Split (if present in PDF) */}
+      {stateEntries.length > 0 ? (
+        <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
+          <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>DELIVERY STATES</Text>
+          <View style={styles.chipWrap}>
+            {stateEntries.map(([state, data]) => (
+              <View
+                key={state}
+                style={[
+                  styles.stateChip,
+                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                ]}
+              >
+                <Text style={[styles.stateChipText, { color: colors.textPrimary }]}>
+                  {state} · {data.quantity.toLocaleString('en-IN')} ({data.percentage}%)
+                </Text>
               </View>
             ))}
           </View>
         </View>
       ) : null}
 
-      {/* Prepare Documents Handoff */}
+      {/* Useful 1-Tap Compliance Letter Drafts */}
+      <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
+        <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>QUICK LETTER DRAFTS</Text>
+        <View style={styles.chipWrap}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.draftBtn,
+              {
+                backgroundColor: colors.primaryTint,
+                borderColor: colors.primary,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+            onPress={() => handleOpenTemplate('MII_DECLARATION')}
+          >
+            <Text style={[styles.draftBtnText, { color: colors.primary }]}>MII Declaration ↗</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.draftBtn,
+              {
+                backgroundColor: colors.surfaceSubtle,
+                borderColor: colors.border,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+            onPress={() => handleOpenTemplate('CA_UDIN_REQUEST')}
+          >
+            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>CA UDIN Request ↗</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.draftBtn,
+              {
+                backgroundColor: colors.surfaceSubtle,
+                borderColor: colors.border,
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+            onPress={() => handleOpenTemplate('OEM_MAF_REQUEST')}
+          >
+            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>OEM MAF Request ↗</Text>
+          </Pressable>
+        </View>
+      </View>
+
       {onPrepareDocuments ? (
-        <TouchableOpacity style={styles.prepareButton} onPress={onPrepareDocuments} activeOpacity={0.8}>
-          <Text style={styles.prepareButtonText}>Attach Missing Documents in Workspace →</Text>
-        </TouchableOpacity>
+        <Pressable
+          style={({ pressed }) => [
+            styles.prepareLinkRow,
+            { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.75 : 1 },
+          ]}
+          onPress={onPrepareDocuments}
+        >
+          <Text style={[styles.prepareLinkText, { color: colors.primary }]}>
+            Organize &amp; attach tender documents in Workspace →
+          </Text>
+        </Pressable>
       ) : null}
 
-      {/* Template Modal */}
-      <Modal visible={!!activeTemplate} animationType="slide" transparent onRequestClose={() => setActiveTemplate(null)}>
+      {/* Compliance Letter Draft Modal */}
+      <Modal
+        visible={!!activeTemplate}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setActiveTemplate(null)}
+      >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{activeTemplate?.title}</Text>
-              <TouchableOpacity onPress={() => setActiveTemplate(null)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
+          <Pressable style={{ flex: 1 }} onPress={() => setActiveTemplate(null)} />
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.borderSubtle }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+                {activeTemplate?.title}
+              </Text>
+              <Pressable onPress={() => setActiveTemplate(null)} hitSlop={10}>
+                <Text style={[styles.modalClose, { color: colors.textMuted }]}>✕</Text>
+              </Pressable>
             </View>
-            <ScrollView style={styles.modalBody}>
-              <Text style={[styles.templateContent, { color: colors.textPrimary }]}>{activeTemplate?.content}</Text>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.templateContent, { color: colors.textPrimary }]}>
+                {activeTemplate?.content}
+              </Text>
             </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.shareBtn} onPress={handleShareTemplate}>
-                <Text style={styles.shareBtnText}>Share / Copy Text</Text>
-              </TouchableOpacity>
+            <View style={[styles.modalFooter, { borderTopColor: colors.borderSubtle }]}>
+              <Pressable
+                style={[styles.shareBtn, { backgroundColor: colors.primary }]}
+                onPress={handleShareTemplate}
+              >
+                <Text style={[styles.shareBtnText, { color: colors.textInverse }]}>
+                  Share / Copy Draft ↗
+                </Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -243,230 +449,152 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
-    marginVertical: 10,
+    marginBottom: 12,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  headerLeft: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  shieldIcon: {
-    fontSize: 24,
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: 11.5,
     marginTop: 2,
   },
-  statusBadge: {
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
+  scoreBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 9,
     paddingVertical: 4,
   },
-  statusBadgeText: {
-    fontSize: 10,
+  scoreBadgeText: {
+    fontSize: 11,
     fontWeight: '800',
   },
-  summaryBanner: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 12,
-  },
-  summaryText: {
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-  },
-  metricCell: {
-    flex: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  metricCount: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  metricLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '700',
+  listWrap: {
     marginTop: 2,
   },
-  checklist: {
-    marginTop: 12,
-    gap: 8,
-  },
-  checkCard: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-  },
-  checkHeader: {
+  watchoutRow: {
     flexDirection: 'row',
-    gap: 10,
     alignItems: 'flex-start',
+    paddingVertical: 10,
+    gap: 10,
   },
-  iconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  tagPill: {
+    minWidth: 68,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconText: {
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  checkTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  checkReason: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  remediationBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    padding: 8,
-    marginTop: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#0B5577',
-  },
-  remediationText: {
-    fontSize: 11,
-    color: '#334155',
-    lineHeight: 15,
-  },
-  templateButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#0B5577',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 6,
-  },
-  templateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  logisticsCard: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  sectionHeading: {
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  stateTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  stateTag: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  stateTagTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1E40AF',
-  },
-  stateTagMeta: {
-    fontSize: 10,
-    color: '#3B82F6',
     marginTop: 1,
   },
-  prepareButton: {
-    backgroundColor: '#0B3B60',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 14,
-  },
-  prepareButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+  tagPillText: {
+    fontSize: 9.5,
     fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  rowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  rowDetail: {
+    fontSize: 11.5,
+    lineHeight: 16.5,
+    marginTop: 2,
+  },
+  remediationLine: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  subSection: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  subSectionTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  stateChip: {
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  stateChipText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  draftBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  draftBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  prepareLinkRow: {
+    marginTop: 12,
+    paddingTop: 11,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  prepareLinkText: {
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
   modalCard: {
-    borderRadius: 12,
-    maxHeight: '80%',
-    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    maxHeight: '82%',
+    paddingBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingBottom: 10,
+    gap: 10,
   },
-  modalTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    flex: 1,
-  },
-  modalClose: {
-    fontSize: 18,
-    color: '#64748B',
-    paddingHorizontal: 8,
-  },
-  modalBody: {
-    marginVertical: 12,
-  },
-  templateContent: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontFamily: 'monospace',
-  },
+  modalTitle: { fontSize: 15, fontWeight: '800', flex: 1 },
+  modalClose: { fontSize: 18, fontWeight: '700' },
+  modalBody: { paddingHorizontal: 16, paddingVertical: 12, maxHeight: 420 },
+  templateContent: { fontSize: 12.5, lineHeight: 19 },
   modalFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 10,
   },
   shareBtn: {
-    backgroundColor: '#059669',
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 9,
+    minHeight: 46,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  shareBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
+  shareBtnText: { fontSize: 13.5, fontWeight: '800' },
 });

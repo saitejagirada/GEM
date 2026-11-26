@@ -41,7 +41,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'laptops-notebooks',
     name: 'Laptops & Notebooks',
     category: 'IT Products',
-    slug: 'computers-0806nb/search',
+    slug: 'computers-entry-and-mid-level-laptop-notebook/search',
     priceUnit: 'per Laptop',
     defaultEta: '24–48 hrs Express',
   },
@@ -49,7 +49,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'printers-mfm',
     name: 'Computer Printers',
     category: 'IT Products',
-    slug: 'computer-printer-0901print/search',
+    slug: 'information-technology-broadcasting-and-telecommunications-computer-equipment-and-accessoriesold-computer-printers-computer-printer-v2-/search',
     priceUnit: 'per Printer',
     defaultEta: '2–3 Days Delivery',
   },
@@ -57,7 +57,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'tablets-v2',
     name: 'Tablet Computers',
     category: 'IT Products',
-    slug: 'computers-0912tc/search',
+    slug: 'computers-tablet-computer-v2-/search',
     priceUnit: 'per Tablet',
     defaultEta: '2–4 Days Delivery',
   },
@@ -91,7 +91,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'buses-chassis',
     name: 'Buses',
     category: 'Automobiles',
-    slug: 'buses/search',
+    slug: 'vehicles-and-their-accessories-and-components-motor-vehicles-passenger-motor-vehicles-buses-v2-/search',
     priceUnit: 'per Bus',
     defaultEta: '15–30 Days Handover',
   },
@@ -125,7 +125,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'classroom-desking',
     name: 'Class Room Desking',
     category: 'Furniture',
-    slug: 'general-classroom-furnishing-class-room-desking-and-seating91/search',
+    slug: 'furniture-and-furnishings-classroom-and-instructional-and-institutional-furniture-and-fixtures-general-classroom-furnishings-desk-and-bench-set-for-classroom-training-area/search',
     priceUnit: 'per Desk Set',
     defaultEta: '5–10 Days Delivery',
   },
@@ -185,7 +185,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'copier-paper',
     name: 'Copier & Maplitho Paper',
     category: 'Stationery Items',
-    slug: 'maplitho-paper/search',
+    slug: 'printing-and-writing-paper-printing-maplitho-paper-v3-conforming-to-is-1848-part-1-/search',
     priceUnit: 'per Ream',
     defaultEta: '24–48 hrs Express',
   },
@@ -237,7 +237,7 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
     id: 'television-tv',
     name: 'Television TVs',
     category: 'Electronic Equipments',
-    slug: 'domestic-appliances-and-supplies-and-consumer-electronic-products-consumer-electronics-audio-and-visual-equipmentold-television-tv-v2-/search',
+    slug: 'domestic-appliances-and-supplies-and-consumer-electronic-products-consumer-electronics-audio-and-visual-equipmentold-television-v3-/search',
     priceUnit: 'per TV Unit',
     defaultEta: '2–4 Days Delivery',
   },
@@ -327,27 +327,292 @@ export const OFFICIAL_GEM_SUBCATEGORIES: GeMSubcategoryConfig[] = [
   },
 ];
 
+export interface GeMPageResult {
+  items: MarketplaceItem[];
+  hasMore: boolean;
+  page: number;
+  totalResults?: number;
+  canonicalSlug?: string;
+  failed?: boolean;
+}
+
+interface GeMXhrCatalogEntry {
+  id?: string | number;
+  title?: string;
+  brand?: string;
+  img_url?: string;
+  url?: string[] | string;
+  is_l1?: boolean;
+  moq?: number | string;
+  list_price?: { value?: number | string };
+  final_price?: { value?: number | string };
+  discount_percent?: number | string;
+  seller?: {
+    name?: string;
+    is_authorized?: boolean;
+    is_reseller?: boolean;
+    display_sold_as?: string;
+    config?: { sold_as?: string };
+  };
+}
+
+interface GeMXhrResponse {
+  curr_page?: string | number;
+  number_of_results?: number | string;
+  browse_node?: { id?: string; title?: string; url?: string };
+  catalogs?: GeMXhrCatalogEntry[];
+}
+
 export class GeMClientCrawler {
   private static BASE_URL = 'https://mkp.gem.gov.in';
   private static USER_AGENT = 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  private static canonicalSlugCache: Map<string, string> = new Map();
+  private static searchSlugCache: Map<string, string> = new Map();
+
+  private static normalizeSlug(slug: string): string {
+    return slug.replace(/^https?:\/\/[^/]+\//i, '').replace(/^\/+/, '').replace(/\/search\/?$/, '');
+  }
+
+  /**
+   * Parses GeM's native `?_xhr=1` JSON catalog response directly from mkp.gem.gov.in.
+   */
+  public static parseGeMXhrJson(
+    payload: GeMXhrResponse,
+    defaultCategory: string,
+    defaultUnit: string,
+    defaultEta: string
+  ): { items: MarketplaceItem[]; currentPage: number; totalResults: number; canonicalSlug?: string } {
+    const catalogs = Array.isArray(payload?.catalogs) ? payload.catalogs : [];
+    const currentPage = Math.max(1, Number(payload?.curr_page) || 1);
+    const totalResults = Math.max(0, Number(payload?.number_of_results) || 0);
+    const canonicalSlug = payload?.browse_node?.url ? this.normalizeSlug(payload.browse_node.url) : undefined;
+
+    const extracted: MarketplaceItem[] = [];
+    for (let idx = 0; idx < catalogs.length; idx++) {
+      const entry = catalogs[idx];
+      const title = typeof entry?.title === 'string' ? entry.title.trim() : '';
+      if (!title || title.length < 2) continue;
+
+      const rawId = entry.id !== undefined && entry.id !== null ? String(entry.id).trim() : '';
+      const cleanId = rawId ? `gem-live-${rawId}` : `gem-live-xhr-${currentPage}-${idx}`;
+
+      let productUrl = this.BASE_URL;
+      if (Array.isArray(entry.url) && entry.url.length > 0) {
+        productUrl = `${this.BASE_URL}/${entry.url.map((s) => String(s).replace(/^\/+/, '')).join('/')}`;
+      } else if (typeof entry.url === 'string' && entry.url.trim()) {
+        productUrl = entry.url.startsWith('http')
+          ? entry.url
+          : `${this.BASE_URL}/${entry.url.replace(/^\/+/, '')}`;
+      }
+
+      const oemBrand =
+        typeof entry.brand === 'string' && entry.brand.trim().length >= 2
+          ? entry.brand.trim()
+          : title.split(/\s+/)[0] || 'GeM Listed';
+
+      const sellerName = entry.seller?.name?.trim();
+      const sellerType =
+        entry.seller?.config?.sold_as?.trim() ||
+        (entry.seller?.is_reseller ? 'Reseller' : 'OEM');
+
+      let finalPrice = Number(entry.final_price?.value) || 0;
+      let mrpPrice = Number(entry.list_price?.value) || 0;
+      if (finalPrice <= 0 && mrpPrice > 0) finalPrice = mrpPrice;
+      if (mrpPrice <= 0 && finalPrice > 0) mrpPrice = finalPrice;
+
+      const parsedDiscount = Number(entry.discount_percent);
+      const discountPercent =
+        Number.isFinite(parsedDiscount) && parsedDiscount > 0
+          ? Math.min(99, Math.round(parsedDiscount))
+          : mrpPrice > finalPrice && mrpPrice > 0
+            ? Math.min(99, Math.round(((mrpPrice - finalPrice) / mrpPrice) * 100))
+            : 0;
+
+      const rawMoq = Number(entry.moq);
+      const moq = Number.isFinite(rawMoq) && rawMoq >= 1 ? Math.round(rawMoq) : 1;
+
+      const imageUrl =
+        typeof entry.img_url === 'string' && entry.img_url.startsWith('https://')
+          ? entry.img_url
+          : undefined;
+
+      const modes: Array<'DIRECT_PURCHASE' | 'L1_COMPARISON' | 'BID' | 'REVERSE_AUCTION'> = [
+        'DIRECT_PURCHASE',
+        'L1_COMPARISON',
+      ];
+      if (finalPrice > 500000) {
+        modes.push('BID', 'REVERSE_AUCTION');
+      } else if (finalPrice > 25000) {
+        modes.push('BID');
+      }
+
+      const specSummary: Record<string, string> = {
+        'OEM / Brand': oemBrand,
+        'Seller Type': sellerType,
+        'Consignee MOQ': String(moq),
+        'GeM Catalog ID': rawId || cleanId,
+      };
+      if (sellerName) {
+        specSummary['Seller'] = sellerName;
+      }
+      if (entry.seller?.display_sold_as) {
+        specSummary['Authorization'] = entry.seller.display_sold_as;
+      }
+
+      extracted.push({
+        id: cleanId,
+        title,
+        category: defaultCategory,
+        type: 'PRODUCT',
+        l1PriceInr: finalPrice,
+        mrpInr: mrpPrice,
+        discountPercent,
+        priceUnit: defaultUnit,
+        unitText: moq > 1 ? `MOQ: ${moq.toLocaleString('en-IN')} units` : '1 Unit',
+        minOrderQty: moq,
+        oemBrand,
+        rating: 0,
+        totalOrders: 0,
+        imageUrl,
+        productUrl,
+        etaDelivery: defaultEta,
+        badge: entry.is_l1 ? 'GeM L1' : entry.seller?.is_authorized ? 'Authorized' : undefined,
+        inStock: true,
+        specSummary,
+        procurementModes: modes,
+        msePreference: true,
+        makeInIndiaPercent: 50,
+        isAvailableOnGeM: true,
+      });
+    }
+
+    return { items: extracted, currentPage, totalResults, canonicalSlug };
+  }
 
   /**
    * Fetches real live products for a given category slug and page number directly from mkp.gem.gov.in.
+   * Prefers GeM's lightweight native JSON endpoint (`?_xhr=1`) and resolves redirecting alias slugs
+   * to their canonical `browse_node.url` so Page 2+ never loops back to Page 1.
    */
   public static async fetchCategoryPage(
     categorySlug: string,
     page: number = 1,
-    timeoutMs: number = 8000,
-    allowFallback: boolean = true
-  ): Promise<{ items: MarketplaceItem[]; hasMore: boolean; page: number }> {
-    const cleanSlug = categorySlug.replace(/^\/+/, '').replace(/\/search$/, '');
-    const url = `${this.BASE_URL}/${cleanSlug}/search?page=${page}`;
+    timeoutMs: number = 12000,
+    allowFallback: boolean = true,
+    skipHtmlFallback: boolean = false
+  ): Promise<GeMPageResult> {
+    const cleanSlug = this.normalizeSlug(categorySlug);
+    const resolvedSlug = this.canonicalSlugCache.get(cleanSlug) || cleanSlug;
+    const config =
+      OFFICIAL_GEM_SUBCATEGORIES.find(
+        (c) => this.normalizeSlug(c.slug) === cleanSlug || this.normalizeSlug(c.slug) === resolvedSlug
+      ) || {
+        id: 'generic',
+        name: cleanSlug.replace(/-/g, ' '),
+        category: 'Marketplace',
+        slug: cleanSlug,
+        priceUnit: 'per Unit',
+        defaultEta: '2–4 Days Delivery',
+      };
+
+    const fetchJsonForSlug = async (slugToQuery: string): Promise<{ data: GeMXhrResponse | null; failed: boolean }> => {
+      // Passing don_load_facets=true skips heavy server facet aggregation (3x-5x faster on mkp.gem.gov.in)
+      const url = `${this.BASE_URL}/${slugToQuery}/search?don_load_facets=true&home=false&page=${page}&select_custom_filter=false&_xhr=1`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const resp = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': this.USER_AGENT,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!resp.ok) return { data: null, failed: resp.status >= 500 || resp.status === 429 };
+        const ct = resp.headers?.get?.('content-type') || '';
+        const text = await resp.text();
+        if (!ct.includes('json') && !text.trim().startsWith('{')) return { data: null, failed: false };
+        return { data: JSON.parse(text) as GeMXhrResponse, failed: false };
+      } catch {
+        clearTimeout(timer);
+        return { data: null, failed: true };
+      }
+    };
 
     try {
+      let jsonRes = await fetchJsonForSlug(resolvedSlug);
+      let json = jsonRes.data;
+
+      // If GeM redirected an alias slug and stripped `?page=N` back to page 1,
+      // cache the canonical `browse_node.url` and immediately re-query the requested page.
+      if (json?.browse_node?.url) {
+        const canonical = this.normalizeSlug(json.browse_node.url);
+        if (canonical) {
+          this.canonicalSlugCache.set(cleanSlug, canonical);
+          if (page > 1 && Number(json.curr_page) !== page && canonical !== resolvedSlug) {
+            const retried = await fetchJsonForSlug(canonical);
+            if (retried.data) {
+              json = retried.data;
+              jsonRes = retried;
+            }
+          }
+        }
+      }
+
+      if (json && Array.isArray(json.catalogs)) {
+        const parsed = this.parseGeMXhrJson(json, config.category, config.priceUnit, config.defaultEta);
+        if (page > 1 && parsed.currentPage < page) {
+          return {
+            items: [],
+            hasMore: false,
+            page,
+            totalResults: parsed.totalResults,
+            canonicalSlug: parsed.canonicalSlug,
+            failed: false,
+          };
+        }
+        if (parsed.items.length > 0) {
+          const perPage = Math.max(12, parsed.items.length);
+          const hasMore =
+            parsed.totalResults > 0
+              ? parsed.currentPage * perPage < parsed.totalResults
+              : parsed.items.length >= 12;
+          return {
+            items: parsed.items,
+            hasMore,
+            page: parsed.currentPage,
+            totalResults: parsed.totalResults || undefined,
+            canonicalSlug: parsed.canonicalSlug,
+            failed: false,
+          };
+        }
+        // Valid JSON response with genuinely 0 catalog items — no need for slow HTML fallback
+        if (parsed.items.length === 0 && !jsonRes.failed) {
+          return {
+            items: [],
+            hasMore: false,
+            page: parsed.currentPage,
+            totalResults: parsed.totalResults || 0,
+            canonicalSlug: parsed.canonicalSlug,
+            failed: false,
+          };
+        }
+      }
+
+      if (skipHtmlFallback) {
+        return { items: [], hasMore: false, page, failed: jsonRes.failed };
+      }
+
+      // Fallback to HTML fetch only when JSON endpoint did not return JSON
+      const targetSlug = this.canonicalSlugCache.get(cleanSlug) || resolvedSlug;
+      const htmlUrl = `${this.BASE_URL}/${targetSlug}/search?don_load_facets=true&home=false&page=${page}&select_custom_filter=false`;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      const resp = await fetch(url, {
+      const resp = await fetch(htmlUrl, {
         method: 'GET',
         headers: {
           'User-Agent': this.USER_AGENT,
@@ -358,32 +623,22 @@ export class GeMClientCrawler {
       clearTimeout(timer);
 
       if (!resp.ok) {
-        const config = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.slug.includes(cleanSlug));
-        if (allowFallback && config?.name) {
+        if (allowFallback && page === 1 && config?.name) {
           return await this.searchLiveProducts(config.name, page, timeoutMs, false);
         }
-        return { items: [], hasMore: false, page };
+        return { items: [], hasMore: false, page, failed: resp.status >= 500 || resp.status === 429 };
       }
 
       const html = await resp.text();
-      const config = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.slug.includes(cleanSlug)) || {
-        id: 'generic',
-        name: cleanSlug.replace(/-/g, ' '),
-        category: 'IT Products',
-        slug: cleanSlug,
-        priceUnit: 'per Unit',
-        defaultEta: '⚡ 2-4 Days Delivery',
-      };
-
       const items = this.parseGeMHtml(html, config.category, config.priceUnit, config.defaultEta);
-      if (allowFallback && items.length === 0 && config.name) {
+      if (allowFallback && page === 1 && items.length === 0 && config.name) {
         return await this.searchLiveProducts(config.name, page, timeoutMs, false);
       }
-      const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
+      const hasMore = html.includes(`page=${page + 1}`) && items.length > 0;
 
-      return { items, hasMore, page };
+      return { items, hasMore, page, failed: false };
     } catch {
-      return { items: [], hasMore: false, page };
+      return { items: [], hasMore: false, page, failed: true };
     }
   }
 
@@ -446,18 +701,25 @@ export class GeMClientCrawler {
     page: number = 1,
     timeoutMs: number = 9000,
     allowCategoryResolve: boolean = true
-  ): Promise<{ items: MarketplaceItem[]; hasMore: boolean; page: number }> {
+  ): Promise<GeMPageResult> {
     if (!query || !query.trim()) {
       return { items: [], hasMore: false, page };
     }
 
     const trimmed = query.trim();
+    const cacheKey = trimmed.toLowerCase();
 
     if (allowCategoryResolve) {
+      const cachedSlug = this.searchSlugCache.get(cacheKey);
+      if (cachedSlug) {
+        return await this.fetchCategoryPage(cachedSlug, page, timeoutMs, false);
+      }
+
       const matchedSub = this.resolveMatchingSubcategory(trimmed);
       if (matchedSub) {
         const directCategoryResult = await this.fetchCategoryPage(matchedSub.slug, page, timeoutMs, false);
         if (directCategoryResult.items.length > 0) {
+          this.searchSlugCache.set(cacheKey, directCategoryResult.canonicalSlug || matchedSub.slug);
           return directCategoryResult;
         }
       }
@@ -486,22 +748,29 @@ export class GeMClientCrawler {
       const html = await resp.text();
       const items = this.parseGeMHtml(html, 'Marketplace Search', 'per Unit', '2–4 Days Delivery');
       if (items.length > 0) {
-        const hasMore = html.includes(`page=${page + 1}`) || items.length >= 10;
+        const hasMore = html.includes(`page=${page + 1}`) && items.length > 0;
         return { items, hasMore, page };
       }
 
-      // Dynamic category resolution: follow live category links returned by mkp.gem.gov.in/search?q=
-      const discoveredSlugs = this.extractDiscoveredSearchSlugs(html);
-      for (const discoveredSlug of discoveredSlugs.slice(0, 3)) {
-        const subResult = await this.fetchCategoryPage(discoveredSlug, page, timeoutMs, false);
-        if (subResult.items.length > 0) {
-          return subResult;
+      // Dynamic category resolution: query top discovered slugs in parallel with fast JSON-only mode
+      // so arbitrary keywords resolve in ~1-3s instead of chaining slow sequential fallbacks.
+      const discoveredSlugs = this.extractDiscoveredSearchSlugs(html).slice(0, 3);
+      if (discoveredSlugs.length > 0) {
+        const candidates = await Promise.all(
+          discoveredSlugs.map((slug) => this.fetchCategoryPage(slug, page, 7000, false, true))
+        );
+        for (let i = 0; i < candidates.length; i++) {
+          const subResult = candidates[i];
+          if (subResult.items.length > 0) {
+            this.searchSlugCache.set(cacheKey, subResult.canonicalSlug || discoveredSlugs[i]);
+            return subResult;
+          }
         }
       }
 
-      return { items: [], hasMore: false, page };
+      return { items: [], hasMore: false, page, failed: false };
     } catch {
-      return { items: [], hasMore: false, page };
+      return { items: [], hasMore: false, page, failed: true };
     }
   }
 

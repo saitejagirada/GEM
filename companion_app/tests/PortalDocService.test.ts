@@ -85,8 +85,25 @@ describe('PortalDocService', () => {
     assert.deepStrictEqual(documents.map((document) => document.id), ['bid-document', 'specification']);
   });
 
-  it('rejects lookalike domains from official document links', () => {
+  it('rejects lookalike domains from official document links while allowing official GeM attachment subdomains', () => {
     assert.strictEqual(PortalDocService.isSafeGemUrl('https://bidplus.gem.gov.in.evil.example/document.pdf'), false);
+    assert.strictEqual(PortalDocService.isSafeGemUrl('http://bidplus.gem.gov.in/document.pdf'), false);
     assert.strictEqual(PortalDocService.isSafeGemUrl('https://bidplus.gem.gov.in/document.pdf'), true);
+    assert.strictEqual(
+      PortalDocService.isSafeGemUrl(
+        'https://mkp.gem.gov.in/catalog_data/catalog_support_document/buyer_documents/123/CatalogAttrs/SpecificationDocument/spec.pdf'
+      ),
+      true
+    );
+    assert.strictEqual(
+      PortalDocService.isSafeGemUrl(
+        'https://fulfilment.gem.gov.in/contract/slafds?fileDownloadPath=SLA_UPLOAD_PATH/2026/Sep/GEM_2026_B_8066439/CLM0010/atc.pdf'
+      ),
+      true
+    );
+    assert.strictEqual(
+      PortalDocService.isSafeGemUrl('https://admin.gem.gov.in/apis/v1/gtc/pdfByDate/?date=20260922'),
+      true
+    );
   });
 });

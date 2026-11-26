@@ -19,6 +19,30 @@ export interface ExtractedConsignee {
   deliveryDays?: number;
 }
 
+export type LinkedDocKind =
+  | 'BID'
+  | 'SPECIFICATION'
+  | 'DRAWING'
+  | 'ATC'
+  | 'CORRIGENDUM'
+  | 'BOQ'
+  | 'SLA'
+  | 'GTC'
+  | 'OTHER';
+
+export type LinkedDocFormat = 'PDF' | 'XLSX' | 'CSV' | 'IMAGE' | 'WEB';
+
+export interface ExtractedLinkedDocument {
+  id: string;
+  label: string;
+  subtitle: string;
+  kind: LinkedDocKind;
+  fileFormat: LinkedDocFormat;
+  url: string;
+  pageNumber?: number;
+  contextLabel?: string;
+}
+
 export interface ExtractedGeMTenderDetails {
   bidNumber?: string;
   title?: string;
@@ -71,6 +95,7 @@ export interface ExtractedGeMTenderDetails {
   requiresPastPerformanceDoc: boolean;
   atcClauses: string[];
   isRaEnabled: boolean;
+  linkedDocuments?: ExtractedLinkedDocument[];
 }
 
 const INDIAN_STATES_AND_UTS = [
@@ -1146,5 +1171,615 @@ export class GemPdfExtractor {
     }
 
     return clauses;
+  }
+
+  /**
+   * Dynamic On-Device Linked Tender Document Discovery Engine.
+   *
+   * Scans every PDF page's /Annots (both inline & indirect array/action objects),
+   * transforms text spans through each page's CTM (`a 0 0 d e f cm`) into exact PDF
+   * coordinates, matches each link's /Rect against nearby table labels and section
+   * headings, falls back to plain-text URLs inside streams, whitelists official
+   * *.gem.gov.in URLs, filters non-document noise, and classifies attachments into
+   * Specifications, Product Drawings, Buyer ATC/Criteria, BOQ Sheets, SLA, Corrigenda,
+   * and standard GTC references.
+   */
+  public static extractLinkedDocumentsFromPdf(
+    pdfSource: string | Uint8Array,
+    excludeUrls: string[] = []
+  ): ExtractedLinkedDocument[] {
+    let rawPdf = '';
+    if (typeof pdfSource === 'string') {
+      rawPdf = pdfSource;
+    } else {
+      const chunk = 8192;
+      for (let i = 0; i < pdfSource.length; i += chunk) {
+        rawPdf += String.fromCharCode(...pdfSource.subarray(i, Math.min(pdfSource.length, i + chunk)));
+      }
+    }
+
+    const excluded = new Set(excludeUrls.map((u) => u.trim().replace(/#.*$/, '').toLowerCase()));
+
+    // 1. Index all numbered PDF objects
+    const objects = new Map<string, string>();
+    const objRegex = /(\d+)\s+0\s+obj\b([\s\S]*?)endobj/g;
+    let objMatch: RegExpExecArray | null;
+    while ((objMatch = objRegex.exec(rawPdf)) !== null) {
+      objects.set(objMatch[1], objMatch[2]);
+    }
+
+    const getObjectStream = (objBody?: string): string => {
+      if (!objBody) return '';
+      const sm = objBody.match(/stream[\r\n]+([\s\S]*?)[\r\n]+endstream/);
+      if (!sm) return '';
+      if (objBody.includes('/FlateDecode')) {
+        return fastDecompress(stringToUint8Array(sm[1]));
+      }
+      return sm[1];
+    };
+
+    // 2. Build /ToUnicode font CMaps once
+    const fontMaps = new Map<string, Map<number, string>>();
+    for (const [, body] of objects) {
+      for (const fe of body.matchAll(/\/(F\d+)\s+(\d+)\s+0\s+R/g)) {
+        const fontName = fe[1];
+        if (fontMaps.has(fontName)) continue;
+        const fontObj = objects.get(fe[2]);
+        const toUni = fontObj?.match(/\/ToUnicode\s+(\d+)\s+0\s+R/);
+        if (toUni) {
+          const parsedMap = parseToUnicodeCMap(getObjectStream(objects.get(toUni[1])));
+          if (parsedMap.size > 0) fontMaps.set(fontName, parsedMap);
+        }
+      }
+    }
+
+    const extractUriFromDict = (dictBody: string): string | undefined => {
+      // Direct literal /URI (...) handling escaped parens
+      const litMatch = dictBody.match(/\/URI\s*\(((?:\\.|[^\\)])+)\)/);
+      if (litMatch) return this.decodePdfLiteral(litMatch[1]).trim();
+      // Hex /URI <...>
+      const hexMatch = dictBody.match(/\/URI\s*<([0-9a-fA-F\s]+)>/);
+      if (hexMatch) return decodePdfHexString(hexMatch[1]).trim();
+      // Indirect action /A N 0 R
+      const actionRef = dictBody.match(/\/A\s+(\d+)\s+0\s+R/);
+      if (actionRef) {
+        const actionObj = objects.get(actionRef[1]);
+        if (actionObj) {
+          const aLit = actionObj.match(/\/URI\s*\(((?:\\.|[^\\)])+)\)/);
+          if (aLit) return this.decodePdfLiteral(aLit[1]).trim();
+          const aHex = actionObj.match(/\/URI\s*<([0-9a-fA-F\s]+)>/);
+          if (aHex) return decodePdfHexString(aHex[1]).trim();
+        }
+      }
+      return undefined;
+    };
+
+    const parseRect = (dictBody: string): [number, number, number, number] | null => {
+      const m = dictBody.match(/\/Rect\s*\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]/);
+      if (!m) return null;
+      return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), parseFloat(m[4])];
+    };
+
+    const decodePageSpans = (stream: string): Array<{ pdfX: number; pdfY: number; text: string }> => {
+      // Proper PDF 2D graphics state CTM stack (`q` / `Q` / `cm`) so multi-page
+      // wkhtmltopdf translations (e.g., `0.75 0 0 -0.75 28.5 785 cm` + `1 0 0 1 0 -1942 cm`)
+      // map every glyph run to exact PDF /Rect coordinates.
+      type Mat = [number, number, number, number, number, number];
+      const mulMat = (m1: Mat, m2: Mat): Mat => [
+        m1[0] * m2[0] + m1[2] * m2[1],
+        m1[1] * m2[0] + m1[3] * m2[1],
+        m1[0] * m2[2] + m1[2] * m2[3],
+        m1[1] * m2[2] + m1[3] * m2[3],
+        m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+        m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+      ];
+
+      let ctm: Mat = [1, 0, 0, 1, 0, 0];
+      const stack: Mat[] = [];
+      const out: Array<{ pdfX: number; pdfY: number; text: string }> = [];
+
+      const blockRe =
+        /\bq\b|\bQ\b|([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+cm\b|BT([\s\S]*?)ET/g;
+      let bm: RegExpExecArray | null;
+      while ((bm = blockRe.exec(stream)) !== null) {
+        if (bm[0] === 'q') {
+          stack.push([...ctm]);
+        } else if (bm[0] === 'Q') {
+          if (stack.length > 0) ctm = stack.pop()!;
+        } else if (bm[1] !== undefined) {
+          const next: Mat = [
+            parseFloat(bm[1]),
+            parseFloat(bm[2]),
+            parseFloat(bm[3]),
+            parseFloat(bm[4]),
+            parseFloat(bm[5]),
+            parseFloat(bm[6]),
+          ];
+          if (next.every((n) => Number.isFinite(n))) {
+            ctm = mulMat(ctm, next);
+          }
+        } else if (bm[7] !== undefined) {
+          const clean = bm[7].replace(/\/Span\s*<<[\s\S]*?>>\s*BDC[\s\S]*?EMC/g, '');
+          let currentFont = 'F8';
+          let tmA = 1;
+          let tmD = 1;
+          let x = 0;
+          let y = 0;
+          let text = '';
+          let spanX = 0;
+          let spanY = 0;
+
+          const flush = () => {
+            const ascii = text
+              .replace(/[\u0900-\u097F]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            if (ascii && ascii !== '/' && ascii !== '( )') {
+              const pdfX = ctm[0] * spanX + ctm[2] * spanY + ctm[4];
+              const pdfY = ctm[1] * spanX + ctm[3] * spanY + ctm[5];
+              out.push({ pdfX, pdfY, text: ascii });
+            }
+            text = '';
+          };
+
+          const tokenRe =
+            /\/(F\d+)\s+[\d.]+\s+Tf|([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+Tm|([-\d.]+)\s+([-\d.]+)\s+Td|<([0-9a-fA-F]+)>\s*Tj|\(((?:\\.|[^\\)])+)\)\s*Tj/g;
+          let tok: RegExpExecArray | null;
+          while ((tok = tokenRe.exec(clean)) !== null) {
+            if (tok[1]) {
+              currentFont = tok[1];
+            } else if (tok[6] !== undefined) {
+              if (text.trim()) flush();
+              tmA = parseFloat(tok[2]) || 1;
+              tmD = parseFloat(tok[5]) || 1;
+              x = parseFloat(tok[6]);
+              y = parseFloat(tok[7]);
+            } else if (tok[8] !== undefined) {
+              const dx = parseFloat(tok[8]) * tmA;
+              const dy = parseFloat(tok[9]) * tmD;
+              if (Math.abs(dy) > 2 || Math.abs(dx) > 40) {
+                if (text.trim()) flush();
+              }
+              x += dx;
+              y += dy;
+            } else if (tok[10]) {
+              if (!text) {
+                spanX = x;
+                spanY = y;
+              }
+              const fmap = fontMaps.get(currentFont);
+              if (fmap && fmap.size > 0) {
+                const hex = tok[10];
+                for (let i = 0; i < hex.length; i += 4) {
+                  text += fmap.get(parseInt(hex.slice(i, i + 4), 16)) ?? '';
+                }
+              } else {
+                text += decodePdfHexString(tok[10]);
+              }
+            } else if (tok[11]) {
+              if (!text) {
+                spanX = x;
+                spanY = y;
+              }
+              text += this.decodePdfLiteral(tok[11]);
+            }
+          }
+          if (text.trim()) flush();
+        }
+      }
+      return out;
+    };
+
+    const candidates: Array<{
+      url: string;
+      pageNumber?: number;
+      rowLabel?: string;
+      aboveLabel?: string;
+      anchorLabel?: string;
+    }> = [];
+
+    // 3. Page-by-page /Annots extraction with spatial label matching
+    let pageNum = 0;
+    for (const [, body] of objects) {
+      if (!/\/Type\s*\/Page\b/.test(body) || /\/Type\s*\/Pages\b/.test(body)) continue;
+      pageNum += 1;
+
+      const annotDicts: string[] = [];
+      const annotRef = body.match(/\/Annots\s+(\d+)\s+0\s+R/);
+      if (annotRef) {
+        const arrObj = objects.get(annotRef[1]) || '';
+        for (const ref of arrObj.matchAll(/(\d+)\s+0\s+R/g)) {
+          const aObj = objects.get(ref[1]);
+          if (aObj) annotDicts.push(aObj);
+        }
+        if (annotDicts.length === 0 && arrObj.includes('/URI')) {
+          annotDicts.push(arrObj);
+        }
+      } else {
+        const inlineAnnots = body.match(/\/Annots\s*\[([\s\S]*?)\]/);
+        if (inlineAnnots) {
+          for (const ref of inlineAnnots[1].matchAll(/(\d+)\s+0\s+R/g)) {
+            const aObj = objects.get(ref[1]);
+            if (aObj) annotDicts.push(aObj);
+          }
+          if (inlineAnnots[1].includes('/URI')) {
+            for (const sub of inlineAnnots[1].matchAll(/<<[\s\S]*?\/URI[\s\S]*?>>/g)) {
+              annotDicts.push(sub[0]);
+            }
+          }
+        }
+      }
+
+      if (annotDicts.length === 0) continue;
+
+      // Decode this page's spatial text spans only when the page actually has links
+      const contentIds: string[] = [];
+      const singleContent = body.match(/\/Contents\s+(\d+)\s+0\s+R/);
+      if (singleContent) {
+        contentIds.push(singleContent[1]);
+      } else {
+        const arrContent = body.match(/\/Contents\s*\[([\s\S]*?)\]/);
+        if (arrContent) {
+          for (const ref of arrContent[1].matchAll(/(\d+)\s+0\s+R/g)) {
+            contentIds.push(ref[1]);
+          }
+        }
+      }
+
+      const pageSpans: Array<{ pdfX: number; pdfY: number; text: string }> = [];
+      for (const cid of contentIds) {
+        const stream = getObjectStream(objects.get(cid));
+        if (stream && stream.includes('BT')) {
+          pageSpans.push(...decodePageSpans(stream));
+        }
+      }
+
+      for (const dict of annotDicts) {
+        const uri = extractUriFromDict(dict);
+        if (!uri) continue;
+        const rect = parseRect(dict);
+        let rowLabel: string | undefined;
+        let aboveLabel: string | undefined;
+        let anchorLabel: string | undefined;
+
+        if (rect && pageSpans.length > 0) {
+          const [x1, y1, x2, y2] = rect;
+          const midY = (y1 + y2) / 2;
+          const sameRowLeft = pageSpans
+            .filter((s) => Math.abs(s.pdfY - midY) <= 16 && s.pdfX < x1 - 4)
+            .sort((a, b) => a.pdfX - b.pdfX)
+            .map((s) => s.text)
+            .join(' ')
+            .trim();
+          const insideAnchor = pageSpans
+            .filter((s) => Math.abs(s.pdfY - midY) <= 14 && s.pdfX >= x1 - 8 && s.pdfX <= x2 + 24)
+            .sort((a, b) => a.pdfX - b.pdfX)
+            .map((s) => s.text)
+            .join(' ')
+            .trim();
+          const aboveSpans = pageSpans
+            .filter((s) => s.pdfY > midY + 12 && s.pdfY <= midY + 64)
+            .sort((a, b) => a.pdfY - b.pdfY || a.pdfX - b.pdfX)
+            .slice(0, 3)
+            .map((s) => s.text)
+            .join(' ')
+            .trim();
+
+          if (sameRowLeft) rowLabel = sameRowLeft.slice(0, 120);
+          if (insideAnchor) anchorLabel = insideAnchor.slice(0, 100);
+          if (aboveSpans) aboveLabel = aboveSpans.slice(0, 120);
+        }
+
+        candidates.push({ url: uri, pageNumber: pageNum, rowLabel, aboveLabel, anchorLabel });
+      }
+    }
+
+    // 4. Global fallback sweep for any /URI or plain-text official GeM link not caught in /Page->/Annots
+    for (const m of rawPdf.matchAll(/\/URI\s*\(((?:\\.|[^\\)])+)\)/g)) {
+      candidates.push({ url: this.decodePdfLiteral(m[1]).trim() });
+    }
+    for (const m of rawPdf.matchAll(/\/URI\s*<([0-9a-fA-F\s]+)>/g)) {
+      const decoded = decodePdfHexString(m[1]).trim();
+      if (decoded.startsWith('http')) candidates.push({ url: decoded });
+    }
+    for (const m of rawPdf.matchAll(/https:\/\/(?:bidplus|bidplus-global|mkp|fulfilment|admin|assets-bg|assets-mkpbg)\.gem\.gov\.in\/[^\s<>)"'\\]+/gi)) {
+      candidates.push({ url: m[0].trim() });
+    }
+
+    // 5. Validate, filter noise, deduplicate, classify, and build plain-English labels
+    const allowedHosts = new Set([
+      'bidplus.gem.gov.in',
+      'bidplus-global.gem.gov.in',
+      'mkp.gem.gov.in',
+      'fulfilment.gem.gov.in',
+      'admin.gem.gov.in',
+      'assets-bg.gem.gov.in',
+      'assets-mkpbg.gem.gov.in',
+      'gem.gov.in',
+      'www.gem.gov.in',
+    ]);
+
+    const byNormalizedUrl = new Map<
+      string,
+      {
+        url: string;
+        pageNumber?: number;
+        rowLabel?: string;
+        aboveLabel?: string;
+        anchorLabel?: string;
+      }
+    >();
+
+    for (const cand of candidates) {
+      const cleanedUrl = cand.url.replace(/[.,;)\]]+$/, '').trim();
+      let parsed: URL;
+      try {
+        parsed = new URL(cleanedUrl);
+      } catch {
+        continue;
+      }
+      if (parsed.protocol !== 'https:') continue;
+      const host = parsed.hostname.toLowerCase();
+      if (!allowedHosts.has(host)) continue;
+
+      const pathnameLower = parsed.pathname.toLowerCase();
+      // Filter empty placeholder / generic portal landing links
+      if (
+        pathnameLower === '/' ||
+        pathnameLower === '/all-bids' ||
+        pathnameLower === '/bidding/downloadomppdfile/' ||
+        pathnameLower === '/bidding/downloadomppdfile' ||
+        /\/login(?:\/|$)/i.test(pathnameLower)
+      ) {
+        continue;
+      }
+
+      const norm = cleanedUrl.replace(/#.*$/, '').toLowerCase();
+      if (excluded.has(norm)) continue;
+
+      const existing = byNormalizedUrl.get(norm);
+      if (!existing || (!existing.rowLabel && cand.rowLabel)) {
+        byNormalizedUrl.set(norm, {
+          url: cleanedUrl,
+          pageNumber: cand.pageNumber ?? existing?.pageNumber,
+          rowLabel: cand.rowLabel || existing?.rowLabel,
+          aboveLabel: cand.aboveLabel || existing?.aboveLabel,
+          anchorLabel: cand.anchorLabel || existing?.anchorLabel,
+        });
+      }
+    }
+
+    const extractFriendlyFileTitle = (url: string): string | undefined => {
+      try {
+        const parsed = new URL(url);
+        const rawPath = parsed.searchParams.get('fileDownloadPath') || parsed.pathname;
+        const lastSeg = decodeURIComponent(rawPath.split('/').pop() || '');
+        if (!lastSeg) return undefined;
+        // Strip file extension, GeM date stamps, UUID hashes, and numeric-only timestamps
+        let stem = lastSeg
+          .replace(/\.(?:pdf|xlsx?|csv|png|jpe?g)$/i, '')
+          .replace(/_?\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}.*$/i, '')
+          .replace(/_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8,}.*$/i, '')
+          .replace(/_[0-9a-f]{16,}$/i, '')
+          .replace(/[-_]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        // Ignore pure numbers (e.g., "1785483415", "4298", "1", "2"), noisy short stems,
+        // or opaque base64/hash tokens from GeM endpoints (e.g., /showCatalogue/<token>)
+        if (
+          !stem ||
+          /^\d+$/.test(stem) ||
+          stem.length < 3 ||
+          stem.split(' ').some((w) => w.length >= 14 && /\d/.test(w) && /[a-z]/i.test(w))
+        ) {
+          return undefined;
+        }
+        if (/^(?:atc|atcmgf|atcmazz|spec\d*|vqc|nit|rfp|tsl)$/i.test(stem)) {
+          return stem.toUpperCase();
+        }
+        // Title-case readable words cleanly
+        return stem
+          .split(' ')
+          .slice(0, 6)
+          .map((w) => (w.length <= 3 && /^[a-z]+$/i.test(w) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1).toLowerCase()))
+          .join(' ');
+      } catch {
+        return undefined;
+      }
+    };
+
+    const isGenericClickLabel = (s?: string): boolean => {
+      if (!s) return true;
+      const clean = s.replace(/[:.\-_/]+/g, ' ').trim().toLowerCase();
+      return (
+        clean.length < 3 ||
+        /^(?:click here|view file|view document|view|download|open|here|document|file|pdf|link|click here to view(?: the file| document)?|\d+(?:\.pdf)?)$/.test(
+          clean
+        )
+      );
+    };
+
+    const cleanContextLabel = (s?: string): string | undefined => {
+      if (!s) return undefined;
+      const cleaned = s
+        .replace(/\ufb01/g, 'fi')
+        .replace(/\ufb02/g, 'fl')
+        .replace(/\bGe\s+M\b/g, 'GeM')
+        .replace(/click\s+here\s+to\s+view(?:\s+the\s+file)?/gi, '')
+        .replace(/\bview\s+file\b/gi, '')
+        .replace(/\/\s*buyer\s*$/i, '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/Drawing\s+Document\s*\d*/gi, 'Product Drawing')
+        .replace(/^[*•:.\-\s/]+|[:\-.\s/]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (isGenericClickLabel(cleaned)) return undefined;
+      return cleaned.slice(0, 64);
+    };
+
+    const results: ExtractedLinkedDocument[] = [];
+    const labelCounts = new Map<string, number>();
+
+    let idx = 0;
+    for (const entry of byNormalizedUrl.values()) {
+      idx += 1;
+      const urlLower = entry.url.toLowerCase();
+      const sameRowContext = `${entry.rowLabel || ''} ${entry.anchorLabel || ''}`.toLowerCase();
+
+      // Determine file format
+      let fileFormat: LinkedDocFormat = 'WEB';
+      if (/\.xlsx?(?:$|[?#&])/i.test(urlLower) || /\/bidding\/excel\//i.test(urlLower)) {
+        fileFormat = 'XLSX';
+      } else if (/\.csv(?:$|[?#&])/i.test(urlLower) || /boqlineitemsdocument/i.test(urlLower)) {
+        fileFormat = 'CSV';
+      } else if (/\.(?:png|jpe?g|webp|gif)(?:$|[?#&])/i.test(urlLower)) {
+        fileFormat = 'IMAGE';
+      } else if (/\/bidsla\//i.test(urlLower)) {
+        fileFormat = 'WEB';
+      } else if (
+        /\.pdf(?:$|[?#&])/i.test(urlLower) ||
+        /show(?:bid|ra|directra)document/i.test(urlLower) ||
+        /gtc\/pdfbydate/i.test(urlLower) ||
+        /documentdownload/i.test(urlLower) ||
+        /slafds/i.test(urlLower)
+      ) {
+        fileFormat = 'PDF';
+      }
+
+      // Multi-signal classification:
+      // 1. Authoritative GeM URL paths first (never overridden by an adjacent row's text)
+      // 2. Same-row spatial label for generic buyer upload buckets (biddoc / documentdownload)
+      let kind: LinkedDocKind = 'OTHER';
+      if (/\/gtc\/pdfbydate/i.test(urlLower)) {
+        kind = 'GTC';
+      } else if (/show(?:bid|ra|directra)document/i.test(urlLower)) {
+        kind = 'BID';
+      } else if (/corrigendum|amendment/i.test(urlLower)) {
+        kind = 'CORRIGENDUM';
+      } else if (/\/drawingdocument\//i.test(urlLower)) {
+        kind = 'DRAWING';
+      } else if (
+        /\/boqlineitemsdocument\/|\/bidding\/excel\/|\.(?:xlsx?|csv)(?:$|[?#&])/i.test(urlLower)
+      ) {
+        kind = 'BOQ';
+      } else if (/\/specificationdocument\/|\/boqdocument\/|\/showcatalogue\//i.test(urlLower)) {
+        kind = 'SPECIFICATION';
+      } else if (/sla_upload_path/i.test(urlLower)) {
+        kind = 'ATC';
+      } else if (/\/bidsla\//i.test(urlLower)) {
+        kind = 'SLA';
+      } else if (/\bcorrigendum\b/i.test(sameRowContext)) {
+        kind = 'CORRIGENDUM';
+      } else if (/\b(?:drawing|product\s+design|cad|blueprint|schematic)\b/i.test(sameRowContext)) {
+        kind = 'DRAWING';
+      } else if (
+        /\b(?:specification|scope\s+of\s+work|sow|technical\s+spec|rfp|boq\s+detail)\b/i.test(
+          sameRowContext
+        )
+      ) {
+        kind = 'SPECIFICATION';
+      } else if (
+        /\b(?:atc|additional\s+terms|eligibility|qualification|criteria|pqc|nit)\b/i.test(
+          sameRowContext
+        )
+      ) {
+        kind = 'ATC';
+      } else if (/\bservice\s+level\s+agreement\b/i.test(sameRowContext)) {
+        kind = 'SLA';
+      }
+
+      const spatialLabel =
+        cleanContextLabel(entry.rowLabel) ||
+        cleanContextLabel(entry.anchorLabel) ||
+        cleanContextLabel(entry.aboveLabel);
+      const fileTitle = extractFriendlyFileTitle(entry.url);
+
+      let baseLabel = '';
+      let subtitle = '';
+      switch (kind) {
+        case 'DRAWING':
+          baseLabel = spatialLabel && /schedule|drawing|design/i.test(spatialLabel)
+            ? spatialLabel
+            : fileTitle && fileTitle.length > 4
+              ? `Product Drawing — ${fileTitle}`
+              : 'Product Design & Drawing';
+          subtitle = 'Buyer-uploaded engineering drawing / product design PDF';
+          break;
+        case 'SPECIFICATION':
+          baseLabel = /\/showcatalogue\//i.test(urlLower)
+            ? 'GeM Category Specification'
+            : fileTitle && !/^SPEC\d*$/i.test(fileTitle) && fileTitle.length > 4
+              ? fileTitle
+              : spatialLabel && /spec|scope|boq|rfp|schedule/i.test(spatialLabel)
+                ? spatialLabel
+                : 'Technical Specifications & Scope';
+          subtitle = /\/showcatalogue\//i.test(urlLower)
+            ? 'Official GeM catalogue golden parameters & specifications'
+            : 'Buyer-uploaded product specifications & technical requirements';
+          break;
+        case 'ATC':
+          baseLabel =
+            spatialLabel && /atc|eligibility|criteria|terms|nit/i.test(spatialLabel)
+              ? spatialLabel
+              : fileTitle && fileTitle.length > 4 && !/^ATC/i.test(fileTitle)
+                ? `Buyer ATC — ${fileTitle}`
+                : 'Buyer Added ATC & Criteria';
+          subtitle = 'Additional Terms, Conditions & eligibility criteria uploaded by buyer';
+          break;
+        case 'BOQ':
+          baseLabel =
+            fileFormat === 'XLSX'
+              ? 'BOQ Price / Item Sheet (Excel)'
+              : fileFormat === 'CSV'
+                ? 'BOQ Line Items Sheet (CSV)'
+                : 'BOQ Document';
+          subtitle =
+            fileFormat === 'PDF'
+              ? 'Bill of Quantities document · Read inline'
+              : `Buyer BOQ ${fileFormat} file · Opens in spreadsheet viewer`;
+          break;
+        case 'CORRIGENDUM':
+          baseLabel = spatialLabel || 'Tender Corrigendum';
+          subtitle = 'Official buyer amendment / corrigendum document';
+          break;
+        case 'SLA':
+          baseLabel = 'Service Level Agreement (SLA)';
+          subtitle = 'Official GeM Service SLA terms on bidplus.gem.gov.in';
+          break;
+        case 'GTC':
+          baseLabel = 'GeM General Terms & Conditions (GTC)';
+          subtitle = 'Standard GeM portal terms applicable on tender publish date';
+          break;
+        case 'BID':
+          baseLabel = 'Linked Parent Bid PDF';
+          subtitle = 'Official referenced GeM bid document';
+          break;
+        default:
+          baseLabel = spatialLabel || fileTitle || 'Buyer Attached Criteria / Document';
+          subtitle =
+            fileFormat === 'PDF'
+              ? 'Additional buyer-uploaded tender document · Read inline'
+              : 'Additional official GeM tender attachment';
+          break;
+      }
+
+      const prevCount = labelCounts.get(baseLabel) || 0;
+      labelCounts.set(baseLabel, prevCount + 1);
+      const uniqueLabel = prevCount > 0 ? `${baseLabel} (${prevCount + 1})` : baseLabel;
+
+      results.push({
+        id: `pdf-link-${kind.toLowerCase()}-${idx}`,
+        label: uniqueLabel,
+        subtitle,
+        kind,
+        fileFormat,
+        url: entry.url,
+        pageNumber: entry.pageNumber,
+        contextLabel: spatialLabel,
+      });
+    }
+
+    return results;
   }
 }

@@ -5,8 +5,11 @@
     "version": "2.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#0B3B60"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -21,7 +24,8 @@
     "android": {
       "versionCode": 3,
       "adaptiveIcon": {
-        "backgroundColor": "#0B3B60"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
       "package": "gov.gem.companion",
       "permissions": [

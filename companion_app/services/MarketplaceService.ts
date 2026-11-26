@@ -78,6 +78,7 @@ interface MarketplacePageCache {
   items: MarketplaceItem[];
   hasMore: boolean;
   page: number;
+  totalResults?: number;
 }
 
 export const OFFICIAL_PRODUCT_CATEGORIES: MarketplaceCategory[] = [
@@ -416,12 +417,13 @@ export class MarketplaceService {
 
   private static cacheStreamPage(
     filter: MarketplaceFilter | undefined,
-    result: { items: MarketplaceItem[]; hasMore: boolean; page: number }
+    result: { items: MarketplaceItem[]; hasMore: boolean; page: number; totalResults?: number }
   ): void {
     this.livePageCache.set(this.getStreamCacheKey(filter, result.page), {
       items: [...result.items],
       hasMore: result.hasMore,
       page: result.page,
+      totalResults: result.totalResults,
     });
   }
 
@@ -502,6 +504,8 @@ export class MarketplaceService {
     items: MarketplaceItem[];
     hasMore: boolean;
     page: number;
+    totalResults?: number;
+    failed?: boolean;
     source: MarketplaceStreamSource;
   }> {
     const page = filter?.page || 1;
@@ -509,8 +513,10 @@ export class MarketplaceService {
 
     // 1. Direct real-time keyword search if query is provided.
     if (filter?.query && filter.query.trim()) {
+      let failed = false;
       try {
         const searchRes = await GeMClientCrawler.searchLiveProducts(filter.query.trim(), page);
+        failed = Boolean(searchRes.failed);
         if (searchRes.items && searchRes.items.length > 0) {
           const scopedItems = searchRes.items.map((item) => ({
             ...item,
@@ -520,14 +526,16 @@ export class MarketplaceService {
           this.ingestLiveProducts(scopedItems);
           const result = { ...searchRes, items: scopedItems };
           this.cacheStreamPage(filter, result);
-          return { ...result, source: 'LIVE_PORTAL' };
+          return { ...result, failed: false, source: 'LIVE_PORTAL' };
         }
-      } catch {}
+      } catch {
+        failed = true;
+      }
 
       const cached = cachedPage();
       return cached
-        ? { ...cached, source: 'CACHED_CATALOG' }
-        : { items: [], hasMore: false, page, source: 'EMPTY' };
+        ? { ...cached, failed: false, source: 'CACHED_CATALOG' }
+        : { items: [], hasMore: false, page, failed, source: 'EMPTY' };
     }
 
     // 2. Direct real-time category crawl from mkp.gem.gov.in
@@ -548,9 +556,11 @@ export class MarketplaceService {
       slug = 'computers-entry-level-computer-cpu/search';
     }
 
+    let crawlFailed = false;
     if (slug) {
       try {
         const crawlRes = await GeMClientCrawler.fetchCategoryPage(slug, page);
+        crawlFailed = Boolean(crawlRes.failed);
         if (crawlRes.items && crawlRes.items.length > 0) {
           const scopedItems = crawlRes.items.map((item) => ({
             ...item,
@@ -560,14 +570,17 @@ export class MarketplaceService {
           this.ingestLiveProducts(scopedItems);
           const result = { ...crawlRes, items: scopedItems };
           this.cacheStreamPage(filter, result);
-          return { ...result, source: 'LIVE_PORTAL' };
+          return { ...result, failed: false, source: 'LIVE_PORTAL' };
         }
-      } catch {}
+      } catch {
+        crawlFailed = true;
+      }
     }
 
-    // Fallback to keyword search with subcategory name or category name when the specific slug 404s/fails
+    // Fallback to keyword search ONLY on page 1 when the specific slug 404s/fails
+    // (on page 2+, falling back to keyword search can return unrelated page-1 records).
     const categorySearch = filter?.subcategoryName || filter?.category;
-    if (categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
+    if (page === 1 && categorySearch && categorySearch !== 'All Categories' && categorySearch !== 'ALL') {
       try {
         const searchRes = await GeMClientCrawler.searchLiveProducts(categorySearch, page);
         if (searchRes.items && searchRes.items.length > 0) {
@@ -579,15 +592,17 @@ export class MarketplaceService {
           this.ingestLiveProducts(scopedItems);
           const result = { ...searchRes, items: scopedItems };
           this.cacheStreamPage(filter, result);
-          return { ...result, source: 'LIVE_PORTAL' };
+          return { ...result, failed: false, source: 'LIVE_PORTAL' };
         }
-      } catch {}
+      } catch {
+        crawlFailed = true;
+      }
     }
 
     // 3. Graceful fallback: return cached page or bundled verified catalog items
     const cached = cachedPage();
     if (cached && cached.items.length > 0) {
-      return { ...cached, source: 'CACHED_CATALOG' };
+      return { ...cached, failed: false, source: 'CACHED_CATALOG' };
     }
 
     if (page === 1) {
@@ -597,12 +612,13 @@ export class MarketplaceService {
           items: bundledItems.slice(0, 20),
           hasMore: bundledItems.length > 20,
           page: 1,
+          failed: false,
           source: 'CACHED_CATALOG',
         };
       }
     }
 
-    return { items: [], hasMore: false, page, source: 'EMPTY' };
+    return { items: [], hasMore: false, page, failed: crawlFailed, source: 'EMPTY' };
   }
 
   /**

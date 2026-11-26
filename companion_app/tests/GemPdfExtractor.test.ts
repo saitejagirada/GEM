@@ -224,4 +224,56 @@ Buyer Added Bid Specific Terms and Conditions
     assert.equal(parsed.consignees[0]?.state, 'Karnataka');
     assert.equal(parsed.consignees[0]?.quantity, 1000);
   });
+
+  it('extracts, classifies, and spatially labels dynamic buyer-linked specifications, drawings, ATC, and BOQ documents from PDF annotations', () => {
+    const mockLinkedPdf = `
+1 0 obj
+<< /Type /Page /Contents 2 0 R /Annots 3 0 R /MediaBox [0 0 595 842] >>
+endobj
+2 0 obj
+<< /Length 260 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 40 700 Tm (Technical Specification) Tj
+1 0 0 1 40 640 Tm (Product Drawing) Tj
+1 0 0 1 40 580 Tm (Buyer Added Bid Specific ATC) Tj
+1 0 0 1 40 520 Tm (BOQ Item List) Tj
+ET
+endstream
+endobj
+3 0 obj
+[ 4 0 R 5 0 R 6 0 R 7 0 R 8 0 R 9 0 R ]
+endobj
+4 0 obj
+<< /Subtype /Link /Rect [260 694 350 708] /A << /S /URI /URI (https://mkp.gem.gov.in/catalog_data/catalog_support_document/buyer_documents/123/CatalogAttrs/SpecificationDocument/2026/9/22/tech_spec_sow_2026-09-22-11-13-14_49fd3e57c02571d4e8af760f9e351844.pdf) >> >>
+endobj
+5 0 obj
+<< /Subtype /Link /Rect [260 634 350 648] /A << /S /URI /URI (https://mkp.gem.gov.in/catalog_data/catalog_support_document/buyer_documents/123/CatalogAttrs/DrawingDocument/2026/9/22/4298_2026-09-22-11-13-14_6abf54a340ad261d40cac90c5b570a5a.pdf) >> >>
+endobj
+6 0 obj
+<< /Subtype /Link /Rect [260 574 350 588] /A << /S /URI /URI (https://fulfilment.gem.gov.in/contract/slafds?fileDownloadPath=SLA_UPLOAD_PATH/2026/Sep/GEM_2026_B_8066439/CLM0010/atc_7c5f8a85-9b98-46e0-b8db1790056785142_USER.pdf) >> >>
+endobj
+7 0 obj
+<< /Subtype /Link /Rect [260 514 350 528] /A << /S /URI /URI (https://bidplus.gem.gov.in/resources/upload_nas/SepQ326/bidding/excel/bid-9946106/1790340484.xlsx) >> >>
+endobj
+8 0 obj
+<< /Subtype /Link /Rect [40 460 180 474] /A << /S /URI /URI (https://bidplus.gem.gov.in/bidding/downloadOmppdfile/) >> >>
+endobj
+9 0 obj
+<< /Subtype /Link /Rect [40 420 180 434] /A << /S /URI /URI (http://dejavu.sourceforge.net/wiki/index.php/License) >> >>
+endobj
+`;
+
+    const docs = GemPdfExtractor.extractLinkedDocumentsFromPdf(mockLinkedPdf);
+    assert.equal(docs.length, 4, 'Should keep 4 valid GeM buyer attachments and filter noise/empty links');
+    assert.equal(docs[0].kind, 'SPECIFICATION');
+    assert.equal(docs[0].fileFormat, 'PDF');
+    assert.equal(docs[1].kind, 'DRAWING');
+    assert.equal(docs[1].fileFormat, 'PDF');
+    assert.equal(docs[2].kind, 'ATC');
+    assert.equal(docs[2].contextLabel, 'Buyer Added Bid Specific ATC');
+    assert.equal(docs[3].kind, 'BOQ');
+    assert.equal(docs[3].fileFormat, 'XLSX');
+  });
 });

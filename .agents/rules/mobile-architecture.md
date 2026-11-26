@@ -1,21 +1,17 @@
-# GeM Mobile Architecture & Security Standards
+# GeM Mobile Architecture & Guardrail Standards
 
-## 1. Offline-First Mandate
-- Consignee inspectors frequently operate in remote defense depots and rail yards without reliable 4G/5G connectivity.
-- All inspection actions (barcode scans, photo evidence, CRAC sign-offs) must first be committed locally with an idempotency key (`UUIDv4`).
-- Sync queues must employ exponential backoff with jitter and transactional safety.
+## 1. Direct Phone-to-GeM Architecture (Option 1)
+- `companion_app` is a **read-only public GeM UI layer + official portal handoff** built with React Native, Expo, and TypeScript for Android and iOS.
+- Live data is fetched directly from official public GeM domains (`bidplus.gem.gov.in`, `mkp.gem.gov.in`, `gem.gov.in`, `forwardauction.gem.gov.in`).
+- No backend server, no Supabase runtime dependency in UI screens, no credential storage, and no simulated bid placement.
 
-## 2. Reverse Auction Real-Time Invariance
-- Bidding occurs under high concurrency with sub-second price decrements.
-- Client devices must calculate and store the server clock offset (`estimatedServerTime - Date.now()`) on WebSocket connection and periodic PING/PONG heartbeats.
-- Bid submission timestamps must be adjusted for clock drift to prevent false timeout rejections.
+## 2. Data Honesty & On-Device Parsing
+- Never fabricate or pre-fill tender fundamentals (EMD, ePBG, estimated value, turnover, experience, L1 price, or seller rank).
+- Extract tender fundamentals locally on-device from official GeM PDFs (`GemPdfExtractor.ts` / `LocalPdfScanner.ts`) and display `"In PDF"` or `"Not published"` when absent.
+- Inline PDF viewing must resolve verified `bidplus.gem.gov.in` document URLs (both RA PDF and Original Parent Bid PDF when linked) and reject lookalike domains (`PortalDocService.ts`).
 
-## 3. Indian Government (GeM / CERT-In) Compliance
-- All on-site photo evidence must carry an immutable watermark text containing PO Number, Consignee ID, UTC Timestamp, and GPS coordinates with accuracy radius.
-- Photos must be hashed with SHA-256 for tamper-proof audit trails per General Financial Rules (GFR) 2017.
-- High-stakes counter-bids require local device biometric authorization (FaceID/Fingerprint) instead of SMS OTP to prevent network latency timeouts.
-
-## 4. Field Usability & Ergonomics
-- Minimum touch target size: 48x48 dp.
-- High contrast palette for readability under outdoor direct sunlight.
-- Critical actions (Submit Bid, Record Consignment Acceptance) must use double-confirmation or slide-to-confirm to prevent accidental submissions.
+## 3. UI Ergonomics & Restraint
+- Minimum touch target size: 44–48 dp.
+- Respect `theme/designTokens.ts` and `useTheme()` across Light Mode, Dark Mode, and accessibility font scaling.
+- Avoid decorative emojis, fake avatars, dead alerts, or unsolicited multi-screen overhauls.
+- Verify real visual behavior on device/emulator or get explicit user sign-off on a screen-by-screen plan before making layout changes.

@@ -149,18 +149,44 @@ jobs:
         run: |
           echo "Installed Xcode versions:"
           ls -d /Applications/Xcode*.app || true
+          echo "Installed simulator runtimes:"
+          xcrun simctl list runtimes || true
+
+          # Prefer an Xcode 16.x install whose matching iOS simulator runtime is installed
+          # (ibtool requires the matching iOS platform runtime to compile SplashScreen.storyboard).
+          SELECTED=""
           for candidate in \
-            /Applications/Xcode_15.4.app \
-            /Applications/Xcode_16.0.app \
+            /Applications/Xcode_16.4.app \
+            /Applications/Xcode_16.3.app \
+            /Applications/Xcode_16.2.app \
             /Applications/Xcode_16.1.app \
-            /Applications/Xcode_16.2.app; do
+            /Applications/Xcode_16.0.app; do
             if [ -d "$candidate" ]; then
-              echo "Selecting $candidate"
               sudo xcode-select -s "$candidate/Contents/Developer"
-              break
+              SDK_VER=$(xcodebuild -showsdks 2>/dev/null | grep -oE 'iphoneos[0-9]+\.[0-9]+' | head -n 1 | sed 's/iphoneos//')
+              if [ -n "$SDK_VER" ] && xcrun simctl list runtimes 2>/dev/null | grep -q "iOS ${SDK_VER}"; then
+                SELECTED="$candidate"
+                echo "Selected $candidate (matched iOS ${SDK_VER} runtime)"
+                break
+              fi
             fi
           done
+
+          if [ -z "$SELECTED" ]; then
+            echo "No exact Xcode 16.x runtime match found; falling back to highest installed Xcode 16.x"
+            for candidate in \
+              /Applications/Xcode_16.4.app \
+              /Applications/Xcode_16.3.app \
+              /Applications/Xcode_16.2.app; do
+              if [ -d "$candidate" ]; then
+                sudo xcode-select -s "$candidate/Contents/Developer"
+                break
+              fi
+            done
+          fi
+
           xcodebuild -version
+          xcodebuild -showsdks
 
       - name: Setup Node.js 22 (LTS)
         uses: actions/setup-node@v4

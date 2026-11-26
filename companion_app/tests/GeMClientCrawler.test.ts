@@ -12,7 +12,7 @@ describe('GeMClientCrawler & Live Multi-Seller Parsing', () => {
 
     const laptopConfig = OFFICIAL_GEM_SUBCATEGORIES.find((c) => c.id === 'laptops-notebooks');
     assert.ok(laptopConfig);
-    assert.strictEqual(laptopConfig.slug, 'computers-0806nb/search');
+    assert.strictEqual(laptopConfig.slug, 'computers-entry-and-mid-level-laptop-notebook/search');
     assert.strictEqual(GeMClientCrawler.resolveMatchingSubcategory('laptop')?.id, 'laptops-notebooks');
 
     // Verify Textile Products, Automobiles, and Pipes & Fittings all use verified live slugs
@@ -110,5 +110,101 @@ describe('GeMClientCrawler & Live Multi-Seller Parsing', () => {
     assert.strictEqual(p2.discountPercent, 30);
     assert.strictEqual(p2.minOrderQty, 5);
     assert.ok(p2.badge?.includes('Startup'));
+  });
+
+  it('parses native GeM _xhr=1 JSON catalog responses with seller, exact totals, and canonical slug', () => {
+    const parsed = GeMClientCrawler.parseGeMXhrJson(
+      {
+        curr_page: '2',
+        number_of_results: 252,
+        browse_node: {
+          id: 'home_info_comp_comp_en14305462',
+          title: 'Entry and Mid Level Laptop - Notebook',
+          url: 'computers-entry-and-mid-level-laptop-notebook',
+        },
+        catalogs: [
+          {
+            id: '5116877-98254261476',
+            title: 'HP ProBook 440 G10 Laptop',
+            brand: 'HP',
+            img_url: 'https://assets-mkpbg.gem.gov.in/img/othe/hp.999xx.jpg',
+            url: ['entry-mid-level-laptop', 'hp-probook', 'p-5116877-98254261476-cat.html'],
+            is_l1: true,
+            moq: 5,
+            list_price: { value: 90000 },
+            final_price: { value: 54000 },
+            discount_percent: 40,
+            seller: {
+              name: 'UNICORN INDUSTRIES',
+              is_authorized: true,
+              is_reseller: true,
+              display_sold_as: 'Reseller - Authorization Details Available',
+              config: { sold_as: 'Resellers' },
+            },
+          },
+        ],
+      },
+      'IT Products',
+      'per Laptop',
+      '24–48 hrs Express'
+    );
+
+    assert.strictEqual(parsed.currentPage, 2);
+    assert.strictEqual(parsed.totalResults, 252);
+    assert.strictEqual(parsed.canonicalSlug, 'computers-entry-and-mid-level-laptop-notebook');
+    assert.strictEqual(parsed.items.length, 1);
+    const laptop = parsed.items[0];
+    assert.strictEqual(laptop.id, 'gem-live-5116877-98254261476');
+    assert.strictEqual(laptop.oemBrand, 'HP');
+    assert.strictEqual(laptop.l1PriceInr, 54000);
+    assert.strictEqual(laptop.mrpInr, 90000);
+    assert.strictEqual(laptop.discountPercent, 40);
+    assert.strictEqual(laptop.badge, 'GeM L1');
+    assert.strictEqual(laptop.specSummary['Seller'], 'UNICORN INDUSTRIES');
+    assert.strictEqual(
+      laptop.productUrl,
+      'https://mkp.gem.gov.in/entry-mid-level-laptop/hp-probook/p-5116877-98254261476-cat.html'
+    );
+  });
+
+  it('automatically retries page 2 against canonical browse_node.url when alias slug bounces to page 1', async () => {
+    const originalFetch = globalThis.fetch;
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes('legacy-alias-slug/search?') && url.includes('page=2')) {
+        return new Response(
+          JSON.stringify({
+            curr_page: '1',
+            number_of_results: 40,
+            browse_node: { url: 'canonical-laptop-slug' },
+            catalogs: [{ id: 'p1-item', title: 'Page 1 Item', brand: 'ACER', final_price: { value: 30000 } }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          curr_page: '2',
+          number_of_results: 40,
+          browse_node: { url: 'canonical-laptop-slug' },
+          catalogs: [{ id: 'p2-item', title: 'Page 2 Item', brand: 'LENOVO', final_price: { value: 32000 } }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    try {
+      const res = await GeMClientCrawler.fetchCategoryPage('legacy-alias-slug/search', 2, 5000, false);
+      assert.strictEqual(res.page, 2);
+      assert.strictEqual(res.totalResults, 40);
+      assert.strictEqual(res.hasMore, true);
+      assert.strictEqual(res.items[0].id, 'gem-live-p2-item');
+      assert.ok(requestedUrls.some((u) => u.includes('canonical-laptop-slug/search?') && u.includes('don_load_facets=true') && u.includes('page=2')));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

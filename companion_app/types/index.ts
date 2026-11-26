@@ -217,14 +217,27 @@ export interface ServiceContractDetails {
   minimumWageCompliance?: boolean;
 }
 
-export type OfficialBidDocumentKind = 'BID' | 'SPECIFICATION' | 'CORRIGENDUM' | 'BOQ' | 'OTHER';
+export type OfficialBidDocumentKind =
+  | 'BID'
+  | 'SPECIFICATION'
+  | 'DRAWING'
+  | 'ATC'
+  | 'CORRIGENDUM'
+  | 'BOQ'
+  | 'SLA'
+  | 'GTC'
+  | 'OTHER';
+
+export type OfficialBidFileFormat = 'PDF' | 'XLSX' | 'CSV' | 'IMAGE' | 'WEB';
 
 export interface OfficialBidDocument {
   id: string;
   label: string;
+  subtitle?: string;
   kind: OfficialBidDocumentKind;
+  fileFormat?: OfficialBidFileFormat;
   url: string;
-  source: 'PUBLIC_GEM_FEED' | 'PUBLIC_GEM_RECORD';
+  source: 'PUBLIC_GEM_FEED' | 'PUBLIC_GEM_RECORD' | 'EXTRACTED_FROM_PDF';
 }
 
 export interface DeconstructedBidDoc {

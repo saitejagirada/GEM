@@ -125,9 +125,67 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = REQUEST_TIMEOUT_
 export class GeMServicesClient {
   private static detailCache = new Map<string, LiveGeMServiceDetail>();
   private static directoryPageCache = new Map<string, LiveGeMServiceListResponse>();
+  private static fullDirectoryCache: { services: LiveGeMServiceSummary[]; total: number } | null = null;
+  private static fullDirectoryPromise: Promise<{ services: LiveGeMServiceSummary[]; total: number }> | null = null;
 
   public static buildPortalUrl(serviceId: string): string {
     return `${MKP_ORIGIN}/services#!/browse/${encodeURIComponent(serviceId)}/open`;
+  }
+
+  /**
+   * Fetches and caches the full active GeM Services directory (380+ services with
+   * official photos & descriptions) using parallel 100-item pages so category filters
+   * and keyword search work instantaneously across every live GeM service.
+   */
+  public static async fetchAllLiveServices(
+    forceRefresh = false
+  ): Promise<{ services: LiveGeMServiceSummary[]; total: number }> {
+    if (!forceRefresh && this.fullDirectoryCache && this.fullDirectoryCache.services.length > 0) {
+      return this.fullDirectoryCache;
+    }
+    if (!forceRefresh && this.fullDirectoryPromise) {
+      return this.fullDirectoryPromise;
+    }
+
+    this.fullDirectoryPromise = (async () => {
+      const perPage = 100;
+      const first = await this.fetchLiveServicesDirectory(1, perPage);
+      const total = first.total || first.services.length;
+      const totalPages = Math.min(6, Math.max(1, Math.ceil(total / perPage)));
+
+      const all: LiveGeMServiceSummary[] = [...first.services];
+      if (totalPages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, i) =>
+            this.fetchLiveServicesDirectory(i + 2, perPage).catch(() => ({
+              services: [],
+              total,
+              page: i + 2,
+              hasMore: false,
+            }))
+          )
+        );
+        const seen = new Set(all.map((s) => s.id));
+        for (const pageRes of rest) {
+          for (const srv of pageRes.services) {
+            if (!seen.has(srv.id)) {
+              seen.add(srv.id);
+              all.push(srv);
+            }
+          }
+        }
+      }
+
+      const result = { services: all, total: Math.max(total, all.length) };
+      if (all.length > 0) {
+        this.fullDirectoryCache = result;
+      }
+      return result;
+    })().finally(() => {
+      this.fullDirectoryPromise = null;
+    });
+
+    return this.fullDirectoryPromise;
   }
 
   /**
