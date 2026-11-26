@@ -72,6 +72,10 @@ export interface GeMPortalQueryResult {
   error?: string;
 }
 
+export interface GeMPortalBatchResult extends GeMPortalQueryResult {
+  lastPageFetched: number;
+}
+
 export interface GeMBidOtherDetails {
   hasCorrigendum: boolean;
   hasRepresentation: boolean;
@@ -692,6 +696,89 @@ export class GeMLiveSyncService {
   }
 
   /**
+   * Fetches multiple consecutive GeM Solr pages in parallel (default: 3 pages = 30 tenders)
+   * after acquiring a single shared CSRF session, unlocking smooth infinite scroll across
+   * all 40,000+ live tenders, 1,500+ Reverse Auctions, and concluded/cancelled archives.
+   */
+  public static async queryLivePortalBatch(
+    options: GeMPortalQueryOptions = {},
+    batchSize = 3
+  ): Promise<GeMPortalBatchResult> {
+    const startPage = Math.max(1, options.page ?? 1);
+    const count = Math.min(5, Math.max(1, batchSize));
+
+    // Warm session once so parallel page requests share the exact same CSRF cookie
+    await this.ensurePortalSession().catch(() => null);
+
+    // When a search filter is active on page 1, check total first to avoid wasting extra requests
+    const hasSearch = Boolean(options.searchBid?.trim());
+    if (count === 1 || (hasSearch && startPage === 1)) {
+      const first = await this.queryLivePortal({ ...options, page: startPage });
+      if (count === 1 || first.error || first.bids.length === 0 || startPage * 10 >= first.total) {
+        return { ...first, lastPageFetched: startPage };
+      }
+      const maxRemaining = Math.min(count - 1, Math.ceil((first.total - startPage * 10) / 10));
+      const rest = await Promise.all(
+        Array.from({ length: maxRemaining }, (_, idx) =>
+          this.queryLivePortal({ ...options, page: startPage + 1 + idx })
+        )
+      );
+      return this.mergeBatchResults(startPage, [first, ...rest]);
+    }
+
+    const pages = await Promise.all(
+      Array.from({ length: count }, (_, idx) =>
+        this.queryLivePortal({ ...options, page: startPage + idx })
+      )
+    );
+    return this.mergeBatchResults(startPage, pages);
+  }
+
+  private static mergeBatchResults(
+    startPage: number,
+    results: GeMPortalQueryResult[]
+  ): GeMPortalBatchResult {
+    const deduped = new Map<string, DeconstructedBidDoc>();
+    let total = 0;
+    let lastPageFetched = startPage;
+    let portalOrigin: 'bidplus.gem.gov.in' | 'bidplus-global.gem.gov.in' = 'bidplus.gem.gov.in';
+    let firstError: string | undefined;
+    let sawEmptyPage = false;
+
+    for (const res of results) {
+      if (res.total > total) total = res.total;
+      if (res.portalOrigin) portalOrigin = res.portalOrigin;
+      if (res.error && !firstError) firstError = res.error;
+      if (res.bids.length > 0) {
+        lastPageFetched = Math.max(lastPageFetched, res.page);
+        for (const bid of res.bids) {
+          if (!deduped.has(bid.bidNumber)) {
+            deduped.set(bid.bidNumber, bid);
+          }
+        }
+      } else if (!res.error) {
+        sawEmptyPage = true;
+      }
+    }
+
+    const combined = Array.from(deduped.values());
+    const hasMore =
+      !sawEmptyPage &&
+      combined.length > 0 &&
+      lastPageFetched * 10 < total;
+
+    return {
+      bids: combined,
+      total,
+      page: startPage,
+      lastPageFetched,
+      hasMore,
+      portalOrigin,
+      error: combined.length === 0 ? firstError : undefined,
+    };
+  }
+
+  /**
    * Direct live bid lookup on GeM by bid number or keyword.
    * Searches ongoing bids first, then concluded Bid/RA status if not found.
    */
@@ -795,38 +882,22 @@ export class GeMLiveSyncService {
 
     this.isSyncingInProgress = true;
     try {
-      const firstPage = await this.queryLivePortal({
-        page: 1,
-        bidStatusType: 'ongoing_bids',
-        byType: 'all',
-        sort: 'Bid-End-Date-Oldest',
-      });
+      const batch = await this.queryLivePortalBatch(
+        {
+          page: 1,
+          bidStatusType: 'ongoing_bids',
+          byType: 'all',
+          sort: 'Bid-Start-Date-Latest',
+        },
+        Math.max(1, maxPages)
+      );
 
-      if (firstPage.error && firstPage.bids.length === 0) {
-        throw new Error(firstPage.error);
-      }
-
-      const pageCount = Math.min(Math.max(1, maxPages), Math.max(1, Math.ceil(firstPage.total / 10)));
-      const collected: DeconstructedBidDoc[] = [...firstPage.bids];
-
-      if (pageCount > 1) {
-        const remaining = await Promise.all(
-          Array.from({ length: pageCount - 1 }, (_, index) =>
-            this.queryLivePortal({
-              page: index + 2,
-              bidStatusType: 'ongoing_bids',
-              byType: 'all',
-              sort: 'Bid-End-Date-Oldest',
-            })
-          )
-        );
-        for (const pageRes of remaining) {
-          collected.push(...pageRes.bids);
-        }
+      if (batch.error && batch.bids.length === 0) {
+        throw new Error(batch.error);
       }
 
       const deduped = new Map<string, DeconstructedBidDoc>();
-      for (const bid of collected) {
+      for (const bid of batch.bids) {
         const status = this.computeLifecycleStatus(bid);
         if (status === 'ONGOING' || status === 'BID_TO_RA') {
           deduped.set(bid.bidNumber, { ...bid, lifecycleStatus: status });
@@ -834,7 +905,7 @@ export class GeMLiveSyncService {
       }
 
       this.liveCatalog = Array.from(deduped.values());
-      this.totalPortalOngoingCount = firstPage.total || this.liveCatalog.length;
+      this.totalPortalOngoingCount = batch.total || this.liveCatalog.length;
       this.lastSyncTime = new Date().toISOString();
       this.notifyListeners();
 

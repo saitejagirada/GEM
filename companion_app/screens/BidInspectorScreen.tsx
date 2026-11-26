@@ -1,33 +1,38 @@
 /**
- * GeM Bid & Reverse Auction Inspector Screen
+ * GeM Bid & Tender Details Screen (High-Clarity Decision Desk)
  *
- * Clean, high-clarity tender brief powered 100% by direct public GeM feeds and
- * on-device PDF extraction:
- * - Executive hero summary (title, department, countdown, estimated value & EMD)
- * - Dynamic Official Documents & Buyer Attachments section (auto-discovers buyer
- *   Technical Specifications, Product Drawings, Buyer ATC/Criteria, BOQ Excel/CSV,
- *   Service SLA, and GTC links directly from the official tender PDFs)
- * - Clean 2-column hairline Key Terms table + Policy tags
+ * Designed for extended tender inspection & PDF review:
+ * - Clean theme-native header with 1-tap Bid Number Copy + Deal Sheet Share
+ * - Sticky Quick-Jump section strip (Overview · Docs · Terms · Eligibility · Delivery · Checklist)
+ * - Executive Summary card with live closing countdown + breathable 2×2 KPI grid
+ * - Official Documents & Auto-Discovered Buyer Attachments (Specs, Drawings, ATC, BOQ, SLA, GTC)
+ * - Scannable Key Tender Terms table + policy tags
  * - Honest Eligibility & Key Watchouts + 1-tap compliance letter drafts
- * - Published Scope, Delivery Locations & Interactive Document Checklist
+ * - Deduplicated Delivery Locations + interactive Seller Checklist with readiness progress bar
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Linking,
   Modal,
+  NativeModules,
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { DeconstructedBidDoc, OfficialBidDocument, OfficialBidDocumentKind } from '../types/index';
+import type {
+  DeconstructedBidDoc,
+  OfficialBidDocument,
+  OfficialBidDocumentKind,
+} from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { GeMLiveSyncService, type GeMBidOtherDetails } from '../services/GeMLiveSyncService';
 import {
@@ -36,9 +41,9 @@ import {
   type LocalPdfScanResult,
 } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
-import { formatDateSafe } from '../utils/formatters';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/designTokens';
+import { formatDateSafe, formatInr } from '../utils/formatters';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
 import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
@@ -48,6 +53,21 @@ interface BidInspectorScreenProps {
   visible: boolean;
   onClose: () => void;
   onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
+}
+
+type SectionKey = 'overview' | 'docs' | 'terms' | 'eligibility' | 'delivery' | 'checklist';
+
+function copyToClipboardSafe(value: string): boolean {
+  try {
+    const nativeClipboard = NativeModules?.Clipboard || NativeModules?.RNCClipboard;
+    if (nativeClipboard && typeof nativeClipboard.setString === 'function') {
+      nativeClipboard.setString(value);
+      return true;
+    }
+  } catch {
+    // Fall through to share sheet fallback
+  }
+  return false;
 }
 
 function getDocumentBadgeStyle(
@@ -85,6 +105,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   onPrepareDocuments,
 }) => {
   const { colors, isDark } = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionYRef = useRef<Partial<Record<SectionKey, number>>>({});
+
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
   const [isScanningPdf, setIsScanningPdf] = useState(false);
@@ -92,6 +115,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
   const [showDealSheet, setShowDealSheet] = useState(false);
   const [otherDetails, setOtherDetails] = useState<GeMBidOtherDetails | null>(null);
+  const [copiedBidNum, setCopiedBidNum] = useState(false);
+  const [activeJump, setActiveJump] = useState<SectionKey>('overview');
 
   useEffect(() => {
     setCheckedDocs({});
@@ -100,6 +125,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     setDocumentViewerVisible(false);
     setShowDealSheet(false);
     setSelectedDocumentId(undefined);
+    setCopiedBidNum(false);
+    setActiveJump('overview');
+    sectionYRef.current = {};
     if (!bid || !visible) return;
 
     let cancelled = false;
@@ -108,15 +136,18 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       .then((result) => {
         if (!cancelled) setPdfScan(result);
       })
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setIsScanningPdf(false);
       });
 
     const probeId = bid.b_id || bid.parentBidId;
     if (probeId) {
-      GeMLiveSyncService.fetchBidOtherDetails(probeId).then((details) => {
-        if (!cancelled && details) setOtherDetails(details);
-      });
+      GeMLiveSyncService.fetchBidOtherDetails(probeId)
+        .then((details) => {
+          if (!cancelled && details) setOtherDetails(details);
+        })
+        .catch(() => undefined);
     }
 
     return () => {
@@ -146,12 +177,36 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const boqItems = Array.isArray(effectiveBid.boqItems) ? effectiveBid.boqItems : [];
   const consignees = Array.isArray(effectiveBid.consignees) ? effectiveBid.consignees : [];
 
-  // Separate primary & buyer-unique attachments from standard GTC reference
   const mainAndBuyerDocs = officialDocuments.filter((d) => d.kind !== 'GTC');
-  const gtcDocs = officialDocuments.filter((d) => d.kind === 'GTC');
-  const extraBuyerAttachmentCount = mainAndBuyerDocs.filter(
+  const primaryTenderDocs = mainAndBuyerDocs.filter(
+    (d) => d.id === 'bid-document' || d.id === 'parent-bid-document'
+  );
+  const buyerAttachmentDocs = mainAndBuyerDocs.filter(
     (d) => d.id !== 'bid-document' && d.id !== 'parent-bid-document'
-  ).length;
+  );
+  const gtcDocs = officialDocuments.filter((d) => d.kind === 'GTC');
+
+  const handleCopyBidNumber = () => {
+    const ok = copyToClipboardSafe(bid.bidNumber);
+    if (ok) {
+      setCopiedBidNum(true);
+      setTimeout(() => setCopiedBidNum(false), 1800);
+    } else {
+      Share.share({ message: bid.bidNumber, title: bid.bidNumber }).catch(() => undefined);
+    }
+  };
+
+  const scrollToSection = (key: SectionKey) => {
+    setActiveJump(key);
+    if (key === 'overview') {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    const y = sectionYRef.current[key];
+    if (typeof y === 'number') {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    }
+  };
 
   const toggleDoc = (docName: string) => {
     setCheckedDocs((prev) => ({
@@ -176,7 +231,6 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       return;
     }
     const format = targetDocument.fileFormat || PortalDocService.inferFileFormat(targetDocument.url);
-    // Open non-PDF spreadsheets/SLA in viewer launcher or directly if preferred
     if (format !== 'PDF' && (format === 'XLSX' || format === 'CSV')) {
       Linking.openURL(targetDocument.url).catch(() => {
         setSelectedDocumentId(targetDocument.id);
@@ -189,6 +243,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   };
 
   const handleScanPdfOnDevice = async () => {
+    if (isScanningPdf) return;
     setIsScanningPdf(true);
     try {
       const result = await LocalPdfScanner.scanBidDocuments(bid);
@@ -226,7 +281,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
   const estValueDisplay =
     effectiveBid.estimatedBidValueInr !== undefined && effectiveBid.estimatedBidValueInr > 0
-      ? fundamentals.estimatedValueLabel
+      ? `₹${formatInr(effectiveBid.estimatedBidValueInr)}`
       : effectiveBid.isHighValue
         ? '≥ ₹2 Cr'
         : isScanningPdf
@@ -237,10 +292,18 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
   const emdDisplay =
     effectiveBid.emdAmountInr !== undefined
-      ? fundamentals.emdLabel
+      ? effectiveBid.emdAmountInr === 0
+        ? '₹0 (Not Required)'
+        : `₹${formatInr(effectiveBid.emdAmountInr)}${effectiveBid.isEmdExemptForMse ? ' (MSE Exempt)' : ''}`
       : effectiveBid.isEmdExemptForMse
         ? 'MSE Exempt'
         : fallbackValue;
+  const emdShortDisplay =
+    effectiveBid.emdAmountInr === 0
+      ? 'None (₹0)'
+      : effectiveBid.emdAmountInr !== undefined
+        ? `₹${formatInr(effectiveBid.emdAmountInr)}`
+        : emdDisplay;
   const emdIsPositive = effectiveBid.emdAmountInr === 0 || Boolean(effectiveBid.isEmdExemptForMse);
 
   const epbgDisplay =
@@ -248,7 +311,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       ? effectiveBid.epbgPercentage === 0
         ? 'Not Required (0%)'
         : effectiveBid.epbgDurationMonths
-          ? `${effectiveBid.epbgPercentage}% (${effectiveBid.epbgDurationMonths} months)`
+          ? `${effectiveBid.epbgPercentage}% (${effectiveBid.epbgDurationMonths} mo)`
           : `${effectiveBid.epbgPercentage}%`
       : fallbackValue;
 
@@ -257,9 +320,14 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
       ? `${effectiveBid.deliveryPeriodDays} Days`
       : fallbackValue;
 
+  const primaryDeliveryState =
+    consignees[0]?.state ||
+    Object.keys(ext?.consigneeStateDistribution || {})[0] ||
+    (consignees.length > 0 ? `${consignees.length} location${consignees.length === 1 ? '' : 's'}` : undefined);
+
   const turnoverDisplay =
     effectiveBid.minAnnualTurnoverInr !== undefined
-      ? fundamentals.turnoverLabel
+      ? `₹${formatInr(effectiveBid.minAnnualTurnoverInr)}`
       : ext?.mseExemptionForExpAndTurnover
         ? 'MSE / Startup Relaxed'
         : fallbackValue;
@@ -290,7 +358,6 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         ? `${totalQty.toLocaleString('en-IN')} Units`
         : fallbackValue;
 
-  // Compact policy tags
   const policyTags: Array<{ label: string; bg: string; fg: string }> = [];
   if (effectiveBid.isEmdExemptForMse || ext?.mseExemptionForExpAndTurnover) {
     policyTags.push({ label: 'MSE Exemption', bg: colors.successTint, fg: colors.success });
@@ -354,7 +421,74 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   ];
 
   const typeInfo = BidDocService.getProcurementTypeLabel(bid);
+  const isRaBid = Boolean(bid.isRa || bid.type === 'RA');
   const checkedCount = requiredDocuments.filter((d) => checkedDocs[d]).length;
+  const checklistRatio =
+    requiredDocuments.length > 0 ? checkedCount / requiredDocuments.length : 0;
+
+  const jumpItems: Array<{ key: SectionKey; label: string; highlight?: boolean }> = [
+    { key: 'overview', label: 'Overview' },
+    {
+      key: 'docs',
+      label: `Docs (${mainAndBuyerDocs.length})`,
+      highlight: buyerAttachmentDocs.length > 0,
+    },
+    { key: 'terms', label: 'Terms' },
+    ...(ext ? [{ key: 'eligibility' as const, label: 'Eligibility' }] : []),
+    ...(consignees.length > 0
+      ? [{ key: 'delivery' as const, label: `Delivery (${consignees.length})` }]
+      : []),
+    ...(requiredDocuments.length > 0
+      ? [{ key: 'checklist' as const, label: `Checklist (${checkedCount}/${requiredDocuments.length})` }]
+      : []),
+  ];
+
+  const renderDocRow = (document: OfficialBidDocument, idx: number, isFirstInGroup: boolean) => {
+    const badge = getDocumentBadgeStyle(document, colors);
+    const format = document.fileFormat || PortalDocService.inferFileFormat(document.url);
+    const isPdf = format === 'PDF';
+
+    return (
+      <Pressable
+        key={document.id}
+        style={({ pressed }) => [
+          styles.docRow,
+          !isFirstInGroup && {
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.borderSubtle,
+          },
+          pressed && { opacity: 0.72 },
+        ]}
+        onPress={() => handleOpenDoc(document.id)}
+      >
+        <View style={[styles.docKindBadge, { backgroundColor: badge.bg }]}>
+          <Text style={[styles.docKindBadgeText, { color: badge.fg }]}>{badge.label}</Text>
+        </View>
+        <View style={styles.docCopy}>
+          <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+            {document.label}
+          </Text>
+          <Text style={[styles.docSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+            {document.subtitle ||
+              (isPdf ? 'Official GeM PDF · Read inside app' : `Official ${format} file`)}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.docActionPill,
+            {
+              backgroundColor: isPdf ? colors.primaryTint : colors.surfaceSubtle,
+              borderColor: isPdf ? 'transparent' : colors.borderSubtle,
+            },
+          ]}
+        >
+          <Text style={[styles.docActionCue, { color: isPdf ? colors.primary : colors.textPrimary }]}>
+            {isPdf ? 'Read ›' : 'Open ↗'}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <>
@@ -365,7 +499,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             backgroundColor={colors.surface}
           />
           <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* Clean Theme-Native Top Bar */}
+            {/* 1. Theme-Native Header with 1-Tap Copy Bid # */}
             <View
               style={[
                 styles.headerBar,
@@ -384,14 +518,40 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               >
                 <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
               </Pressable>
-              <View style={styles.headerCenter}>
-                <Text style={[styles.headerBidNum, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {bid.bidNumber}
-                </Text>
+
+              <Pressable
+                style={styles.headerCenter}
+                onPress={handleCopyBidNumber}
+                hitSlop={4}
+                accessibilityLabel="Copy Bid Number"
+              >
+                <View style={styles.headerBidRow}>
+                  <Text style={[styles.headerBidNum, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {bid.bidNumber}
+                  </Text>
+                  <View
+                    style={[
+                      styles.copyChip,
+                      {
+                        backgroundColor: copiedBidNum ? colors.successTint : colors.surfaceSubtle,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.copyChipText,
+                        { color: copiedBidNum ? colors.success : colors.textSecondary },
+                      ]}
+                    >
+                      {copiedBidNum ? 'Copied ✓' : 'Copy'}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {typeInfo.label} · Official GeM Tender
+                  {typeInfo.label} · Closes {formatDateSafe(bid.closingTimeUtc)}
                 </Text>
-              </View>
+              </Pressable>
+
               <Pressable
                 style={({ pressed }) => [
                   styles.sharePillBtn,
@@ -406,7 +566,62 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               </Pressable>
             </View>
 
+            {/* 2. Sticky Quick-Jump Section Bar */}
+            <View
+              style={[
+                styles.jumpBar,
+                { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+              ]}
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.jumpBarRow}
+              >
+                {jumpItems.map((item) => {
+                  const active = activeJump === item.key;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      onPress={() => scrollToSection(item.key)}
+                      style={[
+                        styles.jumpPill,
+                        {
+                          backgroundColor: active
+                            ? colors.primary
+                            : item.highlight
+                              ? colors.successTint
+                              : colors.surfaceSubtle,
+                          borderColor: active
+                            ? colors.primary
+                            : item.highlight
+                              ? colors.success
+                              : colors.borderSubtle,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.jumpPillText,
+                          {
+                            color: active
+                              ? colors.textInverse
+                              : item.highlight
+                                ? colors.success
+                                : colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             <ScrollView
+              ref={scrollRef}
               style={styles.scrollArea}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
@@ -427,134 +642,202 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         : 'Representation recorded on GeM'}
                     </Text>
                     <Text style={[styles.corrigendumSubtitle, { color: colors.textSecondary }]}>
-                      Check the latest PDF updates before quoting.
+                      Review the latest PDF amendments before preparing your quote.
                     </Text>
                   </View>
                 </View>
               )}
 
-              {/* 1. Clean Executive Summary Card */}
+              {/* 1. Executive Summary Card with Accent Bar & Breathable 2×2 KPI Grid */}
               <View
                 style={[
-                  styles.card,
+                  styles.heroCard,
                   { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                 ]}
               >
-                <View style={styles.badgeRow}>
-                  <View
-                    style={[
-                      styles.pillBadge,
-                      {
-                        backgroundColor:
-                          bid.isRa || bid.type === 'RA' ? colors.dangerTint : colors.primaryTint,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.pillBadgeText,
-                        { color: bid.isRa || bid.type === 'RA' ? colors.danger : colors.primary },
-                      ]}
-                    >
-                      {typeInfo.label.toUpperCase()}
-                    </Text>
-                  </View>
-                  {bid.isHighValue ? (
-                    <View style={[styles.pillBadge, { backgroundColor: colors.successTint }]}>
-                      <Text style={[styles.pillBadgeText, { color: colors.success }]}>≥ ₹2 Cr</Text>
-                    </View>
-                  ) : null}
-                  {bid.parentBidNumber ? (
-                    <View style={[styles.pillBadge, { backgroundColor: colors.surfaceSubtle }]}>
-                      <Text style={[styles.pillBadgeText, { color: colors.textSecondary }]}>
-                        Parent: {bid.parentBidNumber}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>
-                  {effectiveBid.title || 'Untitled Bid'}
-                </Text>
-                <Text style={[styles.deptText, { color: colors.textSecondary }]}>
-                  {[
-                    effectiveBid.department,
-                    effectiveBid.ministry !== effectiveBid.department ? effectiveBid.ministry : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-
-                {/* 3-Metric At-a-Glance Highlights Strip */}
                 <View
                   style={[
-                    styles.heroMetricsStrip,
-                    { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                    styles.heroAccentStrip,
+                    { backgroundColor: isRaBid ? colors.danger : colors.primary },
                   ]}
-                >
-                  <View style={styles.heroMetricCol}>
-                    <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>CLOSES IN</Text>
-                    <Text
+                />
+                <View style={styles.heroCardInner}>
+                  <View style={styles.heroTopRow}>
+                    <View style={styles.badgeRow}>
+                      <View
+                        style={[
+                          styles.pillBadge,
+                          { backgroundColor: isRaBid ? colors.dangerTint : colors.primaryTint },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pillBadgeText,
+                            { color: isRaBid ? colors.danger : colors.primary },
+                          ]}
+                        >
+                          {typeInfo.label.toUpperCase()}
+                        </Text>
+                      </View>
+                      {bid.isHighValue ? (
+                        <View style={[styles.pillBadge, { backgroundColor: colors.successTint }]}>
+                          <Text style={[styles.pillBadgeText, { color: colors.success }]}>≥ ₹2 Cr</Text>
+                        </View>
+                      ) : null}
+                      {bid.parentBidNumber ? (
+                        <View style={[styles.pillBadge, { backgroundColor: colors.surfaceSubtle }]}>
+                          <Text style={[styles.pillBadgeText, { color: colors.textSecondary }]}>
+                            Parent: {bid.parentBidNumber}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View
                       style={[
-                        styles.heroMetricValue,
-                        { color: isClosingSoon ? colors.danger : colors.textPrimary },
+                        styles.countdownPill,
+                        {
+                          backgroundColor: isClosingSoon ? colors.dangerTint : colors.primaryTint,
+                        },
                       ]}
-                      numberOfLines={1}
                     >
-                      {remainingLabel}
-                    </Text>
-                    <Text style={[styles.heroMetricSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {formatDateSafe(bid.closingTimeUtc).split(',')[0]}
-                    </Text>
+                      <View
+                        style={[
+                          styles.countdownDot,
+                          { backgroundColor: isClosingSoon ? colors.danger : colors.primary },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.countdownPillText,
+                          { color: isClosingSoon ? colors.danger : colors.primary },
+                        ]}
+                      >
+                        {remainingLabel}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={[styles.heroDivider, { backgroundColor: colors.borderSubtle }]} />
+                  <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>
+                    {effectiveBid.title || 'Untitled Bid'}
+                  </Text>
+                  <Text style={[styles.deptText, { color: colors.textSecondary }]}>
+                    {[
+                      effectiveBid.department,
+                      effectiveBid.ministry !== effectiveBid.department ? effectiveBid.ministry : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
 
-                  <View style={styles.heroMetricCol}>
-                    <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-                    <Text
-                      style={[styles.heroMetricValue, { color: colors.primary }]}
-                      numberOfLines={1}
-                    >
-                      {estValueDisplay}
-                    </Text>
-                    <Text style={[styles.heroMetricSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {totalQty !== undefined ? `Qty ${totalQty.toLocaleString('en-IN')}` : 'See scope'}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.heroDivider, { backgroundColor: colors.borderSubtle }]} />
-
-                  <View style={styles.heroMetricCol}>
-                    <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>EMD</Text>
-                    <Text
+                  {/* Breathable 2×2 Executive KPI Grid */}
+                  <View style={styles.kpiGrid}>
+                    <View
                       style={[
-                        styles.heroMetricValue,
-                        { color: emdIsPositive ? colors.success : colors.textPrimary },
+                        styles.kpiTile,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
                       ]}
-                      numberOfLines={1}
                     >
-                      {effectiveBid.emdAmountInr === 0
-                        ? 'None'
-                        : effectiveBid.emdAmountInr
-                          ? fundamentals.emdLabel.replace(/\s*\(.*?\)/, '')
-                          : emdDisplay}
-                    </Text>
-                    <Text
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+                      <Text
+                        style={[styles.kpiValue, { color: colors.primary }]}
+                        numberOfLines={1}
+                      >
+                        {estValueDisplay}
+                      </Text>
+                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {totalQty !== undefined ? `Qty ${totalQty.toLocaleString('en-IN')} Units` : 'See scope in PDF'}
+                      </Text>
+                    </View>
+
+                    <View
                       style={[
-                        styles.heroMetricSub,
-                        { color: emdIsPositive ? colors.success : colors.textSecondary },
+                        styles.kpiTile,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
                       ]}
-                      numberOfLines={1}
                     >
-                      {effectiveBid.isEmdExemptForMse ? 'MSE Exempt' : deliveryDisplay}
-                    </Text>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD GUARANTEE</Text>
+                      <Text
+                        style={[
+                          styles.kpiValue,
+                          { color: emdIsPositive ? colors.success : colors.textPrimary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {emdShortDisplay}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.kpiSub,
+                          { color: effectiveBid.isEmdExemptForMse ? colors.success : colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {effectiveBid.emdAmountInr === 0
+                          ? 'Not required for any bidder'
+                          : effectiveBid.isEmdExemptForMse
+                            ? 'MSE Exempt (OEM)'
+                            : 'Check PDF terms'}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.kpiTile,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>e-PBG SECURITY</Text>
+                      <Text
+                        style={[
+                          styles.kpiValue,
+                          {
+                            color:
+                              effectiveBid.epbgPercentage === 0
+                                ? colors.success
+                                : effectiveBid.epbgPercentage
+                                  ? colors.warning
+                                  : colors.textPrimary,
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {epbgDisplay}
+                      </Text>
+                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {effectiveBid.epbgPercentage ? 'Post-award performance' : 'Performance security'}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.kpiTile,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>DELIVERY</Text>
+                      <Text
+                        style={[
+                          styles.kpiValue,
+                          { color: effectiveBid.deliveryPeriodDays ? colors.primary : colors.textPrimary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {deliveryDisplay}
+                      </Text>
+                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {primaryDeliveryState || 'See consignees'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
 
-              {/* 2. Official Documents & Dynamically Discovered Buyer Attachments */}
+              {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
               <View
+                onLayout={(e) => {
+                  sectionYRef.current.docs = e.nativeEvent.layout.y;
+                }}
                 style={[
                   styles.card,
                   { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
@@ -567,69 +850,41 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     </Text>
                     <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]}>
                       {isScanningPdf
-                        ? 'Scanning tender PDF for linked specs, drawings & ATC…'
-                        : extraBuyerAttachmentCount > 0
-                          ? `${extraBuyerAttachmentCount} extra buyer attachment${extraBuyerAttachmentCount === 1 ? '' : 's'} discovered from PDF`
-                          : 'Tap any document to read directly inside the app'}
+                        ? 'Scanning tender PDF for buyer specs, drawings & ATC…'
+                        : buyerAttachmentDocs.length > 0
+                          ? `${buyerAttachmentDocs.length} buyer attachment${buyerAttachmentDocs.length === 1 ? '' : 's'} discovered from PDF`
+                          : 'Tap any document to read inside the app'}
                     </Text>
                   </View>
                   {isScanningPdf ? (
                     <ActivityIndicator size="small" color={colors.primary} />
-                  ) : extraBuyerAttachmentCount > 0 ? (
+                  ) : buyerAttachmentDocs.length > 0 ? (
                     <View style={[styles.foundBadge, { backgroundColor: colors.successTint }]}>
                       <Text style={[styles.foundBadgeText, { color: colors.success }]}>
-                        +{extraBuyerAttachmentCount} Linked
+                        +{buyerAttachmentDocs.length} Linked
                       </Text>
                     </View>
                   ) : null}
                 </View>
 
-                {mainAndBuyerDocs.map((document, idx) => {
-                  const badge = getDocumentBadgeStyle(document, colors);
-                  const format = document.fileFormat || PortalDocService.inferFileFormat(document.url);
-                  const isPdf = format === 'PDF';
+                {primaryTenderDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
 
-                  return (
-                    <Pressable
-                      key={document.id}
-                      style={({ pressed }) => [
-                        styles.docRow,
-                        idx > 0 && {
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: colors.borderSubtle,
-                        },
-                        pressed && { opacity: 0.72 },
+                {buyerAttachmentDocs.length > 0 ? (
+                  <>
+                    <View
+                      style={[
+                        styles.docGroupHeader,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
                       ]}
-                      onPress={() => handleOpenDoc(document.id)}
                     >
-                      <View style={[styles.docKindBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.docKindBadgeText, { color: badge.fg }]}>
-                          {badge.label}
-                        </Text>
-                      </View>
-                      <View style={styles.docCopy}>
-                        <Text
-                          style={[styles.docTitle, { color: colors.textPrimary }]}
-                          numberOfLines={2}
-                        >
-                          {document.label}
-                        </Text>
-                        <Text
-                          style={[styles.docSubtitle, { color: colors.textSecondary }]}
-                          numberOfLines={1}
-                        >
-                          {document.subtitle ||
-                            (isPdf ? 'Official GeM PDF · Read inline' : `Official ${format} attachment`)}
-                        </Text>
-                      </View>
-                      <Text style={[styles.docActionCue, { color: colors.primary }]}>
-                        {isPdf ? 'Read ›' : 'Open ↗'}
+                      <Text style={[styles.docGroupHeaderText, { color: colors.primary }]}>
+                        BUYER ATTACHMENTS DISCOVERED IN PDF ({buyerAttachmentDocs.length})
                       </Text>
-                    </Pressable>
-                  );
-                })}
+                    </View>
+                    {buyerAttachmentDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
+                  </>
+                ) : null}
 
-                {/* Standard GTC Reference kept cleanly separated at bottom */}
                 {gtcDocs.length > 0 ? (
                   <Pressable
                     style={({ pressed }) => [
@@ -639,24 +894,36 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     onPress={() => handleOpenDoc(gtcDocs[0].id)}
                   >
                     <Text style={[styles.gtcRowText, { color: colors.textSecondary }]} numberOfLines={1}>
-                      Standard Reference: GeM General Terms &amp; Conditions (GTC) PDF
+                      GeM General Terms &amp; Conditions (GTC)
                     </Text>
-                    <Text style={[styles.gtcRowLink, { color: colors.primary }]}>View ›</Text>
+                    <Text style={[styles.gtcRowLink, { color: colors.primary }]}>View PDF ›</Text>
                   </Pressable>
                 ) : null}
               </View>
 
-              {/* 3. Clean Scannable Key Terms Table */}
+              {/* 3. Scannable Key Tender Terms Table */}
               <View
+                onLayout={(e) => {
+                  sectionYRef.current.terms = e.nativeEvent.layout.y;
+                }}
                 style={[
                   styles.card,
                   { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                 ]}
               >
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                    Key Tender Terms
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                      Key Tender Terms
+                    </Text>
+                    {scannedOk ? (
+                      <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {effectiveBid.parentBidNumber
+                          ? `Exact figures from Original Bid PDF (${effectiveBid.parentBidNumber})`
+                          : 'Exact figures from official GeM Bid PDF'}
+                      </Text>
+                    ) : null}
+                  </View>
                   {isScanningPdf ? (
                     <View style={[styles.statusChip, { backgroundColor: colors.primaryTint }]}>
                       <ActivityIndicator size="small" color={colors.primary} />
@@ -721,15 +988,24 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
               {/* 4. Honest Eligibility & Key Watchouts + Quick Letter Drafts */}
               {ext ? (
-                <PreBidDisqualificationShield
-                  tenderDetails={ext}
-                  onPrepareDocuments={handlePrepareDocuments}
-                />
+                <View
+                  onLayout={(e) => {
+                    sectionYRef.current.eligibility = e.nativeEvent.layout.y;
+                  }}
+                >
+                  <PreBidDisqualificationShield
+                    tenderDetails={ext}
+                    onPrepareDocuments={handlePrepareDocuments}
+                  />
+                </View>
               ) : null}
 
-              {/* 5. Delivery Locations (Consignees) */}
+              {/* 5. Delivery Locations (Consignees — Deduplicated) */}
               {consignees.length > 0 ? (
                 <View
+                  onLayout={(e) => {
+                    sectionYRef.current.delivery = e.nativeEvent.layout.y;
+                  }}
                   style={[
                     styles.card,
                     { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
@@ -739,61 +1015,122 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
                       Delivery Locations
                     </Text>
-                    <Text style={[styles.countLabel, { color: colors.primary }]}>
-                      {consignees.length} Consignee{consignees.length === 1 ? '' : 's'}
-                    </Text>
-                  </View>
-                  {consignees.map((c, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.consigneeRow,
-                        idx > 0 && {
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: colors.borderSubtle,
-                        },
-                      ]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.consigneeLocation, { color: colors.textPrimary }]}>
-                          {c.location}
-                        </Text>
-                        <Text style={[styles.consigneeOfficer, { color: colors.textSecondary }]}>
-                          {c.reportingOfficer || 'Consignee Reporting Officer'}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={[styles.stateBadge, { color: colors.primary }]}>
-                          {c.state || 'India'}
-                          {c.pincode ? ` · ${c.pincode}` : ''}
-                        </Text>
-                        <Text style={[styles.consigneeQty, { color: colors.textPrimary }]}>
-                          {c.quantity !== undefined
-                            ? `${c.quantity.toLocaleString('en-IN')} Units`
-                            : 'See PDF'}
-                        </Text>
-                      </View>
+                    <View style={[styles.countPill, { backgroundColor: colors.primaryTint }]}>
+                      <Text style={[styles.countLabel, { color: colors.primary }]}>
+                        {consignees.length} Consignee{consignees.length === 1 ? '' : 's'}
+                      </Text>
                     </View>
-                  ))}
+                  </View>
+                  {consignees.map((c, idx) => {
+                    const stateLine = [c.state, c.pincode].filter(Boolean).join(' · ') || 'India';
+                    const locNormalized = (c.location || '').replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
+                    const stateNormalized = stateLine.replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
+                    const primaryLine =
+                      locNormalized && locNormalized !== stateNormalized
+                        ? c.location
+                        : c.reportingOfficer || 'Consignee Office';
+                    const secondaryLine =
+                      primaryLine === c.reportingOfficer
+                        ? 'Consignee Reporting Officer'
+                        : c.reportingOfficer || 'Consignee Reporting Officer';
+
+                    return (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.consigneeRow,
+                          idx > 0 && {
+                            borderTopWidth: StyleSheet.hairlineWidth,
+                            borderTopColor: colors.borderSubtle,
+                          },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.consigneeLocation, { color: colors.textPrimary }]}>
+                            {primaryLine}
+                          </Text>
+                          <Text style={[styles.consigneeOfficer, { color: colors.textSecondary }]}>
+                            {secondaryLine}
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <View style={[styles.stateBadgePill, { backgroundColor: colors.surfaceSubtle }]}>
+                            <Text style={[styles.stateBadge, { color: colors.primary }]}>{stateLine}</Text>
+                          </View>
+                          <Text style={[styles.consigneeQty, { color: colors.textPrimary }]}>
+                            {c.quantity !== undefined
+                              ? `${c.quantity.toLocaleString('en-IN')} Unit${c.quantity === 1 ? '' : 's'}`
+                              : 'See PDF'}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               ) : null}
 
-              {/* 6. Interactive Seller Document Checklist */}
+              {/* 6. Interactive Seller Document Checklist with Progress Bar */}
               {requiredDocuments.length > 0 ? (
                 <View
+                  onLayout={(e) => {
+                    sectionYRef.current.checklist = e.nativeEvent.layout.y;
+                  }}
                   style={[
                     styles.card,
                     { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                   ]}
                 >
                   <View style={styles.sectionHeaderRow}>
-                    <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                      Documents Required from Seller
-                    </Text>
-                    <Text style={[styles.countLabel, { color: colors.primary }]}>
-                      {checkedCount}/{requiredDocuments.length}
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                        Documents Required from Seller
+                      </Text>
+                      <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]}>
+                        Tap items as you gather them for technical upload
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.countPill,
+                        {
+                          backgroundColor:
+                            checkedCount === requiredDocuments.length
+                              ? colors.successTint
+                              : colors.primaryTint,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.countLabel,
+                          {
+                            color:
+                              checkedCount === requiredDocuments.length
+                                ? colors.success
+                                : colors.primary,
+                          },
+                        ]}
+                      >
+                        {checkedCount}/{requiredDocuments.length} Ready
+                      </Text>
+                    </View>
                   </View>
+
+                  <View style={[styles.progressTrack, { backgroundColor: colors.surfaceSubtle }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${Math.round(checklistRatio * 100)}%`,
+                          backgroundColor:
+                            checkedCount === requiredDocuments.length
+                              ? colors.success
+                              : colors.primary,
+                        },
+                      ]}
+                    />
+                  </View>
+
                   {requiredDocuments.map((doc, idx) => {
                     const isChecked = !!checkedDocs[doc];
                     return (
@@ -812,8 +1149,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         <View
                           style={[
                             styles.checkbox,
-                            { borderColor: isChecked ? colors.primary : colors.border },
-                            isChecked && { backgroundColor: colors.primary },
+                            { borderColor: isChecked ? colors.success : colors.border },
+                            isChecked && { backgroundColor: colors.success },
                           ]}
                         >
                           <Text style={[styles.checkMark, { color: colors.textInverse }]}>
@@ -960,17 +1297,44 @@ const styles = StyleSheet.create({
   },
   headerBackIcon: { fontSize: 19, fontWeight: '700' },
   headerCenter: { flex: 1 },
-  headerBidNum: { fontSize: 15, fontWeight: '800' },
-  headerSubtitle: { fontSize: 11.5, marginTop: 1 },
+  headerBidRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerBidNum: { fontSize: 14.5, fontWeight: '800', flexShrink: 1 },
+  copyChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  copyChipText: { fontSize: 10, fontWeight: '800' },
+  headerSubtitle: { fontSize: 11, marginTop: 2 },
   sharePillBtn: {
-    paddingHorizontal: 12,
-    minHeight: 36,
+    paddingHorizontal: 11,
+    minHeight: 34,
     borderRadius: 9,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sharePillText: { fontSize: 12, fontWeight: '800' },
+  sharePillText: { fontSize: 11.5, fontWeight: '800' },
+  jumpBar: {
+    borderBottomWidth: 1,
+    paddingVertical: 8,
+  },
+  jumpBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 7,
+  },
+  jumpPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  jumpPillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
   scrollArea: { flex: 1 },
   scrollContent: { padding: 14, paddingBottom: 28 },
   corrigendumBanner: {
@@ -982,25 +1346,35 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 10,
   },
-  corrigendumDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
+  corrigendumDot: { width: 8, height: 8, borderRadius: 4 },
   corrigendumTitle: { fontSize: 12.5, fontWeight: '800' },
   corrigendumSubtitle: { fontSize: 11.5, marginTop: 1 },
-  card: {
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+  heroCard: {
+    borderRadius: 14,
     borderWidth: 1,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  heroAccentStrip: {
+    height: 4,
+    width: '100%',
+  },
+  heroCardInner: {
+    padding: 14,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 8,
+    flex: 1,
   },
   pillBadge: {
     paddingHorizontal: 8,
@@ -1012,105 +1386,134 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  bidTitle: { fontSize: 16.5, fontWeight: '800', lineHeight: 22.5, marginBottom: 4 },
-  deptText: { fontSize: 12.5, lineHeight: 17.5, marginBottom: 12 },
-  heroMetricsStrip: {
+  countdownPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  countdownDot: { width: 6, height: 6, borderRadius: 3 },
+  countdownPillText: { fontSize: 10.5, fontWeight: '800' },
+  bidTitle: { fontSize: 17, fontWeight: '800', lineHeight: 23.5, marginBottom: 4 },
+  deptText: { fontSize: 12.5, lineHeight: 17.5, marginBottom: 12 },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  kpiTile: {
+    width: '48.6%',
     borderRadius: 10,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
   },
-  heroMetricCol: {
-    flex: 1,
-    paddingHorizontal: 6,
-  },
-  heroDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 36,
-  },
-  heroMetricLabel: {
-    fontSize: 9,
+  kpiLabel: {
+    fontSize: 9.5,
     fontWeight: '800',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: 3,
   },
-  heroMetricValue: {
-    fontSize: 13.5,
+  kpiValue: {
+    fontSize: 14.5,
     fontWeight: '800',
   },
-  heroMetricSub: {
+  kpiSub: {
     fontSize: 10.5,
-    marginTop: 1,
+    marginTop: 2,
+  },
+  card: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
     gap: 8,
   },
-  sectionHeading: { fontSize: 14.5, fontWeight: '800' },
+  sectionHeading: { fontSize: 15, fontWeight: '800' },
   sectionSubcopy: { fontSize: 11.5, marginTop: 2 },
   foundBadge: {
-    borderRadius: 7,
-    paddingHorizontal: 8,
+    borderRadius: 8,
+    paddingHorizontal: 9,
     paddingVertical: 4,
   },
   foundBadgeText: { fontSize: 10.5, fontWeight: '800' },
+  docGroupHeader: {
+    marginTop: 8,
+    marginBottom: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  docGroupHeaderText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 11,
-    minHeight: 54,
+    minHeight: 56,
     gap: 10,
   },
   docKindBadge: {
-    minWidth: 46,
-    height: 32,
-    borderRadius: 7,
+    minWidth: 48,
+    height: 34,
+    borderRadius: 8,
     paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   docKindBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   docCopy: { flex: 1 },
-  docTitle: { fontSize: 13, fontWeight: '700', lineHeight: 17.5 },
+  docTitle: { fontSize: 13.5, fontWeight: '700', lineHeight: 18 },
   docSubtitle: { fontSize: 11, marginTop: 2 },
-  docActionCue: { fontSize: 12.5, fontWeight: '800' },
+  docActionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  docActionCue: { fontSize: 11.5, fontWeight: '800' },
   gtcRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 10,
+    paddingTop: 11,
     marginTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
-  gtcRowText: { flex: 1, fontSize: 11.5, fontWeight: '600' },
-  gtcRowLink: { fontSize: 11.5, fontWeight: '800' },
+  gtcRowText: { flex: 1, fontSize: 12, fontWeight: '600' },
+  gtcRowLink: { fontSize: 12, fontWeight: '800' },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 7,
+    borderRadius: 8,
   },
   statusChipText: { fontSize: 10.5, fontWeight: '800' },
-  termsTable: {
-    marginTop: 2,
-  },
+  termsTable: { marginTop: 2 },
   termRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 9,
+    paddingVertical: 10,
     gap: 12,
   },
   termLabel: { fontSize: 12.5, fontWeight: '500', flex: 1 },
-  termValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.1 },
+  termValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.15 },
   policyTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1118,27 +1521,48 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   policyTag: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
+    borderRadius: 7,
+    paddingHorizontal: 9,
     paddingVertical: 4,
   },
   policyTagText: { fontSize: 10.5, fontWeight: '700' },
-  countLabel: { fontSize: 11.5, fontWeight: '800' },
+  countPill: {
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  countLabel: { fontSize: 11, fontWeight: '800' },
   consigneeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 9,
+    alignItems: 'center',
+    paddingVertical: 10,
     gap: 10,
   },
-  consigneeLocation: { fontSize: 13, fontWeight: '700' },
+  consigneeLocation: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
   consigneeOfficer: { fontSize: 11.5, marginTop: 2 },
-  stateBadge: { fontSize: 11, fontWeight: '700' },
-  consigneeQty: { fontSize: 12.5, fontWeight: '800', marginTop: 2 },
+  stateBadgePill: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  stateBadge: { fontSize: 10.5, fontWeight: '800' },
+  consigneeQty: { fontSize: 12.5, fontWeight: '800', marginTop: 4 },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
-    paddingVertical: 7,
+    minHeight: 46,
+    paddingVertical: 8,
   },
   checkbox: {
     width: 22,
@@ -1150,7 +1574,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   checkMark: { fontSize: 13, fontWeight: '900' },
-  checkLabel: { fontSize: 12.5, flex: 1, lineHeight: 17.5 },
+  checkLabel: { fontSize: 13, flex: 1, lineHeight: 18 },
   boqItemRow: { paddingVertical: 9 },
   boqTopRow: {
     flexDirection: 'row',
@@ -1190,7 +1614,7 @@ const styles = StyleSheet.create({
   },
   secondaryFooterText: { fontSize: 13, fontWeight: '700' },
   primaryFooterBtn: {
-    flex: 1.4,
+    flex: 1.45,
     minHeight: 46,
     borderRadius: 10,
     justifyContent: 'center',

@@ -49,31 +49,48 @@ export const TenderDealSheetCard: React.FC<TenderDealSheetCardProps> = ({
       ? `⏳ Closes in ${diffDays}d ${diffHours % 24}h`
       : `🚨 Closes in ${diffHours} Hours!`;
 
-  // Formatting values
+  // Formatting values (strictly exact published/extracted values — zero fabrication)
   const estVal = bid.estimatedBidValueInr;
   const estValText =
-    estVal && estVal > 0 ? formatLakhs(estVal) : 'As per BOQ / Unstated';
+    estVal && estVal > 0
+      ? formatLakhs(estVal)
+      : bid.isHighValue
+        ? 'High Value (≥ ₹2 Cr)'
+        : 'Not disclosed in PDF';
   const emdVal = bid.emdAmountInr;
   const emdValText =
-    emdVal && emdVal > 0 ? `₹${emdVal.toLocaleString('en-IN')}` : 'NIL / ₹0';
+    emdVal === undefined
+      ? 'Check PDF'
+      : emdVal === 0
+        ? 'Not Required (₹0)'
+        : `₹${emdVal.toLocaleString('en-IN')}`;
   const epbgText =
-    bid.epbgPercentage !== undefined && bid.epbgPercentage > 0
-      ? `${bid.epbgPercentage}%`
-      : '3% (Standard)';
+    bid.epbgPercentage === undefined
+      ? 'Check PDF'
+      : bid.epbgPercentage === 0
+        ? 'Not Required (0%)'
+        : bid.epbgDurationMonths
+          ? `${bid.epbgPercentage}% (${bid.epbgDurationMonths} mo)`
+          : `${bid.epbgPercentage}%`;
 
-  const isMseExempt = bid.isEmdExemptForMse !== false;
-  const miiText = bid.makeInIndiaClass
-    ? `${bid.makeInIndiaClass} Local Content`
-    : 'Class-1 (50% Local Content)';
+  const isMseExempt = Boolean(bid.isEmdExemptForMse);
+  const miiText =
+    bid.makeInIndiaClass === 'CLASS_1'
+      ? 'Class-1 (≥50% Local Content)'
+      : bid.makeInIndiaClass === 'CLASS_2'
+        ? 'Class-2 (≥20% Local Content)'
+        : bid.miiPurchasePreference
+          ? 'MII Preference Applicable'
+          : 'Not specified in PDF';
 
   const turnoverReq = bid.minAnnualTurnoverInr;
   const turnoverText =
     turnoverReq && turnoverReq > 0
       ? formatLakhs(turnoverReq)
-      : 'Relaxed for MSE / Unstated';
+      : 'Not specified in PDF';
   const expYears = bid.yearsExperienceRequired;
   const expText =
-    expYears && expYears > 0 ? `${expYears} Years` : 'Relaxed for MSE / Unstated';
+    expYears && expYears > 0 ? `${expYears} Years` : 'Not specified in PDF';
 
   const primaryState = bid.consignees?.[0]?.state || 'Pan-India';
   const totalQty =

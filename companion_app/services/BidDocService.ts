@@ -11,6 +11,20 @@ export interface BidRiskAssessment {
   flags: string[];
 }
 
+function formatIndianAmount(amountInr: number): string {
+  if (amountInr >= 10000000) {
+    return `₹${(amountInr / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`;
+  }
+  if (amountInr >= 100000) {
+    const lakhs = amountInr / 100000;
+    return `₹${lakhs >= 100 ? lakhs.toFixed(0) : lakhs.toFixed(1)} Lakhs`;
+  }
+  if (amountInr >= 1000) {
+    return `₹${(amountInr / 1000).toFixed(0)}k`;
+  }
+  return `₹${amountInr.toLocaleString('en-IN')}`;
+}
+
 export class BidDocService {
   /**
    * Formats a glanceable 2x2 fundamentals summary for card rendering.
@@ -23,23 +37,24 @@ export class BidDocService {
     deliveryPeriodLabel: string;
     consigneeCountLabel: string;
   } {
-    const estValue = bid.estimatedBidValueInr !== undefined && bid.estimatedBidValueInr > 0
-      ? `₹${(bid.estimatedBidValueInr / 100000).toFixed(1)} Lakhs`
-      : 'Not published';
+    const estValue =
+      bid.estimatedBidValueInr !== undefined && bid.estimatedBidValueInr > 0
+        ? formatIndianAmount(bid.estimatedBidValueInr)
+        : 'Not published';
 
     const emd =
       bid.emdAmountInr === undefined
         ? 'Not published'
         : bid.emdAmountInr === 0
-        ? '₹0 (Free)'
-        : `₹${(bid.emdAmountInr / 1000).toFixed(0)}k ${bid.isEmdExemptForMse ? '(MSE Exempt)' : ''}`.trim();
+          ? '₹0 (Free)'
+          : `${formatIndianAmount(bid.emdAmountInr)} ${bid.isEmdExemptForMse ? '(MSE Exempt)' : ''}`.trim();
 
     const turnover =
       bid.minAnnualTurnoverInr === undefined
         ? 'Not published'
         : bid.minAnnualTurnoverInr === 0
-        ? 'No minimum published'
-        : `₹${(bid.minAnnualTurnoverInr / 100000).toFixed(1)} Lakhs`;
+          ? 'No minimum published'
+          : formatIndianAmount(bid.minAnnualTurnoverInr);
 
     const experience =
       bid.yearsExperienceRequired === undefined

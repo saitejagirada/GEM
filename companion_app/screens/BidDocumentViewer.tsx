@@ -1,4 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+/**
+ * GeM Inline Document Reader (High-Focus PDF Viewer)
+ *
+ * Designed for comfortable, extended reading of dense GeM Bid PDFs, Specs,
+ * Drawings, ATC documents, and GTC references:
+ * - Multi-document horizontal tab switcher (RA, Original Bid, Specs, Drawings, ATC, BOQ, GTC)
+ * - Focus Reading Mode (1-tap header toggle or single-tap PDF canvas -> ~94% viewport)
+ * - In-viewer "Terms" Quick-Peek sheet (inspect EMD, e-PBG, Delivery, Turnover without losing your page)
+ * - Native Prev / Next page stepper bar + Share / Open External launcher
+ * - Safe in-PDF *.gem.gov.in hyperlink interception
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -7,19 +19,27 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import type { DeconstructedBidDoc, OfficialBidDocument, OfficialBidDocumentKind } from '../types/index';
+import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
 import { useTheme } from '../theme/ThemeContext';
+import { formatDateSafe, formatInr } from '../utils/formatters';
 
 const PDF_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36';
 
+interface NativePdfHandle {
+  setPage?: (pageNumber: number) => void;
+}
+
 type NativePdfComponent = React.ComponentType<{
+  ref?: React.Ref<NativePdfHandle>;
   source: {
     uri: string;
     cache?: boolean;
@@ -33,6 +53,8 @@ type NativePdfComponent = React.ComponentType<{
   onLoadProgress?: (percent: number) => void;
   onLoadComplete?: (numberOfPages: number) => void;
   onPageChanged?: (page: number, numberOfPages: number) => void;
+  onPageSingleTap?: (page: number, x: number, y: number) => void;
+  onPressLink?: (uri: string) => void;
   onError?: (error: unknown) => void;
   style?: object;
   renderActivityIndicator?: (progress: number) => React.ReactNode;
@@ -76,17 +98,6 @@ function getBadgeLabel(document: OfficialBidDocument): string {
   return map[document.kind] || 'DOC';
 }
 
-function getContextBannerCopy(document: OfficialBidDocument, totalDocs: number): string {
-  if (document.subtitle) return document.subtitle;
-  if (/show(?:direct)?radocumentPdf/i.test(document.url) && totalDocs > 1) {
-    return 'Reverse Auction schedule & rules · Switch tabs above for original bid, specs, drawings & ATC.';
-  }
-  if (document.id === 'parent-bid-document') {
-    return 'Original GeM Bid PDF · Full technical terms, EMD, ePBG & consignees.';
-  }
-  return 'Official GeM tender document · Pinch or double-tap to zoom.';
-}
-
 interface BidDocumentViewerProps {
   bid: DeconstructedBidDoc | null;
   visible: boolean;
@@ -101,6 +112,8 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   onClose,
 }) => {
   const { colors, isDark } = useTheme();
+  const pdfRef = useRef<NativePdfHandle | null>(null);
+
   const documents = useMemo(
     () => (bid ? PortalDocService.getOfficialDocuments(bid) : []),
     [bid]
@@ -110,6 +123,8 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   const [pageCount, setPageCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [focusMode, setFocusMode] = useState(false);
+  const [showTermsPeek, setShowTermsPeek] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -118,10 +133,52 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setPageCount(0);
     setLoadError(null);
     setRetryNonce(0);
+    setFocusMode(false);
+    setShowTermsPeek(false);
   }, [documents, initialDocumentId, visible]);
 
   const selectedDocument: OfficialBidDocument | undefined =
     documents.find((document) => document.id === selectedDocumentId) || documents[0];
+
+  const quickTermsRows = useMemo(() => {
+    if (!bid) return [];
+    const f = BidDocService.getFundamentalsSummary(bid);
+    const estVal =
+      bid.estimatedBidValueInr && bid.estimatedBidValueInr > 0
+        ? `₹${formatInr(bid.estimatedBidValueInr)}`
+        : bid.isHighValue
+          ? '≥ ₹2 Cr'
+          : 'Not disclosed in PDF';
+    const emdVal =
+      bid.emdAmountInr === undefined
+        ? bid.isEmdExemptForMse
+          ? 'MSE Exempt'
+          : 'See PDF'
+        : bid.emdAmountInr === 0
+          ? '₹0 (Not Required)'
+          : `₹${formatInr(bid.emdAmountInr)}${bid.isEmdExemptForMse ? ' (MSE Exempt)' : ''}`;
+    const epbg =
+      bid.epbgPercentage !== undefined
+        ? bid.epbgPercentage === 0
+          ? 'Not Required (0%)'
+          : bid.epbgDurationMonths
+            ? `${bid.epbgPercentage}% (${bid.epbgDurationMonths} mo)`
+            : `${bid.epbgPercentage}%`
+        : 'See PDF';
+    const qty = bid.boqItems?.[0]?.quantity;
+    const states = Array.from(new Set((bid.consignees || []).map((c) => c.state).filter(Boolean)));
+    return [
+      { label: 'Closes (IST)', value: formatDateSafe(bid.closingTimeUtc) },
+      { label: 'Estimated Value', value: estVal },
+      { label: 'EMD Guarantee', value: emdVal },
+      { label: 'e-PBG Security', value: epbg },
+      { label: 'Delivery Timeline', value: bid.deliveryPeriodDays ? `${bid.deliveryPeriodDays} Days` : 'See PDF' },
+      { label: 'Quantity', value: qty !== undefined ? `${qty.toLocaleString('en-IN')} Units` : 'See PDF' },
+      { label: 'Min Annual Turnover', value: bid.minAnnualTurnoverInr !== undefined ? `₹${formatInr(bid.minAnnualTurnoverInr)}` : 'See PDF' },
+      { label: 'Past Experience', value: bid.yearsExperienceRequired !== undefined ? f.experienceLabel : 'See PDF' },
+      ...(states.length > 0 ? [{ label: 'Delivery States', value: states.join(', ') }] : []),
+    ];
+  }, [bid]);
 
   if (!bid || !selectedDocument) return null;
 
@@ -145,10 +202,39 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setRetryNonce((n) => n + 1);
   };
 
+  const jumpPage = (delta: number) => {
+    if (pageCount <= 0) return;
+    const target = Math.min(pageCount, Math.max(1, page + delta));
+    if (target === page) return;
+    setPage(target);
+    pdfRef.current?.setPage?.(target);
+  };
+
+  const handlePdfLinkPress = (uri: string) => {
+    const clean = uri.trim();
+    if (!PortalDocService.isSafeGemUrl(clean)) return;
+    const norm = clean.replace(/#.*$/, '').toLowerCase();
+    const matchedDoc = documents.find(
+      (d) => d.url.trim().replace(/#.*$/, '').toLowerCase() === norm
+    );
+    if (matchedDoc) {
+      selectDocument(matchedDoc);
+      return;
+    }
+    Linking.openURL(clean).catch(() => undefined);
+  };
+
   const NativePdf = getNativePdfComponent();
 
   const openInSystemViewer = () => {
     Linking.openURL(selectedDocument.url).catch(() => undefined);
+  };
+
+  const shareDocumentLink = () => {
+    Share.share({
+      title: `${bid.bidNumber} — ${selectedDocument.label}`,
+      message: `${bid.bidNumber} (${selectedDocument.label})\nOfficial GeM Document: ${selectedDocument.url}`,
+    }).catch(() => undefined);
   };
 
   const sourceHost = (() => {
@@ -167,102 +253,119 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
           backgroundColor={colors.surface}
         />
 
-        {/* Clean Theme-Aware Header */}
-        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle }]}>
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.headerBackBtn,
-              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-              pressed && { opacity: 0.75 },
-            ]}
-            hitSlop={8}
-            accessibilityLabel="Close document viewer"
-          >
-            <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
-          </Pressable>
+        {/* Compact Top Bar (hidden during Focus Reading Mode for max PDF area) */}
+        {!focusMode && (
+          <>
+            <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle }]}>
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [
+                  styles.headerBackBtn,
+                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                  pressed && { opacity: 0.75 },
+                ]}
+                hitSlop={8}
+                accessibilityLabel="Close document viewer"
+              >
+                <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
+              </Pressable>
 
-          <View style={styles.headerCopy}>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-              {selectedDocument.label}
-            </Text>
-            <Text style={[styles.headerBidNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-              {bid.bidNumber} · {sourceHost}
-            </Text>
-          </View>
+              <View style={styles.headerCopy}>
+                <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {selectedDocument.label}
+                </Text>
+                <Text style={[styles.headerBidNumber, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {bid.bidNumber} · {sourceHost}
+                </Text>
+              </View>
 
-          <View style={styles.headerRight}>
-            <View style={[styles.pagePill, { backgroundColor: colors.primaryTint }]}>
-              <Text style={[styles.pagePillText, { color: colors.primary }]}>
-                {isPdfDocument && pageCount > 0 ? `${page} / ${pageCount}` : format}
-              </Text>
-            </View>
-            <Pressable
-              onPress={openInSystemViewer}
-              style={({ pressed }) => [
-                styles.externalBtn,
-                { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                pressed && { opacity: 0.75 },
-              ]}
-              hitSlop={8}
-              accessibilityLabel="Open file externally"
-            >
-              <Text style={[styles.externalBtnText, { color: colors.primary }]}>↗</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Multi-document switcher (Bid, Parent Bid, Specs, Drawings, ATC, BOQ, SLA, GTC) */}
-        {documents.length > 1 ? (
-          <View style={[styles.docTabsBar, { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.docTabsRow}>
-              {documents.map((document) => {
-                const active = selectedDocument.id === document.id;
-                return (
-                  <Pressable
-                    key={document.id}
-                    onPress={() => selectDocument(document)}
+              <View style={styles.headerRight}>
+                <Pressable
+                  onPress={() => setShowTermsPeek((p) => !p)}
+                  style={({ pressed }) => [
+                    styles.headerChipBtn,
+                    {
+                      backgroundColor: showTermsPeek ? colors.primary : colors.primaryTint,
+                      opacity: pressed ? 0.78 : 1,
+                    },
+                  ]}
+                  hitSlop={6}
+                  accessibilityLabel="Quick tender terms"
+                >
+                  <Text
                     style={[
-                      styles.docTabChip,
-                      {
-                        backgroundColor: active ? colors.primary : colors.surfaceSubtle,
-                        borderColor: active ? colors.primary : colors.borderSubtle,
-                      },
+                      styles.headerChipText,
+                      { color: showTermsPeek ? colors.textInverse : colors.primary },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.docTabKind,
-                        { color: active ? colors.textInverse : colors.primary, opacity: active ? 0.85 : 1 },
-                      ]}
-                    >
-                      {getBadgeLabel(document)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.docTabLabel,
-                        { color: active ? colors.textInverse : colors.textPrimary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {document.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        ) : null}
+                    Terms
+                  </Text>
+                </Pressable>
 
-        {/* Document context bar */}
-        <View style={[styles.viewerHeading, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.borderSubtle }]}>
-          <View style={styles.viewerHeadingLeft}>
-            <View style={[styles.sourceDot, { backgroundColor: colors.emerald }]} />
-            <Text style={[styles.viewerSubtitle, { color: colors.textSecondary }]} numberOfLines={2}>
-              {getContextBannerCopy(selectedDocument, documents.length)}
-            </Text>
-          </View>
-        </View>
+                {isPdfDocument && NativePdf && !loadError ? (
+                  <Pressable
+                    onPress={() => setFocusMode(true)}
+                    style={({ pressed }) => [
+                      styles.headerChipBtn,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderWidth: 1,
+                        borderColor: colors.borderSubtle,
+                        opacity: pressed ? 0.78 : 1,
+                      },
+                    ]}
+                    hitSlop={6}
+                    accessibilityLabel="Enter focus reading mode"
+                  >
+                    <Text style={[styles.headerChipText, { color: colors.textPrimary }]}>Focus</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Multi-document switcher (Bid, Parent Bid, Specs, Drawings, ATC, BOQ, SLA, GTC) */}
+            {documents.length > 1 ? (
+              <View style={[styles.docTabsBar, { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle }]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.docTabsRow}>
+                  {documents.map((document) => {
+                    const active = selectedDocument.id === document.id;
+                    return (
+                      <Pressable
+                        key={document.id}
+                        onPress={() => selectDocument(document)}
+                        style={[
+                          styles.docTabChip,
+                          {
+                            backgroundColor: active ? colors.primary : colors.surfaceSubtle,
+                            borderColor: active ? colors.primary : colors.borderSubtle,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.docTabKind,
+                            { color: active ? colors.textInverse : colors.primary, opacity: active ? 0.85 : 1 },
+                          ]}
+                        >
+                          {getBadgeLabel(document)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.docTabLabel,
+                            { color: active ? colors.textInverse : colors.textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {document.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+          </>
+        )}
 
         {/* Viewport: Native Inline PDF OR Clean Non-PDF Attachment Launcher (XLSX / CSV / SLA) */}
         <View style={[styles.pdfFrame, { backgroundColor: colors.background }]}>
@@ -277,14 +380,14 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
               <Text style={[styles.errorText, { color: colors.textSecondary }]}>
                 {format === 'XLSX' || format === 'CSV'
                   ? `This buyer-attached ${format} spreadsheet is hosted directly on ${sourceHost}. Open it in Excel, Sheets, or your browser to inspect all BOQ rows.`
-                  : `This official GeM ${format === 'WEB' ? 'SLA / web' : format} document opens directly on ${sourceHost}.`}
+                  : `This official GeM ${format === 'WEB' ? 'catalogue / SLA web' : format} document opens directly on ${sourceHost}.`}
               </Text>
               <Pressable
                 style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
                 onPress={openInSystemViewer}
               >
                 <Text style={[styles.primaryActionText, { color: colors.textInverse }]}>
-                  Download &amp; Open {format} File ↗
+                  Open {format === 'WEB' ? 'Official Page' : `${format} File`} ↗
                 </Text>
               </Pressable>
             </View>
@@ -334,6 +437,7 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
             </View>
           ) : (
             <NativePdf
+              ref={pdfRef}
               key={`${selectedDocument.id}-${retryNonce}`}
               source={{
                 uri: selectedDocument.url,
@@ -358,6 +462,8 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                 setPage(currentPage);
                 setPageCount(numberOfPages);
               }}
+              onPageSingleTap={() => setFocusMode((prev) => !prev)}
+              onPressLink={handlePdfLinkPress}
               onError={(err) => {
                 const msg =
                   err instanceof Error
@@ -383,14 +489,160 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
               )}
             />
           )}
+
+          {/* Floating Exit-Focus Pill when in Focus Reading Mode */}
+          {focusMode && (
+            <View style={styles.focusOverlayBar} pointerEvents="box-none">
+              <Pressable
+                onPress={() => setFocusMode(false)}
+                style={[
+                  styles.focusExitPill,
+                  { backgroundColor: colors.primary, shadowColor: '#000' },
+                ]}
+              >
+                <Text style={[styles.focusExitText, { color: colors.textInverse }]}>
+                  Exit Focus{pageCount > 0 ? ` · ${page} / ${pageCount}` : ''}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* In-Viewer Quick Terms Peek Sheet (check EMD / Delivery / e-PBG without leaving page) */}
+          {showTermsPeek && !focusMode && (
+            <View style={styles.termsOverlay}>
+              <Pressable style={{ flex: 1 }} onPress={() => setShowTermsPeek(false)} />
+              <View
+                style={[
+                  styles.termsSheet,
+                  { backgroundColor: colors.surface, borderTopColor: colors.border },
+                ]}
+              >
+                <View style={[styles.termsSheetHeader, { borderBottomColor: colors.borderSubtle }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.termsSheetTitle, { color: colors.textPrimary }]}>
+                      Quick Tender Terms
+                    </Text>
+                    <Text style={[styles.termsSheetSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {bid.bidNumber} · {bid.title}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => setShowTermsPeek(false)} hitSlop={10}>
+                    <Text style={[styles.termsSheetClose, { color: colors.textMuted }]}>✕</Text>
+                  </Pressable>
+                </View>
+                <ScrollView style={styles.termsSheetBody} showsVerticalScrollIndicator={false}>
+                  {quickTermsRows.map((row, idx) => (
+                    <View
+                      key={row.label}
+                      style={[
+                        styles.termsSheetRow,
+                        idx > 0 && {
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: colors.borderSubtle,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.termsSheetLabel, { color: colors.textSecondary }]}>
+                        {row.label}
+                      </Text>
+                      <Text style={[styles.termsSheetValue, { color: colors.textPrimary }]}>
+                        {row.value}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          )}
         </View>
 
-        {/* Compact Footer */}
-        <View style={[styles.footerNote, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle }]}>
-          <Text style={[styles.footerNoteText, { color: colors.textMuted }]}>
-            Direct from {sourceHost} · Read-only inline viewer · Cached locally on device
-          </Text>
-        </View>
+        {/* Interactive Bottom Reader Bar (Prev / Page Counter / Next / Share / Open External) */}
+        {!focusMode && (
+          <View style={[styles.readerFooter, { backgroundColor: colors.surface, borderTopColor: colors.borderSubtle }]}>
+            {isPdfDocument && pageCount > 1 ? (
+              <View style={styles.pageStepperGroup}>
+                <Pressable
+                  onPress={() => jumpPage(-1)}
+                  disabled={page <= 1}
+                  style={[
+                    styles.stepperBtn,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.borderSubtle,
+                      opacity: page <= 1 ? 0.4 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Previous page"
+                >
+                  <Text style={[styles.stepperBtnText, { color: colors.textPrimary }]}>‹ Prev</Text>
+                </Pressable>
+
+                <View style={[styles.pageCounterPill, { backgroundColor: colors.primaryTint }]}>
+                  <Text style={[styles.pageCounterText, { color: colors.primary }]}>
+                    {page} / {pageCount}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => jumpPage(1)}
+                  disabled={page >= pageCount}
+                  style={[
+                    styles.stepperBtn,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.borderSubtle,
+                      opacity: page >= pageCount ? 0.4 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Next page"
+                >
+                  <Text style={[styles.stepperBtnText, { color: colors.textPrimary }]}>Next ›</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.sourceCaptionWrap}>
+                <View style={[styles.sourceDot, { backgroundColor: colors.emerald }]} />
+                <Text style={[styles.footerCaption, { color: colors.textSecondary }]} numberOfLines={1}>
+                  Direct from {sourceHost}
+                  {pageCount === 1 ? ' · 1 page' : ''}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.footerRightBtns}>
+              <Pressable
+                onPress={shareDocumentLink}
+                style={({ pressed }) => [
+                  styles.footerIconBtn,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.borderSubtle,
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}
+                hitSlop={6}
+                accessibilityLabel="Share document link"
+              >
+                <Text style={[styles.footerIconBtnText, { color: colors.textPrimary }]}>Share</Text>
+              </Pressable>
+              <Pressable
+                onPress={openInSystemViewer}
+                style={({ pressed }) => [
+                  styles.footerIconBtn,
+                  {
+                    backgroundColor: colors.primaryTint,
+                    borderColor: 'transparent',
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}
+                hitSlop={6}
+                accessibilityLabel="Open externally"
+              >
+                <Text style={[styles.footerIconBtnText, { color: colors.primary }]}>Open ↗</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -399,7 +651,7 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    minHeight: 58,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -420,26 +672,18 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 14, fontWeight: '800' },
   headerBidNumber: { fontSize: 11, fontWeight: '500', marginTop: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pagePill: {
-    minWidth: 46,
+  headerChipBtn: {
     borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  pagePillText: { fontSize: 11, fontWeight: '800' },
-  externalBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  externalBtnText: { fontSize: 15, fontWeight: '800' },
+  headerChipText: { fontSize: 11.5, fontWeight: '800' },
   docTabsBar: {
     borderBottomWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   docTabsRow: {
     flexDirection: 'row',
@@ -449,8 +693,8 @@ const styles = StyleSheet.create({
   docTabChip: {
     borderWidth: 1,
     borderRadius: 9,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     maxWidth: 210,
   },
   docTabKind: {
@@ -463,27 +707,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 1,
   },
-  viewerHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-  },
-  viewerHeadingLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sourceDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  viewerSubtitle: { flex: 1, fontSize: 11.5, lineHeight: 16 },
-  pdfFrame: { flex: 1 },
+  pdfFrame: { flex: 1, position: 'relative' },
   pdf: { flex: 1, width: '100%', height: '100%' },
+  focusOverlayBar: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 20,
+  },
+  focusExitPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  focusExitText: { fontSize: 12, fontWeight: '800' },
+  termsOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+    zIndex: 15,
+  },
+  termsSheet: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    maxHeight: '70%',
+    paddingBottom: 14,
+  },
+  termsSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 10,
+  },
+  termsSheetTitle: { fontSize: 15, fontWeight: '800' },
+  termsSheetSub: { fontSize: 11.5, marginTop: 2 },
+  termsSheetClose: { fontSize: 18, fontWeight: '700' },
+  termsSheetBody: { paddingHorizontal: 16 },
+  termsSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  termsSheetLabel: { fontSize: 12.5, fontWeight: '500', flex: 1 },
+  termsSheetValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.2 },
   loadingState: {
     flex: 1,
     alignItems: 'center',
@@ -537,10 +816,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryActionText: { fontSize: 13, fontWeight: '700' },
-  footerNote: {
+  readerFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
+    gap: 8,
   },
-  footerNoteText: { fontSize: 10.5, textAlign: 'center' },
+  pageStepperGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepperBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  stepperBtnText: { fontSize: 11.5, fontWeight: '800' },
+  pageCounterPill: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  pageCounterText: { fontSize: 11.5, fontWeight: '800' },
+  sourceCaptionWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sourceDot: { width: 7, height: 7, borderRadius: 4 },
+  footerCaption: { fontSize: 11.5, fontWeight: '600', flex: 1 },
+  footerRightBtns: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerIconBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  footerIconBtnText: { fontSize: 11.5, fontWeight: '800' },
 });

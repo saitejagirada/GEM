@@ -39,6 +39,16 @@ describe('BidDocService', () => {
     expect(summary.experienceLabel).toBe('2 Years');
     expect(summary.deliveryPeriodLabel).toBe('25 Days');
     expect(summary.consigneeCountLabel).toBe('2 Destinations');
+
+    // Large EMD (>= ₹1 Lakh) and Cr values format cleanly in Indian Lakhs/Crores rather than ₹2000k
+    const highValueSummary = BidDocService.getFundamentalsSummary({
+      ...sampleBid,
+      estimatedBidValueInr: 22770000, // ₹2.28 Cr
+      emdAmountInr: 2000000, // ₹20.0 Lakhs
+      isEmdExemptForMse: false,
+    });
+    expect(highValueSummary.estimatedValueLabel).toBe('₹2.28 Cr');
+    expect(highValueSummary.emdLabel).toBe('₹20.0 Lakhs');
   });
 
   it('assesses tender risks and flags tight deadlines or high guarantees', () => {

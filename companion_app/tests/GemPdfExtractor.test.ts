@@ -276,4 +276,41 @@ endobj
     assert.equal(docs[3].kind, 'BOQ');
     assert.equal(docs[3].fileFormat, 'XLSX');
   });
+
+  it('never misreads ATC boilerplate percentages (e.g. "20% of estimated bid value") or option clauses as tender figures', () => {
+    const gem8255933Sample = `
+Bid Number : GEM/2026/B/8255933
+Department Name : Department Of Military Affairs
+Ministry/State Name : Ministry Of Defence
+Total Quantity : 37
+Years of Past Experience Required for : 3 Year (s)
+Past Performance : 70 %
+MSE Relaxation for Years Of Experience : No
+and Turnover
+EMD Detail
+Required : No
+ePBG Detail
+Required : No
+Splitting
+Bid splitting not applied.
+Buyer Added Bid Specific Terms and Conditions
+1 . Generic OPTION CLAUSE: The additional delivery time shall be subject to minimum of 30 days.
+15 . Turnover
+Bidder Turn Over Criteria: The minimum average annual financial turnover of the bidder during the last 3 financial years.
+20 . Past Project Experience
+(i) Single order of at least 35% of estimated bid value; or
+(ii) Two orders of at least 20% each of estimated bid value; or
+(iii) Three orders of at least 15% each of estimated bid value.
+`;
+    const parsed = GemPdfExtractor.parseGeMTenderText(gem8255933Sample);
+    assert.equal(parsed.estimatedValueInr, undefined, 'Must NOT extract 20 from "20% each of estimated bid value"');
+    assert.equal(parsed.emdAmountInr, 0);
+    assert.equal(parsed.isEmdExemptForMse, false, 'Must NOT fabricate MSE exemption when MSE Relaxation is No');
+    assert.equal(parsed.epbgPercentage, 0);
+    assert.equal(parsed.minAnnualTurnoverInr, undefined, 'Must NOT extract 3 from "last 3 financial years"');
+    assert.equal(parsed.deliveryPeriodDays, undefined, 'Must NOT extract 30 from ATC Option Clause prose');
+    assert.equal(parsed.totalQuantity, 37);
+    assert.equal(parsed.yearsExperienceRequired, 3);
+    assert.equal(parsed.pastPerformancePercentage, 70);
+  });
 });

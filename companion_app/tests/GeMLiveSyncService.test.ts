@@ -117,4 +117,39 @@ describe('GeMLiveSyncService', () => {
       'https://bidplus.gem.gov.in/showbidDocument/9812036'
     );
   });
+
+  it('merges parallel multi-page batches cleanly without duplicates and tracks hasMore accurately', async () => {
+    const origEnsure = GeMLiveSyncService.ensurePortalSession;
+    const origQuery = GeMLiveSyncService.queryLivePortal;
+    try {
+      GeMLiveSyncService.ensurePortalSession = async () => ({
+        csrfToken: 'test-token',
+        cookieHeader: '',
+        acquiredAt: Date.now(),
+      });
+      GeMLiveSyncService.queryLivePortal = async (opts = {}) => {
+        const page = opts.page ?? 1;
+        const base = (page - 1) * 10;
+        return {
+          bids: [
+            makeBid({ bidNumber: `GEM/2026/B/${8000000 + base + 1}` }),
+            makeBid({ bidNumber: `GEM/2026/B/${8000000 + base + 2}` }),
+          ],
+          total: 43962,
+          page,
+          hasMore: true,
+          portalOrigin: 'bidplus.gem.gov.in',
+        };
+      };
+
+      const batch = await GeMLiveSyncService.queryLivePortalBatch({ page: 4 }, 3);
+      assert.equal(batch.bids.length, 6);
+      assert.equal(batch.total, 43962);
+      assert.equal(batch.lastPageFetched, 6);
+      assert.equal(batch.hasMore, true);
+    } finally {
+      GeMLiveSyncService.ensurePortalSession = origEnsure;
+      GeMLiveSyncService.queryLivePortal = origQuery;
+    }
+  });
 });

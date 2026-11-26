@@ -15,7 +15,7 @@ import {
 } from './GemPdfExtractor.ts';
 import { PortalDocService } from './PortalDocService.ts';
 
-const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v3';
+const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v4';
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 15000;
 const PDF_FETCH_USER_AGENT =
@@ -195,10 +195,8 @@ export function enrichBidWithPdfScan(
     bid.isEmdExemptForMse !== undefined
       ? bid.isEmdExemptForMse
       : d.isEmdExemptForMse !== undefined
-      ? d.isEmdExemptForMse
-      : emdAmountInr === 0
-      ? true
-      : ext?.isEmdExemptForMse;
+        ? d.isEmdExemptForMse
+        : ext?.isEmdExemptForMse;
   const epbgPercentage = bid.epbgPercentage ?? d.epbgPercentage ?? ext?.epbgPercentage;
   const epbgDurationMonths = bid.epbgDurationMonths ?? ext?.epbgDurationMonths;
   const minAnnualTurnoverInr = bid.minAnnualTurnoverInr ?? d.minAnnualTurnoverInr ?? ext?.minAnnualTurnoverInr;

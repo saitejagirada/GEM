@@ -100,14 +100,18 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
                 ? 'bidToRA'
                 : 'all';
 
-        const res = await GeMLiveSyncService.queryLivePortal({
-          page: targetPage,
-          searchBid: debouncedQuery,
-          searchType: /^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery) ? 'exact' : 'fullText',
-          bidStatusType: 'bidrastatus',
-          byType,
-          sort: 'Bid-End-Date-Latest',
-        });
+        const isExact = /^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery);
+        const res = await GeMLiveSyncService.queryLivePortalBatch(
+          {
+            page: targetPage,
+            searchBid: debouncedQuery,
+            searchType: isExact ? 'exact' : 'fullText',
+            bidStatusType: 'bidrastatus',
+            byType,
+            sort: 'Bid-End-Date-Latest',
+          },
+          isExact ? 1 : 3
+        );
 
         if (reqId !== reqIdRef.current) return;
 
@@ -119,7 +123,7 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
 
         setIsOffline(false);
         setTotalCount(res.total);
-        setPage(targetPage);
+        setPage(res.lastPageFetched);
         setHasMore(res.hasMore);
         setRecords((prev) => {
           if (!append) return res.bids;
@@ -277,6 +281,12 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
         renderItem={renderRecordCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={() => {
+          if (!isLoadingMore && !isRefreshing && hasMore) {
+            loadConcludedRecords(page + 1, true);
+          }
+        }}
+        onEndReachedThreshold={0.45}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -289,7 +299,11 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
           records.length > 0 && hasMore ? (
             <View style={{ marginTop: 6, marginBottom: 16 }}>
               <SecondaryButton
-                label={isLoadingMore ? 'Loading more from GeM...' : 'Load More Concluded Bids'}
+                label={
+                  isLoadingMore
+                    ? 'Loading next 30 concluded bids…'
+                    : `Load 30 More (${records.length.toLocaleString('en-IN')} of ${totalCount.toLocaleString('en-IN')})`
+                }
                 onPress={() => loadConcludedRecords(page + 1, true)}
                 disabled={isLoadingMore}
               />
@@ -322,7 +336,6 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>📜</Text>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching concluded records</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Try another search term or view signed contracts directly on gem.gov.in/view_contracts.

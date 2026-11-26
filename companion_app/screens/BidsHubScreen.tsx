@@ -1,9 +1,9 @@
 /**
  * GeM Bids & Tenders Hub Screen — Direct Live Public GeM UI Layer
  *
- * Passes live search, status tabs (Ongoing, Live RA, Closed), vehicle filters
- * (All, Goods, Services, BOQ, Custom, High Value >= ₹2Cr), and pagination
- * directly from the user's phone to https://bidplus.gem.gov.in/all-bids-data.
+ * Streams all 40,000+ live tenders, 1,500+ Reverse Auctions, concluded bids, and
+ * cancelled records directly from https://bidplus.gem.gov.in/all-bids-data using
+ * parallel 3-page batching (30 tenders per scroll) and true infinite scroll.
  * Zero backend server, zero bundled snapshots, zero invented commercial fields.
  */
 
@@ -17,6 +17,7 @@ import {
   RefreshControl,
   BackHandler,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import {
@@ -40,8 +41,10 @@ import {
 } from '../components/SharedUI';
 import { formatLakhs, formatDateSafe } from '../utils/formatters';
 
-export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed';
+export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed' | 'Cancelled';
 type TypeChip = 'All' | 'Goods' | 'Services' | 'BOQ' | 'Custom';
+
+const BATCH_PAGES = 3; // 30 tenders per parallel GeM batch
 
 interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
@@ -69,6 +72,12 @@ function mapTypeChipToPortalParam(tab: GeMStatusTab, chip: TypeChip): GeMPortalB
   }
 }
 
+function mapStatusTabToPortalParam(tab: GeMStatusTab): GeMPortalStatusType {
+  if (tab === 'Closed') return 'bidrastatus';
+  if (tab === 'Cancelled') return 'cancelled_bids';
+  return 'ongoing_bids';
+}
+
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
   initialSearch,
@@ -90,26 +99,29 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       setDebouncedQuery(initialSearch.trim());
     }
   }, [initialSearch]);
+
   const [highValueOnly, setHighValueOnly] = useState<boolean>(false);
-  const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-End-Date-Oldest');
+  const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-Start-Date-Latest');
   const [inspectingBid, setInspectingBid] = useState<DeconstructedBidDoc | null>(null);
   const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
 
-  // Live direct query state (for search, tab switches, filters, and pagination)
+  // Live direct query state (supports seamless 30-item infinite scroll across 40,000+ tenders)
   const [liveStats, setLiveStats] = useState<GeMPortalLiveStats>(GeMLiveSyncService.getLiveStats());
   const [queryBids, setQueryBids] = useState<DeconstructedBidDoc[] | null>(null);
   const [queryTotal, setQueryTotal] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [lastPageFetched, setLastPageFetched] = useState<number>(3);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [isQuerying, setIsQuerying] = useState<boolean>(false);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const requestIdRef = useRef<number>(0);
+  const isLoadingMoreRef = useRef<boolean>(false);
 
   // Bottom Sheet Filter State
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
 
-  // Subscribe to global GeMLiveSyncService stats
+  // Subscribe to global GeMLiveSyncService stats (does NOT reset paginated list)
   useEffect(() => {
     const unsub = GeMLiveSyncService.subscribe((_, stats) => {
       setLiveStats(stats);
@@ -121,7 +133,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery.trim());
-    }, 400);
+    }, 380);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -130,45 +142,55 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
     activeTypeChip === 'All' &&
     !debouncedQuery &&
     !highValueOnly &&
-    sortOrder === 'Bid-End-Date-Oldest';
+    sortOrder === 'Bid-Start-Date-Latest';
 
-  // Execute a direct Phone -> bidplus.gem.gov.in query whenever tabs, filters, or search change
-  const runPortalQuery = useCallback(
-    async (page: number, append: boolean) => {
+  const filterKey = `${activeStatusTab}|${activeTypeChip}|${debouncedQuery}|${highValueOnly ? 'hv' : 'all'}|${sortOrder}`;
+
+  const runPortalBatch = useCallback(
+    async (startPage: number, append: boolean, seedExisting?: DeconstructedBidDoc[]) => {
       const reqId = ++requestIdRef.current;
       if (append) {
+        isLoadingMoreRef.current = true;
         setIsLoadingMore(true);
+        setLoadMoreError(null);
       } else {
         setIsQuerying(true);
+        setQueryError(null);
+        setLoadMoreError(null);
       }
-      setQueryError(null);
 
-      const bidStatusType: GeMPortalStatusType =
-        activeStatusTab === 'Closed' ? 'bidrastatus' : 'ongoing_bids';
+      const bidStatusType = mapStatusTabToPortalParam(activeStatusTab);
       const byType = mapTypeChipToPortalParam(activeStatusTab, activeTypeChip);
       const effectiveSort: GeMPortalSort =
-        activeStatusTab === 'Closed' && sortOrder === 'Bid-End-Date-Oldest'
+        activeStatusTab === 'Closed' && sortOrder === 'Bid-Start-Date-Latest'
           ? 'Bid-End-Date-Latest'
           : sortOrder;
       const isExactBidNum = /^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery);
 
       try {
-        const res = await GeMLiveSyncService.queryLivePortal({
-          page,
-          searchBid: debouncedQuery,
-          searchType: isExactBidNum ? 'exact' : 'fullText',
-          bidStatusType,
-          byType,
-          highBidValue: highValueOnly ? 'highValue' : '',
-          sort: effectiveSort,
-        });
+        const res = await GeMLiveSyncService.queryLivePortalBatch(
+          {
+            page: startPage,
+            searchBid: debouncedQuery,
+            searchType: isExactBidNum ? 'exact' : 'fullText',
+            bidStatusType,
+            byType,
+            highBidValue: highValueOnly ? 'highValue' : '',
+            sort: effectiveSort,
+          },
+          isExactBidNum ? 1 : BATCH_PAGES
+        );
 
         if (reqId !== requestIdRef.current) return;
 
         if (res.error && res.bids.length === 0) {
-          setQueryError(res.error);
-          if (!append) setQueryBids([]);
-          setHasMore(false);
+          if (append) {
+            setLoadMoreError('GeM took too long to load the next batch. Tap to retry.');
+          } else {
+            setQueryError(res.error);
+            setQueryBids([]);
+            setHasMore(false);
+          }
           return;
         }
 
@@ -181,34 +203,40 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         }
 
         setQueryTotal(res.total);
-        setCurrentPage(page);
+        setLastPageFetched(res.lastPageFetched);
         setHasMore(res.hasMore);
         setQueryBids((prev) => {
-          if (!append || !prev) return results;
-          const seen = new Set(prev.map((b) => b.bidNumber));
-          return [...prev, ...results.filter((b) => !seen.has(b.bidNumber))];
+          const baseList = append ? (prev ?? seedExisting ?? []) : [];
+          if (!append) return results;
+          const seen = new Set(baseList.map((b) => b.bidNumber));
+          return [...baseList, ...results.filter((b) => !seen.has(b.bidNumber))];
         });
       } finally {
         if (reqId === requestIdRef.current) {
           setIsQuerying(false);
           setIsLoadingMore(false);
+          isLoadingMoreRef.current = false;
         }
       }
     },
     [activeStatusTab, activeTypeChip, debouncedQuery, highValueOnly, sortOrder]
   );
 
+  // ONLY reset when the user explicitly changes tab, search, type chip, high-value flag, or sort!
+  // Never reset when global liveStats / bids.length ticks in the background.
   useEffect(() => {
     if (isDefaultOngoingView) {
       requestIdRef.current += 1;
+      isLoadingMoreRef.current = false;
       setQueryBids(null);
       setQueryError(null);
-      setCurrentPage(3); // Initial App sync fetches pages 1-3
-      setHasMore(liveStats.totalPortalOngoingBids > bids.length);
+      setLoadMoreError(null);
+      setLastPageFetched(3); // Initial App sync fetches pages 1-3 (30 latest tenders)
+      setHasMore(true);
       return;
     }
-    runPortalQuery(1, false);
-  }, [isDefaultOngoingView, runPortalQuery, bids.length, liveStats.totalPortalOngoingBids]);
+    runPortalBatch(1, false);
+  }, [filterKey, isDefaultOngoingView, runPortalBatch]);
 
   // Hardware BackHandler to close inspector modal or filter sheet
   useEffect(() => {
@@ -240,201 +268,261 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
     });
   }, [queryBids, bids]);
 
+  const activeTotalCount = queryBids !== null ? queryTotal : liveStats.totalPortalOngoingBids;
+  const effectiveHasMore =
+    hasMore && (activeTotalCount === 0 || displayedBids.length < activeTotalCount);
+
   const handleRefresh = useCallback(async () => {
-    if (isDefaultOngoingView) {
+    if (isDefaultOngoingView && queryBids === null) {
       await onSyncLive?.();
     } else {
-      await runPortalQuery(1, false);
+      await runPortalBatch(1, false);
     }
-  }, [isDefaultOngoingView, onSyncLive, runPortalQuery]);
+  }, [isDefaultOngoingView, queryBids, onSyncLive, runPortalBatch]);
 
   const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || isQuerying || !hasMore) return;
+    if (isLoadingMoreRef.current || isLoadingMore || isQuerying || !effectiveHasMore) return;
     if (isDefaultOngoingView && queryBids === null) {
-      // Seed queryBids with current synced list, then append page 4 directly from GeM
-      setQueryBids(displayedBids);
-      await runPortalQuery(4, true);
+      const seed = displayedBids;
+      setQueryBids(seed);
+      setQueryTotal(liveStats.totalPortalOngoingBids || seed.length);
+      await runPortalBatch(4, true, seed);
     } else {
-      await runPortalQuery(currentPage + 1, true);
+      await runPortalBatch(lastPageFetched + 1, true);
     }
-  }, [isLoadingMore, isQuerying, hasMore, isDefaultOngoingView, queryBids, displayedBids, currentPage, runPortalQuery]);
+  }, [
+    isLoadingMore,
+    isQuerying,
+    effectiveHasMore,
+    isDefaultOngoingView,
+    queryBids,
+    displayedBids,
+    liveStats.totalPortalOngoingBids,
+    lastPageFetched,
+    runPortalBatch,
+  ]);
 
   const handleOpenDoc = useCallback((bid: DeconstructedBidDoc) => {
     setDocumentBid(bid);
   }, []);
 
-  const handleInspect = (bid: DeconstructedBidDoc) => {
-    if (onInspectBid) {
-      onInspectBid(bid);
-    } else {
-      setInspectingBid(bid);
-    }
-  };
+  const handleInspect = useCallback(
+    (bid: DeconstructedBidDoc) => {
+      if (onInspectBid) {
+        onInspectBid(bid);
+      } else {
+        setInspectingBid(bid);
+      }
+    },
+    [onInspectBid]
+  );
 
   const resetAllFilters = () => {
     setSearchQuery('');
     setDebouncedQuery('');
     setActiveTypeChip('All');
     setHighValueOnly(false);
-    setSortOrder('Bid-End-Date-Oldest');
+    setSortOrder('Bid-Start-Date-Latest');
   };
 
-  const activeTotalCount = queryBids !== null ? queryTotal : liveStats.totalPortalOngoingBids;
   const activeFilterCount =
     (activeTypeChip !== 'All' ? 1 : 0) +
     (highValueOnly ? 1 : 0) +
-    (sortOrder !== 'Bid-End-Date-Oldest' ? 1 : 0);
+    (sortOrder !== 'Bid-Start-Date-Latest' ? 1 : 0);
+
+  const sortLabel =
+    sortOrder === 'Bid-Start-Date-Latest'
+      ? 'Newest'
+      : sortOrder === 'Bid-End-Date-Oldest'
+        ? 'Ending Soon'
+        : 'Longest Window';
 
   // Render individual bid card
-  const renderBidCard = ({ item }: { item: DeconstructedBidDoc }) => {
-    const isService = item.type === 'SERVICE';
-    const isRa = item.isRa || item.type === 'RA' || item.lifecycleStatus === 'BID_TO_RA';
-    const estVal = item.estimatedBidValueInr;
-    const publishedQty = item.boqItems?.[0]?.quantity;
+  const renderBidCard = useCallback(
+    ({ item }: { item: DeconstructedBidDoc }) => {
+      const isService = item.type === 'SERVICE';
+      const isRa = item.isRa || item.type === 'RA' || item.lifecycleStatus === 'BID_TO_RA';
+      const estVal = item.estimatedBidValueInr;
+      const publishedQty = item.boqItems?.[0]?.quantity;
 
-    return (
-      <View
-        style={[
-          styles.bidCard,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        {/* Card Header: Type Tag, High Value Tag, Bid Number */}
-        <View style={styles.cardHeaderRow}>
-          <View style={styles.cardHeaderLeft}>
-            <StatusBadge
-              label={isRa ? 'RA' : isService ? 'SERVICES' : item.type === 'BOQ' ? 'BOQ' : item.type === 'CUSTOM' ? 'CUSTOM' : 'GOODS'}
-              tone={isRa ? 'warning' : isService ? 'violet' : 'neutral'}
-            />
-            <Text style={[styles.bidNumberText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.bidNumber}
-            </Text>
-          </View>
-          {item.isHighValue ? (
-            <StatusBadge label="≥ ₹2 Cr" tone="success" />
-          ) : null}
-        </View>
-
-        {/* Bid Title */}
-        <Text
-          style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}
-          numberOfLines={2}
+      return (
+        <View
+          style={[
+            styles.bidCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
         >
-          {item.title}
-        </Text>
+          {/* Card Header: Type Tag, High Value Tag, Bid Number */}
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderLeft}>
+              <StatusBadge
+                label={
+                  isRa
+                    ? 'RA'
+                    : isService
+                      ? 'SERVICES'
+                      : item.type === 'BOQ'
+                        ? 'BOQ'
+                        : item.type === 'CUSTOM'
+                          ? 'CUSTOM'
+                          : 'GOODS'
+                }
+                tone={isRa ? 'warning' : isService ? 'violet' : 'neutral'}
+              />
+              <Text style={[styles.bidNumberText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {item.bidNumber}
+              </Text>
+            </View>
+            {item.isHighValue ? <StatusBadge label="≥ ₹2 Cr" tone="success" /> : null}
+          </View>
 
-        {/* Buyer Department */}
-        <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
-          {[item.department, item.ministry !== item.department ? item.ministry : '']
-            .filter(Boolean)
-            .join(' • ') || 'Department not published'}
-        </Text>
+          {/* Bid Title */}
+          <Text
+            style={[styles.bidTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
 
-        {/* 2x2 Glanceable Metrics Grid — strictly published portal values */}
-        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-            <Text style={[styles.metricValue, { color: estVal ? colors.primary : colors.textMuted }]}>
-              {estVal === undefined || item.publishedFields?.estimatedValue === false
-                ? item.isHighValue
-                  ? 'High Value (≥ ₹2 Cr)'
-                  : 'In PDF'
-                : formatLakhs(estVal)}
-            </Text>
+          {/* Buyer Department */}
+          <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {[item.department, item.ministry !== item.department ? item.ministry : '']
+              .filter(Boolean)
+              .join(' • ') || 'Department not published'}
+          </Text>
+
+          {/* 2x2 Glanceable Metrics Grid — strictly published portal values */}
+          <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+              <Text style={[styles.metricValue, { color: estVal ? colors.primary : colors.textMuted }]}>
+                {estVal === undefined || item.publishedFields?.estimatedValue === false
+                  ? item.isHighValue
+                    ? 'High Value (≥ ₹2 Cr)'
+                    : 'In PDF'
+                  : formatLakhs(estVal)}
+              </Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
+                {publishedQty !== undefined ? `${publishedQty.toLocaleString('en-IN')} Units` : 'In PDF'}
+              </Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSING (IST)</Text>
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                {formatDateSafe(item.closingTimeUtc)}
+              </Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                {item.parentBidNumber ? 'ORIGINAL BID' : 'TERMS / EMD'}
+              </Text>
+              <Text
+                style={[
+                  styles.metricValue,
+                  {
+                    color: item.parentBidNumber
+                      ? colors.primary
+                      : item.isEmdExemptForMse === undefined
+                        ? colors.textMuted
+                        : item.isEmdExemptForMse
+                          ? colors.success
+                          : colors.warning,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {item.parentBidNumber
+                  ? item.parentBidNumber
+                  : item.isEmdExemptForMse === undefined
+                    ? 'Tap to scan PDF'
+                    : item.isEmdExemptForMse
+                      ? 'MSE exempt'
+                      : 'Applicable'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-            <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
-              {publishedQty !== undefined ? `${publishedQty.toLocaleString('en-IN')} Units` : 'In PDF'}
-            </Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSING (IST)</Text>
-            <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
-              {formatDateSafe(item.closingTimeUtc)}
-            </Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-              {item.parentBidNumber ? 'ORIGINAL BID' : 'TERMS / EMD'}
-            </Text>
-            <Text
-              style={[
-                styles.metricValue,
-                {
-                  color: item.parentBidNumber
-                    ? colors.primary
-                    : item.isEmdExemptForMse === undefined
-                      ? colors.textMuted
-                      : item.isEmdExemptForMse
-                        ? colors.success
-                        : colors.warning,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {item.parentBidNumber
-                ? item.parentBidNumber
-                : item.isEmdExemptForMse === undefined
-                  ? 'Tap to scan PDF'
-                  : item.isEmdExemptForMse
-                    ? 'MSE exempt'
-                    : 'Applicable'}
-            </Text>
+
+          {/* Actions: View PDF + Inspect Details */}
+          <View style={styles.cardActionsRow}>
+            <SecondaryButton
+              label="View PDF"
+              onPress={() => handleOpenDoc(item)}
+              style={{ flex: 1, marginRight: 8 }}
+            />
+            <PrimaryButton
+              label="View Bid Details"
+              onPress={() => handleInspect(item)}
+              style={{ flex: 1.5 }}
+            />
           </View>
         </View>
+      );
+    },
+    [colors, fontMultiplier, handleOpenDoc, handleInspect]
+  );
 
-        {/* Actions: View PDF + Inspect Details */}
-        <View style={styles.cardActionsRow}>
-          <SecondaryButton
-            label="View PDF"
-            onPress={() => handleOpenDoc(item)}
-            style={{ flex: 1, marginRight: 8 }}
-          />
-          <PrimaryButton
-            label="View Bid Details"
-            onPress={() => handleInspect(item)}
-            style={{ flex: 1.5 }}
-          />
-        </View>
-      </View>
-    );
-  };
+  const busy = (isSyncing && displayedBids.length === 0) || isQuerying;
 
-  const busy = isSyncing || isQuerying;
+  const tabNoun =
+    activeStatusTab === 'Closed'
+      ? 'concluded bids'
+      : activeStatusTab === 'Cancelled'
+        ? 'cancelled tenders'
+        : activeStatusTab === 'Live RA'
+          ? 'live reverse auctions'
+          : 'live tenders';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.liveNotice, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.border }]}>
-        <Text style={[styles.liveNoticeLabel, { color: colors.success }]}>
-          DIRECT GeM PORTAL FEED · bidplus.gem.gov.in
-        </Text>
+      {/* Live Count & Scroll Progress Strip */}
+      <View
+        style={[
+          styles.liveNotice,
+          { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.liveNoticeTopRow}>
+          <View style={styles.liveDotWrap}>
+            <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
+            <Text style={[styles.liveNoticeLabel, { color: colors.success }]}>
+              LIVE GeM FEED · bidplus.gem.gov.in
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setShowFilterModal(true)}
+            hitSlop={6}
+            style={[styles.sortPillMini, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+          >
+            <Text style={[styles.sortPillMiniText, { color: colors.primary }]}>Sort: {sortLabel} ▾</Text>
+          </Pressable>
+        </View>
         <Text style={[styles.liveNoticeText, { color: colors.textSecondary }]}>
           {activeTotalCount > 0
-            ? `${activeTotalCount.toLocaleString('en-IN')} live public ${
-                activeStatusTab === 'Closed' ? 'concluded records' : activeStatusTab === 'Live RA' ? 'reverse auctions' : 'tenders'
-              } directly from GeM`
+            ? `Showing ${displayedBids.length.toLocaleString('en-IN')} of ${activeTotalCount.toLocaleString('en-IN')} ${tabNoun}${effectiveHasMore ? ' · Scroll down to auto-load more' : ''}`
             : 'Direct phone-to-GeM public feed. No backend proxy or mock records.'}
         </Text>
       </View>
 
-      {/* 1. Status Tabs */}
+      {/* 1. Status Tabs (Ongoing, Live RA, Closed, Cancelled) */}
       <View style={styles.topSection}>
         <SegmentedTabs
-          options={['Ongoing', 'Live RA', 'Closed']}
+          options={['Ongoing', 'Live RA', 'Closed', 'Cancelled']}
           selected={activeStatusTab}
           onSelect={(tab) => setActiveStatusTab(tab as GeMStatusTab)}
-          style={{ marginBottom: 12 }}
+          style={{ marginBottom: 10 }}
         />
 
-        {/* 2. Direct Live Search Field (queries bidplus.gem.gov.in directly) */}
+        {/* 2. Direct Live Search Field (queries all 43,000+ tenders directly on GeM) */}
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Live search GeM (e.g. Laptop, Solar, GEM/2026/...)"
+          placeholder="Search all GeM tenders (e.g. Laptop, Solar, GEM/2026/...)"
           style={{ marginBottom: 10 }}
         />
 
@@ -466,30 +554,64 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         </ScrollView>
       </View>
 
-      {/* 4. Bid List */}
+      {/* 4. Infinite-Scroll Bid List */}
       <FlatList
         data={displayedBids}
         keyExtractor={(item) => `${item.bidNumber}-${item.b_id || ''}`}
         renderItem={renderBidCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={9}
+        removeClippedSubviews={true}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.45}
         refreshControl={
           <RefreshControl
-            refreshing={busy}
+            refreshing={isQuerying || (isSyncing && displayedBids.length > 0)}
             onRefresh={handleRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
           />
         }
         ListFooterComponent={
-          displayedBids.length > 0 && hasMore ? (
-            <View style={styles.loadMoreWrap}>
-              <SecondaryButton
-                label={isLoadingMore ? 'Loading more from GeM...' : 'Load More from GeM'}
-                onPress={handleLoadMore}
-                disabled={isLoadingMore}
-              />
-            </View>
+          displayedBids.length > 0 ? (
+            loadMoreError ? (
+              <View style={styles.loadMoreWrap}>
+                <Text style={[styles.footerStatusText, { color: colors.danger }]}>{loadMoreError}</Text>
+                <SecondaryButton
+                  label="Retry Next 30 Tenders"
+                  onPress={handleLoadMore}
+                  style={{ marginTop: 8 }}
+                />
+              </View>
+            ) : isLoadingMore ? (
+              <View style={styles.loadingMoreRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.loadingMoreText, { color: colors.textSecondary }]}>
+                  Loading next 30 {tabNoun} from GeM…
+                </Text>
+              </View>
+            ) : effectiveHasMore ? (
+              <View style={styles.loadMoreWrap}>
+                <Text style={[styles.footerStatusText, { color: colors.textMuted }]}>
+                  Loaded {displayedBids.length.toLocaleString('en-IN')} of{' '}
+                  {activeTotalCount.toLocaleString('en-IN')} {tabNoun}
+                </Text>
+                <SecondaryButton
+                  label="Load 30 More from GeM"
+                  onPress={handleLoadMore}
+                  style={{ marginTop: 8 }}
+                />
+              </View>
+            ) : (
+              <View style={styles.loadMoreWrap}>
+                <Text style={[styles.footerStatusText, { color: colors.textMuted }]}>
+                  All {displayedBids.length.toLocaleString('en-IN')} matching {tabNoun} loaded
+                </Text>
+              </View>
+            )
           ) : null
         }
         ListEmptyComponent={
@@ -505,29 +627,26 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             </View>
           ) : queryError || (isDefaultOngoingView && bids.length === 0) ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>!</Text>
+              <View style={[styles.emptyBadge, { backgroundColor: colors.dangerTint }]}>
+                <Text style={[styles.emptyBadgeText, { color: colors.danger }]}>!</Text>
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Unable to Reach GeM Portal</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                {queryError || 'Check your internet connection and tap Retry to fetch live tenders directly from GeM.'}
+                {queryError ||
+                  'Check your internet connection and tap Retry to fetch live tenders directly from GeM.'}
               </Text>
-              <PrimaryButton
-                label="Retry Live Sync"
-                onPress={handleRefresh}
-                style={{ marginTop: 14 }}
-              />
+              <PrimaryButton label="Retry Live Sync" onPress={handleRefresh} style={{ marginTop: 14 }} />
             </View>
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>📋</Text>
+              <View style={[styles.emptyBadge, { backgroundColor: colors.primaryTint }]}>
+                <Text style={[styles.emptyBadgeText, { color: colors.primary }]}>GeM</Text>
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No matching tenders on GeM</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Try a different keyword or reset your filters.
+                Try a different keyword or reset your filters to browse all live tenders.
               </Text>
-              <SecondaryButton
-                label="Reset Filters"
-                onPress={resetAllFilters}
-                style={{ marginTop: 14 }}
-              />
+              <SecondaryButton label="Reset Filters" onPress={resetAllFilters} style={{ marginTop: 14 }} />
             </View>
           )
         }
@@ -569,9 +688,9 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         <View style={styles.sheetPillWrap}>
           {(
             [
-              { label: 'Ending Soonest', value: 'Bid-End-Date-Oldest' },
-              { label: 'Ending Latest', value: 'Bid-End-Date-Latest' },
               { label: 'Newest Published', value: 'Bid-Start-Date-Latest' },
+              { label: 'Ending Soonest', value: 'Bid-End-Date-Oldest' },
+              { label: 'Longest Window', value: 'Bid-End-Date-Latest' },
             ] as const
           ).map((opt) => (
             <CompactChip
@@ -614,18 +733,44 @@ const styles = StyleSheet.create({
   },
   liveNotice: {
     paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderBottomWidth: 1,
+  },
+  liveNoticeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  liveDotWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   liveNoticeLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
+  },
+  sortPillMini: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  sortPillMiniText: {
+    fontSize: 10.5,
+    fontWeight: '700',
   },
   liveNoticeText: {
-    fontSize: 10.5,
-    lineHeight: 14,
-    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 3,
   },
   filterChipRow: {
     flexDirection: 'row',
@@ -696,16 +841,41 @@ const styles = StyleSheet.create({
   },
   loadMoreWrap: {
     marginTop: 6,
-    marginBottom: 16,
+    marginBottom: 18,
+    alignItems: 'center',
+  },
+  loadingMoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 10,
+  },
+  loadingMoreText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  footerStatusText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 50,
   },
-  emptyEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
+  emptyBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyBadgeText: {
+    fontSize: 14,
+    fontWeight: '900',
   },
   emptyTitle: {
     fontSize: 16,

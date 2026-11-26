@@ -765,117 +765,133 @@ export class GemPdfExtractor {
   }
 
   /**
-   * Master GeM Tender Extraction Engine.
-   * Applies exact regex and heuristic rules across all standard tables and clauses,
-   * including multi-line wrapped labels produced by wkhtmltopdf on bidplus.gem.gov.in.
+   * Master GeM Tender Extraction Engine (Table-Locked & Zero-Approximation).
+   *
+   * Strictly scopes commercial & financial metrics (Estimated Bid Value, EMD,
+   * ePBG, Turnover, Past Experience, Past Performance, Quantity) to the
+   * official GeM Bid Details / EMD Detail / ePBG Detail tables (before ATC /
+   * Past Project Experience boilerplate prose) so clause percentages like
+   * "20% of estimated bid value" or "Option Clause 30 days" can NEVER be
+   * misread as tender values.
    */
   public static parseGeMTenderText(text: string, fallbackBidNumber?: string): ExtractedGeMTenderDetails {
     const bidNumberMatch =
       text.match(/\bGEM\s*\/\s*\d{4}\s*\/\s*[A-Z]+\s*\/\s*\d+\b/i)?.[0]?.replace(/\s+/g, '') ||
       fallbackBidNumber;
 
-    const itemCategory = this.extractLabeledField(text, ['item category', 'primary product category', 'category']);
+    // Isolate the official Bid Details + EMD Detail + ePBG Detail tables
+    // before boilerplate ATC clauses, Technical Specifications, and Consignee tables.
+    const proseBoundaryMatch = text.match(
+      /(?:^|\n)\s*(?:Buyer\s+Added\s+Bid\s+Specific|Buyer\s+Added\s+ATC|Consignees?\s*\/\s*Reporting\s+Officer|Technical\s+Specifications\b|20\s*\.\s*Past\s+Project\s+Experience)/i
+    );
+    const headerTableScope =
+      proseBoundaryMatch && typeof proseBoundaryMatch.index === 'number' && proseBoundaryMatch.index > 200
+        ? text.slice(0, proseBoundaryMatch.index)
+        : text;
+
+    const itemCategory = this.extractLabeledField(headerTableScope, ['item category', 'primary product category', 'category']);
     const title =
-      this.extractLabeledField(text, ['bid title', 'item title', 'product name', 'service name']) || itemCategory;
-    const department = this.extractLabeledField(text, ['department name', 'buyer department', 'department']);
-    const ministry = this.extractLabeledField(text, ['ministry/state name', 'ministry']);
-    const organisation = this.extractLabeledField(text, ['organisation name', 'organization']);
-    const officeName = this.extractLabeledField(text, ['office name']);
-    const closingDate = this.extractLabeledField(text, [
+      this.extractLabeledField(headerTableScope, ['bid title', 'item title', 'product name', 'service name']) || itemCategory;
+    const department = this.extractLabeledField(headerTableScope, ['department name', 'buyer department', 'department']);
+    const ministry = this.extractLabeledField(headerTableScope, ['ministry/state name', 'ministry']);
+    const organisation = this.extractLabeledField(headerTableScope, ['organisation name', 'organization']);
+    const officeName = this.extractLabeledField(headerTableScope, ['office name']);
+    const closingDate = this.extractLabeledField(headerTableScope, [
       'bid end date/time',
       'ra end date/time',
       'bid closing date',
       'end date',
     ]);
-    const bidOpeningDate = this.extractLabeledField(text, [
+    const bidOpeningDate = this.extractLabeledField(headerTableScope, [
       'bid opening date/time',
       'ra start date/time',
       'bid opening date',
       'bid opening',
     ]);
 
-    const validityMatch = text.match(/Bid\s+Offer[\s\S]{0,40}?(\d+)\s*\(\s*Days\s*\)/i);
+    const validityMatch = headerTableScope.match(/Bid\s+Offer[\s\S]{0,40}?(\d+)\s*\(\s*Days\s*\)/i);
     const bidValidityDays = validityMatch ? parseInt(validityMatch[1], 10) : undefined;
 
-    const qtyMatch = text.match(/Total\s+Quantity\s*[:\-\n]?\s*(\d+)/i);
-    const totalQuantity = qtyMatch ? parseInt(qtyMatch[1], 10) : undefined;
+    const qtyMatch = headerTableScope.match(/Total\s+Quantity\s*[:\-\n]?\s*([\d,]+)\b/i);
+    const totalQuantity = qtyMatch ? parseInt(qtyMatch[1].replace(/,/g, ''), 10) : undefined;
 
-    const typeOfBid = this.extractLabeledField(text, ['type of bid']);
+    const typeOfBid = this.extractLabeledField(headerTableScope, ['type of bid']);
 
-    // 2. Turnover Extraction (supports single-line, wkhtmltopdf wrapped label, and bilingual Hindi/English row wrap)
+    // 2. Turnover Extraction (strictly inside headerTableScope, requiring explicit monetary units so "3 Years" never parses as ₹3)
     const turnoverCandidates = [
-      this.extractLabeledField(text, [
-        'minimum average annual turnover of the bidder',
-        'minimum average annual turnover',
-        'minimum average annual',
-        'bidder turnover',
-        'annual turnover of bidder',
-        'oem average turnover',
-      ]),
-      text.match(/Minimum\s+Average\s+Annual[\s\S]{0,60}?([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)/i)?.[1],
-      text.match(
+      headerTableScope.match(
+        /(?:^|\n)[^\n]{0,40}Minimum\s+Average\s+Annual\s+Turnover(?:\s+of\s+the(?:\s+bidder)?)?(?:\s*\([^)\n]*\))?[^\n:]{0,20}[:\-]\s*([^\n]+)/i
+      )?.[1],
+      headerTableScope.match(
+        /Minimum\s+Average\s+Annual[\s\S]{0,60}?([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)/i
+      )?.[1],
+      headerTableScope.match(
         /:\s*([\d.]+\s*(?:Lakhs?|Lacs?|Crores?|Cr)(?:\s*\(s\))?)\s*\n[^\n]{0,40}(?:Minimum\s+Average\s+Annual|Bidder\s+Turnover|OEM\s+Average\s+Turnover)/i
+      )?.[1],
+      headerTableScope.match(
+        /(?:^|\n)[^\n]{0,25}(?:Annual\s+Turnover\s+of\s+Bidder|OEM\s+Average\s+Turnover)(?:\s*\([^)\n]*\))?\s*[:\-]\s*([^\n]+)/i
       )?.[1],
     ];
     let turnoverLine: string | undefined;
     let minAnnualTurnoverInr: number | undefined;
     for (const candidate of turnoverCandidates) {
       if (!candidate) continue;
+      // Require an explicit currency unit (Lakh/Lac/Crore/Cr/₹/Rs/INR) so plain year counts ("3 Years") are rejected
+      if (!/(?:Lakhs?|Lacs?|Crores?|Cr|₹|Rs\.?|INR)/i.test(candidate)) continue;
       const parsed = this.parseIndianCurrency(candidate);
-      if (parsed !== undefined) {
-        turnoverLine = candidate;
+      if (parsed !== undefined && parsed > 0) {
+        turnoverLine = candidate.trim();
         minAnnualTurnoverInr = parsed;
         break;
       }
     }
 
-    // 3. Past Experience Extraction (supports single-line AND wkhtmltopdf wrapped label)
-    const expMatch = text.match(/Years\s+of\s+Past\s+Experience\s+Required[^\d]{0,35}(\d+(?:\.\d+)?)\s*Year/i);
+    // 3. Past Experience & Past Performance (strictly single-line / headerTableScope)
+    const expMatch = headerTableScope.match(
+      /Years\s+of\s+Past\s+Experience\s+Required[^\n\d]{0,35}(\d+(?:\.\d+)?)\s*Year/i
+    );
     const yearsExperienceRequired = expMatch ? parseFloat(expMatch[1]) : undefined;
 
-    const pastPerfMatch = text.match(/Past\s+Performance\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*%/i);
+    const pastPerfMatch = headerTableScope.match(
+      /(?:^|\n)[^\n]{0,20}Past\s+Performance\s*[:\-]\s*(\d+(?:\.\d+)?)\s*%/i
+    );
     const pastPerformancePercentage = pastPerfMatch ? parseFloat(pastPerfMatch[1]) : undefined;
 
-    // 4. MSE & Startup Exemptions (handles both single-line, wkhtmltopdf wrapped, and TCPDF RA multiline layouts)
-    const mseExemptionMatch = text.match(
+    // 4. MSE & Startup Exemptions (strictly from headerTableScope)
+    const mseExemptionMatch = headerTableScope.match(
       /MSE\s+(?:Exemption|Relaxation)\s+for\s+Years[\s\S]{0,65}?[:\-\n]\s*(Yes|No)\b/i
     );
-    const mseExemptionForExpAndTurnover = mseExemptionMatch ? mseExemptionMatch[1].toLowerCase() === 'yes' : false;
+    const mseExemptionForExpAndTurnover = mseExemptionMatch
+      ? mseExemptionMatch[1].toLowerCase() === 'yes'
+      : false;
 
-    const startupExemptionMatch = text.match(
+    const startupExemptionMatch = headerTableScope.match(
       /Startup\s+(?:Exemption|Relaxation)\s+for\s+Years[\s\S]{0,65}?[:\-\n]\s*(Yes|No)\b/i
     );
     const startupExemptionForExpAndTurnover = startupExemptionMatch
       ? startupExemptionMatch[1].toLowerCase() === 'yes'
       : false;
 
-    const emdMseFootnoteMatch =
-      /EMD\s+EXEMPTION\s*[:\-]?\s*.*?(?:manufacturers\s+for\s+goods|service\s+providers)/i.test(text);
-    const isEmdExemptForMse =
-      mseExemptionForExpAndTurnover || emdMseFootnoteMatch || /EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
-    const isEmdExemptForStartup =
-      startupExemptionForExpAndTurnover || /Startup\s+EMD\s+Exemption\s*[:\-]?\s*Yes/i.test(text);
-
-    const msePrefMatch = text.match(/MSE\s+Purchase\s+Preference[\s\S]{0,40}?\b(Yes|No)\b/i);
+    const msePrefMatch = headerTableScope.match(/MSE\s+Purchase\s+Preference[\s\S]{0,40}?\b(Yes|No)\b/i);
     const msePurchasePreference = msePrefMatch
       ? msePrefMatch[1].toLowerCase() === 'yes'
-      : /Purchase\s+preference\s+to\s+Micro\s+and\s+Small\s+Enterprises/i.test(text);
+      : /Purchase\s+preference\s+to\s+Micro\s+and\s+Small\s+Enterprises/i.test(headerTableScope);
 
     // 5. Make in India (MII) Local Content Requirement
-    const miiPrefMatch = text.match(/MII\s+Purchase\s+Preference\s*[:\-]?\s*(Yes|No)/i);
+    const miiPrefMatch = headerTableScope.match(/MII\s+Purchase\s+Preference\s*[:\-]?\s*(Yes|No)/i);
     const miiPurchasePreference = miiPrefMatch
       ? miiPrefMatch[1].toLowerCase() === 'yes'
-      : /Preference\s+to\s+Make\s+In\s+India\s+products/i.test(text);
+      : /Preference\s+to\s+Make\s+In\s+India\s+products/i.test(headerTableScope);
 
     let miiLocalContentPercentage: number | undefined;
-    const localContentMatch = text.match(
-      /(?:minimum\s+local\s+content|local\s+content(?:\s+percentage)?)[^\d%]{0,40}(\d+(?:\.\d+)?)\s*%/i
+    const localContentMatch = headerTableScope.match(
+      /(?:minimum\s+local\s+content|local\s+content(?:\s+percentage)?)[^\n\d%]{0,40}(\d+(?:\.\d+)?)\s*%/i
     );
     if (localContentMatch) {
       miiLocalContentPercentage = parseFloat(localContentMatch[1]);
-    } else if (/Class\s*1\s+local\s+supplier/i.test(text)) {
+    } else if (/Class\s*1\s+local\s+supplier/i.test(headerTableScope)) {
       miiLocalContentPercentage = 50;
-    } else if (/Class\s*2\s+local\s+supplier/i.test(text)) {
+    } else if (/Class\s*2\s+local\s+supplier/i.test(headerTableScope)) {
       miiLocalContentPercentage = 20;
     }
 
@@ -886,33 +902,67 @@ export class GemPdfExtractor {
       else miiClass = 'NON_LOCAL';
     }
 
-    // 6. Financial Guarantees (EMD and ePBG)
-    const estimatedValueInr = this.extractMoneyValue(text, [
+    // 6. Financial Guarantees (Estimated Bid Value, EMD, ePBG) — STRICT TABLE ROWS ONLY
+    const estimatedValueInr = this.extractStrictTableMoneyValue(headerTableScope, [
+      'estimated bid value in inr',
       'estimated bid value',
       'total bid value',
       'estimated value',
     ]);
-    let emdAmountInr = this.extractMoneyValue(text, ['emd amount', 'earnest money deposit']);
-    if (emdAmountInr === undefined && /EMD\s+Detail[\s\S]{0,40}?Required\s*[:\-]?\s*No\b/i.test(text)) {
+
+    // Scope EMD strictly to the EMD Detail block when present, else explicit EMD Amount table row
+    const emdSectionMatch = headerTableScope.match(
+      /EMD\s+Detail[\s\S]{0,300}?(?=ePBG\s+Detail|Splitting|EMD\s+EXEMPTION|MII\s+Purchase|$)/i
+    );
+    const emdSearchScope = emdSectionMatch ? emdSectionMatch[0] : headerTableScope;
+    let emdAmountInr = this.extractStrictTableMoneyValue(emdSearchScope, ['emd amount']);
+    if (emdAmountInr === undefined && !emdSectionMatch) {
+      emdAmountInr = this.extractStrictTableMoneyValue(headerTableScope, ['earnest money deposit']);
+    }
+    if (emdAmountInr === undefined && /EMD\s+Detail[\s\S]{0,60}?Required\s*[:\-]\s*No\b/i.test(headerTableScope)) {
       emdAmountInr = 0;
     }
 
-    const epbgPercentMatch = text.match(/ePBG\s+Percentage\s*\(\s*%\s*\)\s*[:\-]?\s*([\d.]+)/i);
+    // Only treat EMD MSE Exemption footnote as active when EMD is actually required (> 0)
+    const emdMseFootnoteMatch =
+      (emdAmountInr ?? 0) > 0 &&
+      /EMD\s+EXEMPTION\s*[:\-]?\s*.*?(?:manufacturers\s+for\s+goods|service\s+providers)/i.test(headerTableScope);
+    const isEmdExemptForMse =
+      mseExemptionForExpAndTurnover ||
+      emdMseFootnoteMatch ||
+      /EMD\s+Exemption\s*[:\-]\s*Yes\b/i.test(headerTableScope);
+    const isEmdExemptForStartup =
+      startupExemptionForExpAndTurnover ||
+      /Startup\s+EMD\s+Exemption\s*[:\-]\s*Yes\b/i.test(headerTableScope);
+
+    // Scope ePBG strictly to the ePBG Detail block when present
+    const epbgSectionMatch = headerTableScope.match(
+      /ePBG\s+Detail[\s\S]{0,320}?(?=Splitting|EMD\s+EXEMPTION|MII\s+Purchase|MSE\s+Purchase|$)/i
+    );
+    const epbgSearchScope = epbgSectionMatch ? epbgSectionMatch[0] : headerTableScope;
+    const epbgPercentMatch = epbgSearchScope.match(/ePBG\s+Percentage\s*\(\s*%\s*\)\s*[:\-]\s*([\d.]+)/i);
     let epbgPercentage = epbgPercentMatch ? parseFloat(epbgPercentMatch[1]) : undefined;
-    if (epbgPercentage === undefined && /ePBG\s+Detail[\s\S]{0,40}?Required\s*[:\-]?\s*No\b/i.test(text)) {
+    if (epbgPercentage !== undefined && (epbgPercentage < 0 || epbgPercentage > 100)) {
+      epbgPercentage = undefined;
+    }
+    if (epbgPercentage === undefined && /ePBG\s+Detail[\s\S]{0,60}?Required\s*[:\-]\s*No\b/i.test(headerTableScope)) {
       epbgPercentage = 0;
     }
 
-    const epbgDurationMatch = text.match(/Duration\s+of\s+ePBG(?:\s+required)?[^\d]{0,35}(\d+)/i);
-    const epbgDurationMonths = epbgDurationMatch ? parseInt(epbgDurationMatch[1], 10) : undefined;
+    const epbgDurationMatch = epbgSearchScope.match(/Duration\s+of\s+ePBG(?:\s+required)?[^\n\d]{0,35}(\d+)/i);
+    const rawEpbgDuration = epbgDurationMatch ? parseInt(epbgDurationMatch[1], 10) : undefined;
+    const epbgDurationMonths =
+      rawEpbgDuration !== undefined && rawEpbgDuration > 0 && rawEpbgDuration <= 240
+        ? rawEpbgDuration
+        : undefined;
 
     // 7. Delivery & Splitting
-    const splittingAppliedMatch = text.match(/Bid\s+splitting\s+(not\s+applied|applied)/i);
+    const splittingAppliedMatch = headerTableScope.match(/Bid\s+splitting\s+(not\s+applied|applied)/i);
     const isSplittingApplied = splittingAppliedMatch
       ? !splittingAppliedMatch[1].toLowerCase().includes('not')
-      : /Splitting\s*[:\-]?\s*Yes/i.test(text);
+      : /Splitting\s*[:\-]\s*Yes\b/i.test(headerTableScope);
 
-    const splitRatioMatch = text.match(/Splitting\s*(?:Ratio)?\s*[:\-]?\s*(\d+\s*:\s*\d+)/i);
+    const splitRatioMatch = headerTableScope.match(/Splitting\s*(?:Ratio)?\s*[:\-]\s*(\d+\s*:\s*\d+)/i);
     const splittingRatio = splitRatioMatch
       ? splitRatioMatch[1].replace(/\s+/g, '')
       : splittingAppliedMatch && splittingAppliedMatch[1].toLowerCase().includes('not')
@@ -920,11 +970,19 @@ export class GemPdfExtractor {
         : undefined;
 
     const consignees = this.extractConsigneesTable(text);
-    const consigneeDeliveryDays = consignees.find((c) => c.deliveryDays !== undefined)?.deliveryDays;
-    const deliveryDaysMatch = text.match(/Delivery\s+(?:Period|Days)\s*(?:\(Days\))?\s*[:\-]?\s*(\d+)/i);
-    const deliveryPeriodDays = deliveryDaysMatch
-      ? parseInt(deliveryDaysMatch[1], 10)
-      : consigneeDeliveryDays;
+    const consigneeDeliveryDays = consignees.find(
+      (c) => c.deliveryDays !== undefined && c.deliveryDays >= 1 && c.deliveryDays <= 1825
+    )?.deliveryDays;
+    // Only match an explicit single-line Delivery Period/Days table row in headerTableScope (never ATC Option Clause prose)
+    const deliveryDaysMatch = headerTableScope.match(
+      /(?:^|\n)[^\n]{0,30}Delivery\s+(?:Period|Days)\s*(?:\(\s*Days\s*\))?\s*[:\-]\s*(\d+)\b/i
+    );
+    const headerDeliveryDays = deliveryDaysMatch ? parseInt(deliveryDaysMatch[1], 10) : undefined;
+    const deliveryPeriodDays =
+      consigneeDeliveryDays ??
+      (headerDeliveryDays !== undefined && headerDeliveryDays >= 1 && headerDeliveryDays <= 1825
+        ? headerDeliveryDays
+        : undefined);
 
     const consigneeStateDistribution = this.computeStateDistribution(consignees, totalQuantity);
 
@@ -989,13 +1047,50 @@ export class GemPdfExtractor {
     };
   }
 
-  private static extractMoneyValue(text: string, labels: string[]): number | undefined {
+  /**
+   * Strict single-line table key-value money extractor.
+   * Requires an explicit ":" or "-" column delimiter on the SAME line, rejects
+   * boilerplate prose ("35% of estimated bid value"), rejects percentages/days/years,
+   * and properly interprets Indian currency units (Lakhs / Crores / raw INR).
+   */
+  private static extractStrictTableMoneyValue(scope: string, labels: string[]): number | undefined {
     const escaped = labels.map((l) => l.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
-    const regex = new RegExp(`(?:${escaped})[^\\d₹]{0,60}(?:₹|rs\\.?|inr)?\\s*([\\d,]+(?:\\.\\d+)?)`, 'i');
-    const match = text.match(regex);
-    if (!match) return undefined;
-    const amount = Number(match[1].replace(/,/g, ''));
-    return Number.isFinite(amount) ? amount : undefined;
+    const lineRegex = new RegExp(
+      `(?:^|\\n)([^\\n]{0,45}\\b(?:${escaped})(?:[^\\n:]{0,35})?\\s*[:\\-]\\s*([^\\n]+))`,
+      'gi'
+    );
+
+    let match: RegExpExecArray | null;
+    while ((match = lineRegex.exec(scope)) !== null) {
+      const fullLine = match[1];
+      const rhs = match[2].trim();
+      if (!rhs) continue;
+      // Reject prose clauses referencing percentages of estimated bid value
+      if (/(?:%|percent)\s+(?:each\s+)?of\s+(?:estimated|total)\s+(?:bid\s+)?value/i.test(fullLine)) {
+        continue;
+      }
+      // Reject if RHS begins with a percentage, duration, or non-monetary count
+      if (/^(?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d+)?\s*(?:%|percent|days?|months?|years?|hrs?|hours?)\b/i.test(rhs)) {
+        continue;
+      }
+      // Extract monetary token strictly at the start of the right-hand table cell
+      const moneyToken = rhs.match(
+        /^(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?(?:\s*(?:Crores?|Cr|Lakhs?|Lacs?|L\b))?)/i
+      );
+      if (!moneyToken) continue;
+
+      const parsed = this.parseIndianCurrency(moneyToken[0]);
+      if (parsed === undefined || !Number.isFinite(parsed)) continue;
+
+      // Guard against stray 1-2 digit numbers without explicit currency symbol/unit
+      const hasExplicitCurrency = /(?:₹|rs\.?|inr|lakhs?|lacs?|crores?|cr)/i.test(moneyToken[0]);
+      if (parsed > 0 && parsed < 100 && !hasExplicitCurrency) {
+        continue;
+      }
+      return parsed;
+    }
+
+    return undefined;
   }
 
   public static extractConsigneesTable(text: string): ExtractedConsignee[] {
