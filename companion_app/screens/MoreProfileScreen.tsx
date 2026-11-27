@@ -20,7 +20,13 @@ import {
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import { AppIcon, type AppIconName } from '../components/AppIcons';
 import { BusinessProfileModal } from '../components/BusinessProfileModal';
+import { GemGlossaryModal } from '../components/GemGlossaryModal';
 import { BusinessProfileService } from '../services/BusinessProfileService';
+import {
+  COMPANY_LOCKER_SLOTS,
+  CompanyDocLockerService,
+  type CompanyLockerDocument,
+} from '../services/CompanyDocLockerService';
 import type { UserAgentProfile } from '../types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -31,6 +37,7 @@ export interface MoreProfileScreenProps {
     tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'HELP' | 'REG_BUYER' | 'REG_SELLER'
   ) => void;
   onOpenPortfolio?: () => void;
+  onOpenCompanyLocker?: () => void;
   onOpenOfficialPortal?: () => void;
 }
 
@@ -48,17 +55,38 @@ interface MenuRowItem {
 export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onNavigateTab,
   onOpenPortfolio,
+  onOpenCompanyLocker,
   onOpenOfficialPortal,
 }) => {
-  const { colors, fontMultiplier, isDark, toggleColorMode, fontScale, setFontScale } = useTheme();
+  const {
+    colors,
+    fontMultiplier,
+    isDark,
+    toggleColorMode,
+    fontScale,
+    setFontScale,
+    language,
+    setLanguage,
+    t,
+  } = useTheme();
   const [businessProfile, setBusinessProfile] = useState<UserAgentProfile | null>(() =>
     BusinessProfileService.getProfile()
   );
+  const [lockerDocs, setLockerDocs] = useState<CompanyLockerDocument[]>(() =>
+    CompanyDocLockerService.getDocuments()
+  );
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showGlossaryModal, setShowGlossaryModal] = useState(false);
 
   useEffect(() => {
     BusinessProfileService.hydrate().then(setBusinessProfile).catch(() => undefined);
-    return BusinessProfileService.subscribe(setBusinessProfile);
+    const unsubProfile = BusinessProfileService.subscribe(setBusinessProfile);
+    CompanyDocLockerService.hydrate().then(setLockerDocs).catch(() => undefined);
+    const unsubLocker = CompanyDocLockerService.subscribe(setLockerDocs);
+    return () => {
+      unsubProfile();
+      unsubLocker();
+    };
   }, []);
 
   const openPortal = () => {
@@ -71,16 +99,34 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
     else onNavigateTab('PORTAL');
   };
 
+  const openLocker = () => {
+    if (onOpenCompanyLocker) onOpenCompanyLocker();
+    else openWorkspace();
+  };
+
   const workspaceItems: MenuRowItem[] = [
     {
       id: 'business-profile',
       icon: 'profile',
       iconBg: businessProfile ? colors.successTint : colors.primaryTint,
       iconColor: businessProfile ? colors.success : colors.primary,
-      title: 'My Business Profile',
+      title: t('businessProfile'),
       subtitle: BusinessProfileService.formatProfileSummary(businessProfile),
       badge: businessProfile ? 'ACTIVE' : '30s SETUP',
       onPress: () => setShowProfileModal(true),
+    },
+    {
+      id: 'company-locker',
+      icon: 'document',
+      iconBg: lockerDocs.length > 0 ? colors.successTint : colors.primaryTint,
+      iconColor: lockerDocs.length > 0 ? colors.success : colors.primary,
+      title: t('companyDocLocker'),
+      subtitle:
+        lockerDocs.length > 0
+          ? `${lockerDocs.length} of ${COMPANY_LOCKER_SLOTS.length} master docs saved · Auto-matches bids`
+          : 'Save GST, PAN, Udyam, Turnover & CRAC PDFs once on device',
+      badge: lockerDocs.length > 0 ? `${lockerDocs.length}/${COMPANY_LOCKER_SLOTS.length} READY` : undefined,
+      onPress: openLocker,
     },
     {
       id: 'docs',
@@ -88,7 +134,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       iconBg: colors.primaryTint,
       iconColor: colors.primary,
       title: 'Document Preparation',
-      subtitle: 'Organize checklists, compliance drafts & local bid files',
+      subtitle: 'Organize bid-specific checklists, compliance drafts & files',
       onPress: openWorkspace,
     },
     {
@@ -129,6 +175,15 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       title: 'Seller & MSE Registration',
       subtitle: 'Verify Udyam MSME & check EMD exemption eligibility',
       onPress: () => onNavigateTab('REG_SELLER'),
+    },
+    {
+      id: 'glossary',
+      icon: 'help',
+      iconBg: colors.primaryTint,
+      iconColor: colors.primary,
+      title: t('jargonGuide'),
+      subtitle: 'Plain English & हिन्दी meanings for EMD, e-PBG, ATC, MII, RA, UDIN',
+      onPress: () => setShowGlossaryModal(true),
     },
     {
       id: 'help',
@@ -254,22 +309,84 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       </View>
 
       {/* 2. Workspace & Tools */}
-      {renderSection('YOUR WORKSPACE', workspaceItems)}
+      {renderSection(t('yourWorkspace'), workspaceItems)}
 
       {/* 3. Registration & Support */}
-      {renderSection('REGISTRATION & SUPPORT', onboardingItems)}
+      {renderSection(t('registrationSupport'), onboardingItems)}
 
       {/* 4. Display & Comfort (Inline Interactive Controls) */}
       <View style={styles.sectionWrap}>
-        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DISPLAY &amp; COMFORT</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('displayComfort')}</Text>
         <View
           style={[
             styles.menuCard,
             { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
           ]}
         >
-          {/* Theme Switch */}
+          {/* Language Switch (English / हिन्दी) */}
           <View style={styles.settingRow}>
+            <View style={[styles.menuIconBox, { backgroundColor: colors.primaryTint }]}>
+              <Text style={{ fontSize: 13, fontWeight: '900', color: colors.primary }}>अ</Text>
+            </View>
+            <View style={styles.menuTextCol}>
+              <Text
+                style={[
+                  styles.menuTitle,
+                  { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier },
+                ]}
+              >
+                {t('languageLabel')}
+              </Text>
+              <Text style={[styles.menuSub, { color: colors.textSecondary }]}>
+                {t('languageSub')}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.segmentedWrap,
+                { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+              ]}
+            >
+              {(
+                [
+                  { id: 'en', label: 'EN' },
+                  { id: 'hi', label: 'हिन्दी' },
+                ] as const
+              ).map((opt) => {
+                const active = language === opt.id;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    style={[
+                      styles.segBtn,
+                      active && { backgroundColor: colors.primary },
+                    ]}
+                    onPress={() => setLanguage(opt.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.segBtnText,
+                        { color: active ? colors.textInverse : colors.textSecondary },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Theme Switch */}
+          <View
+            style={[
+              styles.settingRow,
+              {
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.borderSubtle,
+              },
+            ]}
+          >
             <View style={[styles.menuIconBox, { backgroundColor: colors.surfaceSubtle }]}>
               <AppIcon name="theme" color={colors.textPrimary} size={18} />
             </View>
@@ -393,6 +510,11 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
         visible={showProfileModal}
         onClose={() => setShowProfileModal(false)}
         onSaved={(saved) => setBusinessProfile(saved)}
+      />
+
+      <GemGlossaryModal
+        visible={showGlossaryModal}
+        onClose={() => setShowGlossaryModal(false)}
       />
     </ScrollView>
   );

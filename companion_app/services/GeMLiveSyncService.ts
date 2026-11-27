@@ -18,6 +18,9 @@ const NATIONAL_PORTAL_ORIGIN = 'https://bidplus.gem.gov.in';
 const NATIONAL_BIDS_PAGE = `${NATIONAL_PORTAL_ORIGIN}/all-bids`;
 const NATIONAL_BIDS_ENDPOINT = `${NATIONAL_PORTAL_ORIGIN}/all-bids-data`;
 const NATIONAL_OTHER_DETAILS_ENDPOINT = `${NATIONAL_PORTAL_ORIGIN}/public-bid-other-details`;
+const NATIONAL_CORRIGENDUM_ENDPOINT = `${NATIONAL_PORTAL_ORIGIN}/bidding/bid/viewCorrigendum`;
+const NATIONAL_CORRIGENDUM_TC_ENDPOINT = `${NATIONAL_PORTAL_ORIGIN}/bidding/bid/getPublicTchtml`;
+const NATIONAL_REPRESENTATION_ENDPOINT = `${NATIONAL_PORTAL_ORIGIN}/publish-representations`;
 const GLOBAL_BIDS_ENDPOINT = 'https://bidplus-global.gem.gov.in/all-bids-data';
 
 const PUBLIC_FEED_TIMEOUT_MS = 12000;
@@ -858,6 +861,153 @@ export class GeMLiveSyncService {
       return details;
     } catch {
       return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Fetches raw public corrigendum HTML directly from `bidplus.gem.gov.in/bidding/bid/viewCorrigendum/<bidId>`
+   * using the authenticated CSRF/cookie public session (with automatic 403 session refresh).
+   */
+  public static async fetchCorrigendumHtml(bidId: string): Promise<string> {
+    const cleanId = bidId.trim();
+    if (!cleanId) return '';
+
+    const runPost = async (session: PortalSession): Promise<{ html: string; expired?: boolean }> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PUBLIC_FEED_TIMEOUT_MS);
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': MOBILE_USER_AGENT,
+          Accept: 'text/html, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          Origin: NATIONAL_PORTAL_ORIGIN,
+          Referer: NATIONAL_BIDS_PAGE,
+        };
+        if (session.cookieHeader) headers.Cookie = session.cookieHeader;
+
+        const response = await fetch(
+          `${NATIONAL_CORRIGENDUM_ENDPOINT}/${encodeURIComponent(cleanId)}`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: `csrf_bd_gem_nk=${encodeURIComponent(session.csrfToken)}`,
+            signal: controller.signal,
+          }
+        );
+        if (response.status === 403) return { html: '', expired: true };
+        if (!response.ok) {
+          throw new Error(`GeM corrigendum endpoint returned HTTP ${response.status}`);
+        }
+        markNetworkOnline();
+        return { html: await response.text() };
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    let session = await this.ensurePortalSession();
+    let result = await runPost(session);
+    if (result.expired) {
+      session = await this.ensurePortalSession(true);
+      result = await runPost(session);
+    }
+    return result.html;
+  }
+
+  /**
+   * Fetches an inline T&C / ATC amendment HTML block (`bcm_txt`) from
+   * `bidplus.gem.gov.in/bidding/bid/getPublicTchtml/<amendmentId>`.
+   */
+  public static async fetchCorrigendumTcHtml(amendmentId: string): Promise<string> {
+    const cleanId = amendmentId.trim();
+    if (!cleanId) return '';
+
+    const runPost = async (session: PortalSession): Promise<{ html: string; expired?: boolean }> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PUBLIC_FEED_TIMEOUT_MS);
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': MOBILE_USER_AGENT,
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          Origin: NATIONAL_PORTAL_ORIGIN,
+          Referer: NATIONAL_BIDS_PAGE,
+        };
+        if (session.cookieHeader) headers.Cookie = session.cookieHeader;
+
+        const response = await fetch(
+          `${NATIONAL_CORRIGENDUM_TC_ENDPOINT}/${encodeURIComponent(cleanId)}`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: `csrf_bd_gem_nk=${encodeURIComponent(session.csrfToken)}`,
+            signal: controller.signal,
+          }
+        );
+        if (response.status === 403) return { html: '', expired: true };
+        if (!response.ok) {
+          throw new Error(`GeM T&C amendment endpoint returned HTTP ${response.status}`);
+        }
+        markNetworkOnline();
+        const text = await response.text();
+        if (text.trim().startsWith('{')) {
+          const parsed = JSON.parse(text) as { bcm_txt?: string };
+          return { html: typeof parsed.bcm_txt === 'string' ? parsed.bcm_txt : '' };
+        }
+        return { html: text };
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    let session = await this.ensurePortalSession();
+    let result = await runPost(session);
+    if (result.expired) {
+      session = await this.ensurePortalSession(true);
+      result = await runPost(session);
+    }
+    return result.html;
+  }
+
+  /**
+   * Fetches published Pre-Bid Representations (Vendor Queries & Official Buyer Replies)
+   * directly from `bidplus.gem.gov.in/publish-representations/<bidId>`.
+   */
+  public static async fetchRepresentationHtml(bidId: string): Promise<string> {
+    const cleanId = bidId.trim();
+    if (!cleanId) return '';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PUBLIC_FEED_TIMEOUT_MS);
+    try {
+      const session = await this.ensurePortalSession().catch(() => null);
+      const headers: Record<string, string> = {
+        'User-Agent': MOBILE_USER_AGENT,
+        Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+        Referer: NATIONAL_BIDS_PAGE,
+      };
+      if (session?.cookieHeader) headers.Cookie = session.cookieHeader;
+
+      const response = await fetch(
+        `${NATIONAL_REPRESENTATION_ENDPOINT}/${encodeURIComponent(cleanId)}`,
+        {
+          method: 'GET',
+          credentials: 'include',
+          headers,
+          signal: controller.signal,
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`GeM representations endpoint returned HTTP ${response.status}`);
+      }
+      markNetworkOnline();
+      return await response.text();
     } finally {
       clearTimeout(timer);
     }

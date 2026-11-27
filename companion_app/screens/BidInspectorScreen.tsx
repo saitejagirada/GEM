@@ -50,6 +50,13 @@ import { BidDocumentViewer } from './BidDocumentViewer';
 import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
 import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
 import { BidMarginModal } from '../components/BidMarginModal';
+import { AtcTrapAndSearchCard } from '../components/AtcTrapAndSearchCard';
+import { SimilarConcludedBidsCard } from '../components/SimilarConcludedBidsCard';
+import { GemGlossaryModal } from '../components/GemGlossaryModal';
+import {
+  CorrigendumAndQaModal,
+  type CorrigendumModalTab,
+} from '../components/CorrigendumAndQaModal';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -58,7 +65,15 @@ interface BidInspectorScreenProps {
   onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
 }
 
-type SectionKey = 'overview' | 'docs' | 'terms' | 'eligibility' | 'delivery' | 'checklist';
+type SectionKey =
+  | 'overview'
+  | 'docs'
+  | 'terms'
+  | 'eligibility'
+  | 'atc'
+  | 'delivery'
+  | 'checklist'
+  | 'similar';
 
 function copyToClipboardSafe(value: string): boolean {
   try {
@@ -110,6 +125,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const { colors, isDark } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const sectionYRef = useRef<Partial<Record<SectionKey, number>>>({});
+  const sectionsOffsetYRef = useRef<number>(0);
 
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
@@ -118,7 +134,12 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
   const [showDealSheet, setShowDealSheet] = useState(false);
   const [showMarginCalc, setShowMarginCalc] = useState(false);
+  const [glossaryTerm, setGlossaryTerm] = useState<string | null>(null);
   const [otherDetails, setOtherDetails] = useState<GeMBidOtherDetails | null>(null);
+  const [corrigendumBidId, setCorrigendumBidId] = useState<string | undefined>();
+  const [representationBidId, setRepresentationBidId] = useState<string | undefined>();
+  const [showCorrModal, setShowCorrModal] = useState(false);
+  const [corrModalTab, setCorrModalTab] = useState<CorrigendumModalTab>('CORRIGENDA');
   const [copiedBidNum, setCopiedBidNum] = useState(false);
   const [activeJump, setActiveJump] = useState<SectionKey>('overview');
   const [isWatched, setIsWatched] = useState(() => TenderRadarService.isWatched(bid?.bidNumber));
@@ -135,6 +156,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     setCheckedDocs({});
     setPdfScan(null);
     setOtherDetails(null);
+    setCorrigendumBidId(undefined);
+    setRepresentationBidId(undefined);
+    setShowCorrModal(false);
     setDocumentViewerVisible(false);
     setShowDealSheet(false);
     setShowMarginCalc(false);
@@ -155,11 +179,31 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         if (!cancelled) setIsScanningPdf(false);
       });
 
-    const probeId = bid.b_id || bid.parentBidId;
-    if (probeId) {
-      GeMLiveSyncService.fetchBidOtherDetails(probeId)
-        .then((details) => {
-          if (!cancelled && details) setOtherDetails(details);
+    const primaryProbeId = bid.b_id;
+    const parentProbeId =
+      bid.parentBidId && bid.parentBidId !== bid.b_id ? bid.parentBidId : undefined;
+    const probeIds = [primaryProbeId, parentProbeId].filter((id): id is string => Boolean(id));
+    if (probeIds.length > 0) {
+      Promise.all(
+        probeIds.map((id) =>
+          GeMLiveSyncService.fetchBidOtherDetails(id)
+            .then((details) => ({ id, details }))
+            .catch(() => ({ id, details: null }))
+        )
+      )
+        .then((results) => {
+          if (cancelled) return;
+          const corrHit = results.find((r) => r.details?.hasCorrigendum);
+          const repHit = results.find((r) => r.details?.hasRepresentation);
+          if (corrHit || repHit) {
+            setCorrigendumBidId(corrHit?.id);
+            setRepresentationBidId(repHit?.id);
+            setOtherDetails({
+              hasCorrigendum: Boolean(corrHit),
+              hasRepresentation: Boolean(repHit),
+              checkedAt: (corrHit?.details || repHit?.details)!.checkedAt,
+            });
+          }
         })
         .catch(() => undefined);
     }
@@ -218,7 +262,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     }
     const y = sectionYRef.current[key];
     if (typeof y === 'number') {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, sectionsOffsetYRef.current + y - 8),
+        animated: true,
+      });
     }
   };
 
@@ -292,6 +339,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         : `${diffHours}h ${diffMins}m left`;
 
   const fallbackValue = isScanningPdf ? 'Scanning…' : scannedOk ? 'Not specified' : 'In PDF';
+
+  const isHighValueFallback =
+    !(effectiveBid.estimatedBidValueInr !== undefined && effectiveBid.estimatedBidValueInr > 0) &&
+    Boolean(effectiveBid.isHighValue);
 
   const estValueDisplay =
     effectiveBid.estimatedBidValueInr !== undefined && effectiveBid.estimatedBidValueInr > 0
@@ -402,16 +453,21 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     policyTags.push({ label: 'Reverse Auction', bg: colors.dangerTint, fg: colors.danger });
   }
 
-  const keyTermRows: Array<{ label: string; value: string; accent?: string }> = [
+  const keyTermRows: Array<{ label: string; value: string; accent?: string; glossaryKey?: string }> = [
     {
       label: 'Estimated Value',
-      value: estValueDisplay,
+      value: isHighValueFallback
+        ? scannedOk
+          ? '≥ ₹2 Cr (GeM flag · exact hidden in PDF)'
+          : '≥ ₹2 Cr (GeM High Value flag)'
+        : estValueDisplay,
       accent: effectiveBid.estimatedBidValueInr ? colors.primary : undefined,
     },
     {
       label: 'EMD Guarantee',
       value: emdDisplay,
       accent: emdIsPositive ? colors.success : undefined,
+      glossaryKey: 'EMD',
     },
     {
       label: 'e-PBG Security',
@@ -422,15 +478,16 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
           : effectiveBid.epbgPercentage !== undefined
             ? colors.warning
             : undefined,
+      glossaryKey: 'EPBG',
     },
     {
       label: 'Delivery Timeline',
       value: deliveryDisplay,
       accent: effectiveBid.deliveryPeriodDays ? colors.primary : undefined,
     },
-    { label: 'Min Annual Turnover', value: turnoverDisplay },
-    { label: 'Past Experience', value: experienceDisplay },
-    { label: 'Splitting Rule', value: splittingDisplay },
+    { label: 'Min Annual Turnover', value: turnoverDisplay, glossaryKey: 'UDIN' },
+    { label: 'Past Experience', value: experienceDisplay, glossaryKey: 'CRAC' },
+    { label: 'Splitting Rule', value: splittingDisplay, glossaryKey: 'MSE' },
     { label: 'Bid Format & Validity', value: bidFormatDisplay },
   ];
 
@@ -449,12 +506,16 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     },
     { key: 'terms', label: 'Terms' },
     ...(ext ? [{ key: 'eligibility' as const, label: 'Eligibility' }] : []),
+    ...(ext || pdfScan?.searchableText
+      ? [{ key: 'atc' as const, label: 'ATC & Search' }]
+      : []),
     ...(consignees.length > 0
       ? [{ key: 'delivery' as const, label: `Delivery (${consignees.length})` }]
       : []),
     ...(requiredDocuments.length > 0
       ? [{ key: 'checklist' as const, label: `Checklist (${checkedCount}/${requiredDocuments.length})` }]
       : []),
+    { key: 'similar', label: 'Similar' },
   ];
 
   const renderDocRow = (document: OfficialBidDocument, idx: number, isFirstInGroup: boolean) => {
@@ -513,7 +574,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             backgroundColor={colors.surface}
           />
           <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* 1. Theme-Native Header with 1-Tap Copy Bid # */}
+            {/* 1. Slim 48dp Native Top Bar (Frameless & Clean) */}
             <View
               style={[
                 styles.headerBar,
@@ -521,13 +582,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               ]}
             >
               <Pressable
-                style={({ pressed }) => [
-                  styles.headerBackBtn,
-                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                  pressed && { opacity: 0.75 },
-                ]}
+                style={({ pressed }) => [styles.headerBackBtn, pressed && { opacity: 0.65 }]}
                 onPress={onClose}
-                hitSlop={8}
+                hitSlop={10}
                 accessibilityLabel="Close tender details"
               >
                 <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
@@ -536,7 +593,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               <Pressable
                 style={styles.headerCenter}
                 onPress={handleCopyBidNumber}
-                hitSlop={4}
+                hitSlop={6}
                 accessibilityLabel="Copy Bid Number"
               >
                 <View style={styles.headerBidRow}>
@@ -561,36 +618,32 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     </Text>
                   </View>
                 </View>
-                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {typeInfo.label} · Closes {formatDateSafe(bid.closingTimeUtc)}
-                </Text>
               </Pressable>
 
               <Pressable
                 style={({ pressed }) => [
                   styles.watchHeaderBtn,
                   {
-                    backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
-                    borderColor: isWatched ? colors.warning : colors.borderSubtle,
-                    opacity: pressed ? 0.78 : 1,
+                    backgroundColor: isWatched ? colors.warningTint : 'transparent',
+                    opacity: pressed ? 0.7 : 1,
                   },
                 ]}
                 onPress={() => void TenderRadarService.toggleWatch(effectiveBid)}
-                hitSlop={6}
+                hitSlop={8}
                 accessibilityLabel={isWatched ? 'Remove from watched tenders' : 'Watch tender'}
               >
                 <AppIcon
                   name={isWatched ? 'bookmarkFilled' : 'bookmark'}
                   color={isWatched ? colors.warning : colors.textSecondary}
-                  size={15}
+                  size={17}
                 />
               </Pressable>
 
               <Pressable
                 style={({ pressed }) => [
                   styles.sharePillBtn,
-                  { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-                  pressed && { opacity: 0.78 },
+                  { backgroundColor: colors.primaryTint },
+                  pressed && { opacity: 0.75 },
                 ]}
                 onPress={() => setShowDealSheet(true)}
                 hitSlop={6}
@@ -600,7 +653,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               </Pressable>
             </View>
 
-            {/* 2. Sticky Quick-Jump Section Bar */}
+            {/* 2. Sleek Native Underline Section Tabs */}
             <View
               style={[
                 styles.jumpBar,
@@ -619,30 +672,20 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                       key={item.key}
                       onPress={() => scrollToSection(item.key)}
                       style={[
-                        styles.jumpPill,
-                        {
-                          backgroundColor: active
-                            ? colors.primary
-                            : item.highlight
-                              ? colors.successTint
-                              : colors.surfaceSubtle,
-                          borderColor: active
-                            ? colors.primary
-                            : item.highlight
-                              ? colors.success
-                              : colors.borderSubtle,
-                        },
+                        styles.jumpTab,
+                        active && { borderBottomColor: colors.primary },
                       ]}
                     >
                       <Text
                         style={[
-                          styles.jumpPillText,
+                          styles.jumpTabText,
                           {
                             color: active
-                              ? colors.textInverse
+                              ? colors.primary
                               : item.highlight
                                 ? colors.success
                                 : colors.textSecondary,
+                            fontWeight: active ? '800' : '600',
                           },
                         ]}
                       >
@@ -660,137 +703,165 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Live Corrigendum / Representation Alert */}
-              {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
-                <View
-                  style={[
-                    styles.corrigendumBanner,
-                    { backgroundColor: colors.warningTint, borderColor: colors.warning },
-                  ]}
-                >
-                  <View style={[styles.corrigendumDot, { backgroundColor: colors.warning }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.corrigendumTitle, { color: colors.warning }]}>
-                      {otherDetails.hasCorrigendum
-                        ? 'Corrigendum published on GeM'
-                        : 'Representation recorded on GeM'}
+              {/* 1. Full-Bleed Editorial Overview + Compact Hairline Metric Strip */}
+              <View
+                style={[
+                  styles.overviewSheet,
+                  { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+                ]}
+              >
+                {/* Live Corrigendum / Pre-Bid Representation Compact Strip */}
+                {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
+                  <View
+                    style={[
+                      styles.corrigendumBanner,
+                      { backgroundColor: colors.warningTint, borderColor: colors.warning },
+                    ]}
+                  >
+                    <View style={styles.corrigendumBannerTop}>
+                      <View style={[styles.corrigendumDot, { backgroundColor: colors.warning }]} />
+                      <Text style={[styles.corrigendumTitle, { color: colors.warning }]} numberOfLines={1}>
+                        {otherDetails.hasCorrigendum && otherDetails.hasRepresentation
+                          ? 'Corrigendum & Pre-Bid Q&A published'
+                          : otherDetails.hasCorrigendum
+                            ? 'Corrigendum published on GeM'
+                            : 'Pre-Bid Q&A replies published'}
+                      </Text>
+                    </View>
+                    <View style={styles.corrigendumActionRow}>
+                      {otherDetails.hasCorrigendum ? (
+                        <Pressable
+                          onPress={() => {
+                            setCorrModalTab('CORRIGENDA');
+                            setShowCorrModal(true);
+                          }}
+                          style={({ pressed }) => [
+                            styles.corrigendumActionBtn,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.warning,
+                              opacity: pressed ? 0.78 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.corrigendumActionText, { color: colors.warning }]}>
+                            View Corrigenda ›
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {otherDetails.hasRepresentation ? (
+                        <Pressable
+                          onPress={() => {
+                            setCorrModalTab('QA');
+                            setShowCorrModal(true);
+                          }}
+                          style={({ pressed }) => [
+                            styles.corrigendumActionBtn,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.primary,
+                              opacity: pressed ? 0.78 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.corrigendumActionText, { color: colors.primary }]}>
+                            View Pre-Bid Q&amp;A ›
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
+
+                {/* Single Crisp Metadata Row */}
+                <View style={styles.heroTopRow}>
+                  <View style={styles.metaInlineRow}>
+                    <View
+                      style={[
+                        styles.typeDot,
+                        { backgroundColor: isRaBid ? colors.danger : colors.primary },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.metaTypeText,
+                        { color: isRaBid ? colors.danger : colors.primary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {typeInfo.label.toUpperCase()}
                     </Text>
-                    <Text style={[styles.corrigendumSubtitle, { color: colors.textSecondary }]}>
-                      Review the latest PDF amendments before preparing your quote.
+                    {bid.isHighValue ? (
+                      <Text style={[styles.metaHighValue, { color: colors.success }]}>
+                        · High Value (≥ ₹2 Cr)
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <View
+                    style={[
+                      styles.countdownPill,
+                      {
+                        backgroundColor: isClosingSoon ? colors.dangerTint : colors.primaryTint,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.countdownDot,
+                        { backgroundColor: isClosingSoon ? colors.danger : colors.primary },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.countdownPillText,
+                        { color: isClosingSoon ? colors.danger : colors.primary },
+                      ]}
+                    >
+                      {remainingLabel}
                     </Text>
                   </View>
                 </View>
-              )}
 
-              {/* 1. Executive Summary Card with Accent Bar & Breathable 2×2 KPI Grid */}
-              <View
-                style={[
-                  styles.heroCard,
-                  { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                ]}
-              >
+                <Text style={[styles.bidTitle, { color: colors.textPrimary }]} numberOfLines={3}>
+                  {effectiveBid.title || 'Untitled Bid'}
+                </Text>
+
+                <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {[
+                    effectiveBid.department,
+                    effectiveBid.ministry !== effectiveBid.department ? effectiveBid.ministry : '',
+                    bid.parentBidNumber ? `Parent ${bid.parentBidNumber}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+
+                {/* Compact Hairline-Divided 2×2 Key-Facts Matrix (Zero Box-in-Box Clutter) */}
                 <View
                   style={[
-                    styles.heroAccentStrip,
-                    { backgroundColor: isRaBid ? colors.danger : colors.primary },
+                    styles.metricMatrix,
+                    { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceSubtle },
                   ]}
-                />
-                <View style={styles.heroCardInner}>
-                  <View style={styles.heroTopRow}>
-                    <View style={styles.badgeRow}>
-                      <View
-                        style={[
-                          styles.pillBadge,
-                          { backgroundColor: isRaBid ? colors.dangerTint : colors.primaryTint },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.pillBadgeText,
-                            { color: isRaBid ? colors.danger : colors.primary },
-                          ]}
-                        >
-                          {typeInfo.label.toUpperCase()}
-                        </Text>
-                      </View>
-                      {bid.isHighValue ? (
-                        <View style={[styles.pillBadge, { backgroundColor: colors.successTint }]}>
-                          <Text style={[styles.pillBadgeText, { color: colors.success }]}>≥ ₹2 Cr</Text>
-                        </View>
-                      ) : null}
-                      {bid.parentBidNumber ? (
-                        <View style={[styles.pillBadge, { backgroundColor: colors.surfaceSubtle }]}>
-                          <Text style={[styles.pillBadgeText, { color: colors.textSecondary }]}>
-                            Parent: {bid.parentBidNumber}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    <View
-                      style={[
-                        styles.countdownPill,
-                        {
-                          backgroundColor: isClosingSoon ? colors.dangerTint : colors.primaryTint,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.countdownDot,
-                          { backgroundColor: isClosingSoon ? colors.danger : colors.primary },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.countdownPillText,
-                          { color: isClosingSoon ? colors.danger : colors.primary },
-                        ]}
-                      >
-                        {remainingLabel}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={[styles.bidTitle, { color: colors.textPrimary }]}>
-                    {effectiveBid.title || 'Untitled Bid'}
-                  </Text>
-                  <Text style={[styles.deptText, { color: colors.textSecondary }]}>
-                    {[
-                      effectiveBid.department,
-                      effectiveBid.ministry !== effectiveBid.department ? effectiveBid.ministry : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
-
-                  {/* Breathable 2×2 Executive KPI Grid */}
-                  <View style={styles.kpiGrid}>
-                    <View
-                      style={[
-                        styles.kpiTile,
-                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                      ]}
-                    >
+                >
+                  <View style={[styles.metricRow, { borderBottomColor: colors.borderSubtle }]}>
+                    <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
                       <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-                      <Text
-                        style={[styles.kpiValue, { color: colors.primary }]}
-                        numberOfLines={1}
-                      >
+                      <Text style={[styles.kpiValue, { color: colors.primary }]} numberOfLines={1}>
                         {estValueDisplay}
                       </Text>
-                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {totalQty !== undefined ? `Qty ${totalQty.toLocaleString('en-IN')} Units` : 'See scope in PDF'}
-                      </Text>
+                      {(isHighValueFallback || totalQty !== undefined) ? (
+                        <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {isHighValueFallback
+                            ? totalQty !== undefined
+                              ? `GeM flag · Qty ${totalQty.toLocaleString('en-IN')}`
+                              : 'GeM High Value flag'
+                            : `Qty ${totalQty!.toLocaleString('en-IN')} Units`}
+                        </Text>
+                      ) : null}
                     </View>
-
-                    <View
-                      style={[
-                        styles.kpiTile,
-                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                      ]}
-                    >
-                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD GUARANTEE</Text>
+                    <View style={styles.metricCell}>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD</Text>
                       <Text
                         style={[
                           styles.kpiValue,
@@ -800,28 +871,17 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                       >
                         {emdShortDisplay}
                       </Text>
-                      <Text
-                        style={[
-                          styles.kpiSub,
-                          { color: effectiveBid.isEmdExemptForMse ? colors.success : colors.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {effectiveBid.emdAmountInr === 0
-                          ? 'Not required for any bidder'
-                          : effectiveBid.isEmdExemptForMse
-                            ? 'MSE Exempt (OEM)'
-                            : 'Check PDF terms'}
-                      </Text>
+                      {effectiveBid.isEmdExemptForMse ? (
+                        <Text style={[styles.kpiSub, { color: colors.success }]} numberOfLines={1}>
+                          MSE Exempt (OEM)
+                        </Text>
+                      ) : null}
                     </View>
+                  </View>
 
-                    <View
-                      style={[
-                        styles.kpiTile,
-                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                      ]}
-                    >
-                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>e-PBG SECURITY</Text>
+                  <View style={styles.metricRowBottom}>
+                    <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>e-PBG</Text>
                       <Text
                         style={[
                           styles.kpiValue,
@@ -836,19 +896,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         ]}
                         numberOfLines={1}
                       >
-                        {epbgDisplay}
-                      </Text>
-                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {effectiveBid.epbgPercentage ? 'Post-award performance' : 'Performance security'}
+                        {effectiveBid.epbgPercentage === 0 ? 'None (0%)' : epbgDisplay}
                       </Text>
                     </View>
-
-                    <View
-                      style={[
-                        styles.kpiTile,
-                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                      ]}
-                    >
+                    <View style={styles.metricCell}>
                       <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>DELIVERY</Text>
                       <Text
                         style={[
@@ -857,42 +908,44 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         ]}
                         numberOfLines={1}
                       >
-                        {deliveryDisplay}
-                      </Text>
-                      <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {primaryDeliveryState || 'See consignees'}
+                        {effectiveBid.deliveryPeriodDays && primaryDeliveryState
+                          ? `${effectiveBid.deliveryPeriodDays}d · ${primaryDeliveryState}`
+                          : deliveryDisplay}
                       </Text>
                     </View>
                   </View>
+                </View>
 
-                  {/* 1-Tap Bid Margin & RA Floor Calculator Launcher */}
+                {/* Slim 1-Row Quick Tools Strip (Closes Date + 1-Tap Margin Calculator) */}
+                <View style={styles.quickActionBar}>
+                  <Text style={[styles.closesInlineText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    Closes {formatDateSafe(bid.closingTimeUtc)}
+                  </Text>
                   <Pressable
                     onPress={() => setShowMarginCalc(true)}
                     style={({ pressed }) => [
-                      styles.calcTriggerRow,
+                      styles.calcInlineChip,
                       {
                         backgroundColor: colors.primaryTint,
-                        borderColor: colors.borderSubtle,
-                        opacity: pressed ? 0.82 : 1,
+                        opacity: pressed ? 0.78 : 1,
                       },
                     ]}
                     accessibilityLabel="Open Bid Margin and RA Floor Calculator"
                   >
-                    <View style={[styles.calcIconBox, { backgroundColor: colors.surface }]}>
-                      <AppIcon name="calculator" color={colors.primary} size={15} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.calcTriggerTitle, { color: colors.primary }]}>
-                        Bid Margin &amp; RA Floor Calculator
-                      </Text>
-                      <Text style={[styles.calcTriggerSub, { color: colors.textSecondary }]}>
-                        Calculate GST quote, walk-away floor &amp; EMD/e-PBG cash
-                      </Text>
-                    </View>
-                    <Text style={[styles.calcTriggerCue, { color: colors.primary }]}>Calculate ›</Text>
+                    <AppIcon name="calculator" color={colors.primary} size={13} />
+                    <Text style={[styles.calcInlineText, { color: colors.primary }]}>
+                      Margin &amp; RA Calc ›
+                    </Text>
                   </Pressable>
                 </View>
               </View>
+
+              <View
+                style={styles.sectionsContainer}
+                onLayout={(e) => {
+                  sectionsOffsetYRef.current = e.nativeEvent.layout.y;
+                }}
+              >
 
               {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
               <View
@@ -1023,9 +1076,24 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         },
                       ]}
                     >
-                      <Text style={[styles.termLabel, { color: colors.textSecondary }]}>
-                        {row.label}
-                      </Text>
+                      <View style={styles.termLabelWrap}>
+                        <Text style={[styles.termLabel, { color: colors.textSecondary }]}>
+                          {row.label}
+                        </Text>
+                        {row.glossaryKey ? (
+                          <Pressable
+                            onPress={() => setGlossaryTerm(row.glossaryKey!)}
+                            hitSlop={8}
+                            style={[
+                              styles.termHelpDot,
+                              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                            ]}
+                            accessibilityLabel={`Explain ${row.label}`}
+                          >
+                            <Text style={[styles.termHelpDotText, { color: colors.primary }]}>?</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
                       <Text
                         style={[styles.termValue, { color: row.accent || colors.textPrimary }]}
                         numberOfLines={2}
@@ -1057,6 +1125,22 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   <PreBidDisqualificationShield
                     tenderDetails={ext}
                     onPrepareDocuments={handlePrepareDocuments}
+                  />
+                </View>
+              ) : null}
+
+              {/* 4b. ATC Trap Extractor & Instant PDF Keyword Finder */}
+              {ext || pdfScan?.searchableText ? (
+                <View
+                  onLayout={(e) => {
+                    sectionYRef.current.atc = e.nativeEvent.layout.y;
+                  }}
+                >
+                  <AtcTrapAndSearchCard
+                    tenderDetails={ext}
+                    searchableText={pdfScan?.searchableText}
+                    isScanning={isScanningPdf}
+                    onExplainAtc={() => setGlossaryTerm('ATC')}
                   />
                 </View>
               ) : null}
@@ -1279,10 +1363,20 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 </View>
               ) : null}
 
+              {/* 8. Similar Concluded Bids & Awarded Contracts Archive */}
+              <View
+                onLayout={(e) => {
+                  sectionYRef.current.similar = e.nativeEvent.layout.y;
+                }}
+              >
+                <SimilarConcludedBidsCard bid={effectiveBid} />
+              </View>
+
               <Text style={[styles.footerDisclaimer, { color: colors.textMuted }]}>
                 Direct public GeM feed + local on-device PDF extraction. Final bid submission and
                 account-specific pricing remain on bidplus.gem.gov.in.
               </Text>
+              </View>
             </ScrollView>
 
             {/* Streamlined Sticky Bottom Actions */}
@@ -1336,6 +1430,23 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         />
       )}
 
+      <GemGlossaryModal
+        visible={glossaryTerm !== null}
+        initialTermKey={glossaryTerm}
+        onClose={() => setGlossaryTerm(null)}
+      />
+
+      <CorrigendumAndQaModal
+        visible={showCorrModal}
+        bidNumber={bid.bidNumber}
+        corrigendumBidId={corrigendumBidId}
+        representationBidId={representationBidId}
+        hasCorrigendum={Boolean(otherDetails?.hasCorrigendum)}
+        hasRepresentation={Boolean(otherDetails?.hasRepresentation)}
+        initialTab={corrModalTab}
+        onClose={() => setShowCorrModal(false)}
+      />
+
       <BidDocumentViewer
         bid={effectiveBid}
         visible={documentViewerVisible}
@@ -1349,184 +1460,188 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerBar: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    gap: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 6,
   },
   headerBackBtn: {
     width: 38,
     height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerBackIcon: { fontSize: 19, fontWeight: '700' },
+  headerBackIcon: { fontSize: 20, fontWeight: '700' },
   headerCenter: { flex: 1 },
   headerBidRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerBidNum: { fontSize: 14.5, fontWeight: '800', flexShrink: 1 },
+  headerBidNum: { fontSize: 15, fontWeight: '800', flexShrink: 1, letterSpacing: -0.2 },
   copyChip: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 4,
   },
-  copyChipText: { fontSize: 10, fontWeight: '800' },
-  headerSubtitle: { fontSize: 11, marginTop: 2 },
+  copyChipText: { fontSize: 10, fontWeight: '700' },
   watchHeaderBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    borderWidth: 1,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sharePillBtn: {
     paddingHorizontal: 11,
-    minHeight: 34,
-    borderRadius: 9,
-    borderWidth: 1,
+    minHeight: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sharePillText: { fontSize: 11.5, fontWeight: '800' },
   jumpBar: {
-    borderBottomWidth: 1,
-    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   jumpBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    gap: 7,
+    gap: 18,
   },
-  jumpPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
+  jumpTab: {
+    paddingVertical: 9,
+    borderBottomWidth: 2.5,
+    borderBottomColor: 'transparent',
   },
-  jumpPillText: {
-    fontSize: 11.5,
-    fontWeight: '700',
+  jumpTabText: {
+    fontSize: 12.5,
   },
   scrollArea: { flex: 1 },
-  scrollContent: { padding: 14, paddingBottom: 28 },
+  scrollContent: { paddingBottom: 24 },
+  overviewSheet: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sectionsContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
   corrigendumBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1,
     borderRadius: 10,
-    padding: 11,
-    marginBottom: 12,
-    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+    gap: 7,
   },
-  corrigendumDot: { width: 8, height: 8, borderRadius: 4 },
-  corrigendumTitle: { fontSize: 12.5, fontWeight: '800' },
-  corrigendumSubtitle: { fontSize: 11.5, marginTop: 1 },
-  heroCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  heroAccentStrip: {
-    height: 4,
-    width: '100%',
-  },
-  heroCardInner: {
-    padding: 14,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 8,
-  },
-  badgeRow: {
+  corrigendumBannerTop: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  corrigendumDot: { width: 7, height: 7, borderRadius: 3.5 },
+  corrigendumTitle: { fontSize: 12, fontWeight: '800', flex: 1 },
+  corrigendumActionRow: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    flex: 1,
+    gap: 7,
   },
-  pillBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  corrigendumActionBtn: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pillBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+  corrigendumActionText: { fontSize: 11.5, fontWeight: '800' },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 5,
   },
-  countdownPill: {
+  metaInlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  countdownDot: { width: 6, height: 6, borderRadius: 3 },
-  countdownPillText: { fontSize: 10.5, fontWeight: '800' },
-  bidTitle: { fontSize: 17, fontWeight: '800', lineHeight: 23.5, marginBottom: 4 },
-  deptText: { fontSize: 12.5, lineHeight: 17.5, marginBottom: 12 },
-  kpiGrid: {
-    flexDirection: 'row',
+    flex: 1,
     flexWrap: 'wrap',
-    gap: 8,
   },
-  kpiTile: {
-    width: '48.6%',
+  typeDot: { width: 6, height: 6, borderRadius: 3 },
+  metaTypeText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 },
+  metaHighValue: { fontSize: 10.5, fontWeight: '800' },
+  countdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 10,
-    borderWidth: 1,
+  },
+  countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
+  countdownPillText: { fontSize: 10.5, fontWeight: '800' },
+  bidTitle: { fontSize: 16, fontWeight: '800', lineHeight: 21.5, marginBottom: 3 },
+  deptText: { fontSize: 12, lineHeight: 16.5, marginBottom: 10 },
+  metricMatrix: {
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  metricRow: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  metricRowBottom: {
+    flexDirection: 'row',
+  },
+  metricCell: {
+    flex: 1,
     paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingVertical: 7,
+  },
+  metricCellLeft: {
+    borderRightWidth: StyleSheet.hairlineWidth,
   },
   kpiLabel: {
     fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: 3,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 2,
   },
   kpiValue: {
-    fontSize: 14.5,
+    fontSize: 13.5,
     fontWeight: '800',
   },
   kpiSub: {
     fontSize: 10.5,
-    marginTop: 2,
+    marginTop: 1,
   },
-  calcTriggerRow: {
+  quickActionBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
-    marginTop: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    minHeight: 48,
+    marginTop: 9,
   },
-  calcIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+  closesInlineText: { fontSize: 11.5, fontWeight: '600', flex: 1 },
+  calcInlineChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    minHeight: 32,
+    borderRadius: 16,
   },
-  calcTriggerTitle: { fontSize: 12.5, fontWeight: '800' },
-  calcTriggerSub: { fontSize: 10.5, marginTop: 1 },
-  calcTriggerCue: { fontSize: 12, fontWeight: '800' },
+  calcInlineText: { fontSize: 11.5, fontWeight: '800' },
   card: {
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
+    borderRadius: 12,
+    padding: 13,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1610,7 +1725,22 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 12,
   },
-  termLabel: { fontSize: 12.5, fontWeight: '500', flex: 1 },
+  termLabelWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  termLabel: { fontSize: 12.5, fontWeight: '500', flexShrink: 1 },
+  termHelpDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  termHelpDotText: { fontSize: 10.5, fontWeight: '900' },
   termValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.15 },
   policyTagsRow: {
     flexDirection: 'row',

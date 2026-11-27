@@ -43,6 +43,10 @@ import {
   type LiveGeMServiceSummary,
 } from '../services/GeMServicesClient';
 import { ServiceDetailModal, type ActiveServiceTarget } from './ServiceDetailModal';
+import {
+  ProductCompareModal,
+  type CompareModalTab,
+} from '../components/ProductCompareModal';
 import type { DeconstructedBidDoc } from '../types/index';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/designTokens';
@@ -304,15 +308,28 @@ interface ProductGridCardProps {
   item: MarketplaceItem;
   qty: number;
   isSaved: boolean;
+  isCompared: boolean;
   colors: ThemeColors;
   fontMultiplier: number;
   onOpenDetail: (item: MarketplaceItem) => void;
   onToggleSave: (id: string) => void;
+  onToggleCompare: (item: MarketplaceItem) => void;
   onUpdateQty: (id: string, delta: number) => void;
 }
 
 const ProductGridCard = React.memo<ProductGridCardProps>(
-  ({ item, qty, isSaved, colors, fontMultiplier, onOpenDetail, onToggleSave, onUpdateQty }) => {
+  ({
+    item,
+    qty,
+    isSaved,
+    isCompared,
+    colors,
+    fontMultiplier,
+    onOpenDetail,
+    onToggleSave,
+    onToggleCompare,
+    onUpdateQty,
+  }) => {
     const sellerLabel = item.specSummary?.['Seller'];
     const sellerType = item.specSummary?.['Seller Type'] || 'Seller';
 
@@ -442,6 +459,29 @@ const ProductGridCard = React.memo<ProductGridCardProps>(
               </Pressable>
             </View>
           )}
+
+          <Pressable
+            style={[
+              styles.gridCompareBtn,
+              {
+                backgroundColor: isCompared ? colors.primaryTint : colors.surfaceSubtle,
+                borderColor: isCompared ? colors.primary : colors.borderSubtle,
+              },
+            ]}
+            unstable_pressDelay={0}
+            hitSlop={4}
+            onPress={() => onToggleCompare(item)}
+            accessibilityLabel={isCompared ? 'Remove from OEM compare' : 'Add to OEM compare'}
+          >
+            <Text
+              style={[
+                styles.gridCompareBtnText,
+                { color: isCompared ? colors.primary : colors.textSecondary },
+              ]}
+            >
+              {isCompared ? '✓ Comparing' : '⇄ Compare OEM'}
+            </Text>
+          </Pressable>
         </View>
       </Pressable>
     );
@@ -635,6 +675,9 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [savedItemIds, setSavedItemIds] = useState<Set<string>>(new Set());
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [compareItems, setCompareItems] = useState<MarketplaceItem[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState<boolean>(false);
+  const [compareInitialTab, setCompareInitialTab] = useState<CompareModalTab>('COMPARE');
   const [showCartModal, setShowCartModal] = useState<boolean>(false);
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
   const [filterBrand, setFilterBrand] = useState<string>('ALL');
@@ -681,6 +724,10 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   // Hardware BackHandler
   useEffect(() => {
     const onBackPress = () => {
+      if (showCompareModal) {
+        setShowCompareModal(false);
+        return true;
+      }
       if (showCartModal) {
         setShowCartModal(false);
         return true;
@@ -713,6 +760,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
   }, [
+    showCompareModal,
     showCartModal,
     selectedItem,
     activeService,
@@ -720,6 +768,29 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
     showSearchSuggestions,
     activeProductQuery,
   ]);
+
+  const compareIds = useMemo(() => new Set(compareItems.map((i) => i.id)), [compareItems]);
+
+  const toggleCompareItem = useCallback((item: MarketplaceItem) => {
+    setCompareItems((prev) => {
+      if (prev.some((p) => p.id === item.id)) {
+        return prev.filter((p) => p.id !== item.id);
+      }
+      if (prev.length >= 3) {
+        Alert.alert(
+          'Compare limit reached',
+          'You can compare up to 3 live GeM products side-by-side. Remove one to add another.'
+        );
+        return prev;
+      }
+      return [...prev, item];
+    });
+  }, []);
+
+  const openCompareModal = useCallback((initialTab: CompareModalTab = 'COMPARE') => {
+    setCompareInitialTab(initialTab);
+    setShowCompareModal(true);
+  }, []);
 
   // Load full live GeM services directory (380+ services with real photos)
   const loadLiveServicesDirectory = useCallback(async (forceRefresh = false) => {
@@ -1485,14 +1556,26 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
         item={item}
         qty={cart[item.id] || 0}
         isSaved={savedItemIds.has(item.id)}
+        isCompared={compareIds.has(item.id)}
         colors={colors}
         fontMultiplier={fontMultiplier}
         onOpenDetail={handleOpenDetail}
         onToggleSave={toggleSaveItem}
+        onToggleCompare={toggleCompareItem}
         onUpdateQty={updateCartQty}
       />
     ),
-    [cart, savedItemIds, colors, fontMultiplier, handleOpenDetail, toggleSaveItem, updateCartQty]
+    [
+      cart,
+      savedItemIds,
+      compareIds,
+      colors,
+      fontMultiplier,
+      handleOpenDetail,
+      toggleSaveItem,
+      toggleCompareItem,
+      updateCartQty,
+    ]
   );
 
   // Results summary copy
@@ -1600,27 +1683,42 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
               </Text>
             </View>
 
-            <Pressable
-              style={[
-                styles.brandFilterBtn,
-                {
-                  backgroundColor: filterBrand !== 'ALL' ? colors.primaryTint : colors.surface,
-                  borderColor: filterBrand !== 'ALL' ? colors.primary : colors.border,
-                },
-              ]}
-              unstable_pressDelay={0}
-              hitSlop={6}
-              onPress={() => setShowFilterModal(true)}
-            >
-              <Text
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Pressable
                 style={[
-                  styles.brandFilterText,
-                  { color: filterBrand !== 'ALL' ? colors.primary : colors.textPrimary },
+                  styles.brandFilterBtn,
+                  { backgroundColor: colors.primaryTint, borderColor: colors.primary },
                 ]}
+                unstable_pressDelay={0}
+                hitSlop={6}
+                onPress={() => openCompareModal('GFR149')}
+                accessibilityLabel="Open GFR 149 procurement rule helper"
               >
-                {filterBrand !== 'ALL' ? `Brand: ${filterBrand}` : 'Brand ▾'}
-              </Text>
-            </Pressable>
+                <Text style={[styles.brandFilterText, { color: colors.primary }]}>GFR 149</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.brandFilterBtn,
+                  {
+                    backgroundColor: filterBrand !== 'ALL' ? colors.primaryTint : colors.surface,
+                    borderColor: filterBrand !== 'ALL' ? colors.primary : colors.border,
+                  },
+                ]}
+                unstable_pressDelay={0}
+                hitSlop={6}
+                onPress={() => setShowFilterModal(true)}
+              >
+                <Text
+                  style={[
+                    styles.brandFilterText,
+                    { color: filterBrand !== 'ALL' ? colors.primary : colors.textPrimary },
+                  ]}
+                >
+                  {filterBrand !== 'ALL' ? `Brand: ${filterBrand}` : 'Brand ▾'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           {itemsList.length > 1 ? (
@@ -1670,6 +1768,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
       handleSelectCategoryTile,
       handleSelectSubcategoryChip,
       clearLiveProductSearch,
+      openCompareModal,
     ]
   );
 
@@ -2059,6 +2158,40 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
         />
       )}
 
+      {/* Floating OEM Compare Bar (stacks cleanly above Shortlist bar if both active) */}
+      {compareItems.length > 0 && activeTypeTab === 'Products' && (
+        <View
+          style={[
+            styles.floatingCompareBar,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.primary,
+              bottom: totalCartCount > 0 ? 78 : 12,
+            },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.compareBarTitle, { color: colors.textPrimary }]}>
+              {compareItems.length}/3 OEMs selected for Compare
+            </Text>
+            <Text style={[styles.compareBarSub, { color: colors.textSecondary }]}>
+              {compareItems.length >= 2
+                ? 'Side-by-side L1 price & GFR 149 check ready'
+                : 'Pick 1–2 more live products to compare'}
+            </Text>
+          </View>
+          <Pressable
+            style={[styles.compareBarBtn, { backgroundColor: colors.primary }]}
+            onPress={() => openCompareModal('COMPARE')}
+            hitSlop={6}
+          >
+            <Text style={[styles.compareBarBtnText, { color: colors.textInverse }]}>
+              Compare →
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Floating Shortlist Summary Bar */}
       {totalCartCount > 0 && (
         <View style={[styles.floatingCartBar, { backgroundColor: colors.primary }]}>
@@ -2322,6 +2455,16 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
           </View>
         </Modal>
       )}
+
+      {/* Side-by-Side Product Compare & GFR 149 Helper Modal */}
+      <ProductCompareModal
+        visible={showCompareModal}
+        initialTab={compareInitialTab}
+        items={compareItems}
+        onRemoveItem={(id) => setCompareItems((prev) => prev.filter((p) => p.id !== id))}
+        onClearCompare={() => setCompareItems([])}
+        onClose={() => setShowCompareModal(false)}
+      />
 
       {/* Full-Screen Live In-App Service Explorer */}
       <ServiceDetailModal
@@ -2624,6 +2767,16 @@ const styles = StyleSheet.create({
   gridStepperBtn: { paddingHorizontal: 6, paddingVertical: 4 },
   gridStepperSymbol: { fontSize: 15, fontWeight: '800' },
   gridStepperQty: { fontSize: 12.5, fontWeight: '800' },
+  gridCompareBtn: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderRadius: 7,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  gridCompareBtnText: { fontSize: 10.5, fontWeight: '800' },
 
   // Pagination & Empty States
   paginationFooter: {
@@ -2735,6 +2888,27 @@ const styles = StyleSheet.create({
   },
 
   // Floating Shortlist Bar & Modals
+  floatingCompareBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    elevation: 7,
+  },
+  compareBarTitle: { fontSize: 12.5, fontWeight: '800' },
+  compareBarSub: { fontSize: 10.5, marginTop: 1 },
+  compareBarBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  compareBarBtnText: { fontSize: 12, fontWeight: '800' },
   floatingCartBar: {
     position: 'absolute',
     left: 12,

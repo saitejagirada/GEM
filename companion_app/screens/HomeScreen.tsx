@@ -96,7 +96,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenMyWork,
   onOpenOfficialPortal,
 }) => {
-  const { colors, fontMultiplier } = useTheme();
+  const { colors, fontMultiplier, t } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterPill, setActiveFilterPill] = useState('All');
 
@@ -260,12 +260,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* 1. Compact Welcome + Universal Search */}
       <View style={styles.welcomeSection}>
         <Text style={[styles.welcomeTitle, { color: colors.textPrimary, fontSize: 23 * fontMultiplier }]}>
-          Procurement, made simpler
+          {t('homeHeroTitle')}
         </Text>
         <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary, fontSize: 13.5 * fontMultiplier }]}>
           {(totalPortalBids || bids.length) > 0
             ? `${(totalPortalBids || bids.length).toLocaleString('en-IN')} live public GeM tenders · Direct phone-to-GeM feed`
-            : 'Discover live tenders, products, services, and buyer attachments directly from GeM.'}
+            : t('homeHeroSub')}
         </Text>
       </View>
 
@@ -273,7 +273,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search products, services, bids or contracts"
+          placeholder={t('homeSearchPlaceholder')}
           onSubmit={handleSearchSubmit}
         />
         <ScrollView
@@ -310,7 +310,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <AppIcon name="bookmarkFilled" color={colors.warning} size={13} />
               </View>
               <Text style={[styles.sectionTitleText, { color: colors.textPrimary }]}>
-                Watched Tenders ({radar.watched.length})
+                {t('watchedTenders')} ({radar.watched.length})
               </Text>
             </View>
             <Pressable
@@ -453,7 +453,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.radarCardTitle, { color: colors.textPrimary }]}>
-                    My Daily Tender Radar
+                    {t('myDailyRadar')}
                   </Text>
                   <Text style={[styles.radarCardSub, { color: colors.textSecondary }]}>
                     Pick what you sell once — see matching live GeM tenders here every day.
@@ -775,7 +775,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* 4. Quick Access Grid (Clean Geometric AppIcons) */}
       <View style={styles.quickAccessSection}>
-        <SectionHeader title="Quick access" />
+        <SectionHeader title={t('quickAccess')} />
         <View style={styles.quickGrid}>
           <Pressable
             style={[styles.quickCard, { backgroundColor: colors.surface, borderColor: colors.border }]}

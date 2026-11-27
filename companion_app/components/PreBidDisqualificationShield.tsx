@@ -29,6 +29,10 @@ import {
   type DisqualificationShieldReport,
 } from '../services/DisqualificationShieldEngine';
 import { BusinessProfileService } from '../services/BusinessProfileService';
+import {
+  CompanyDocLockerService,
+  type CompanyLockerDocument,
+} from '../services/CompanyDocLockerService';
 import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { formatInr } from '../utils/formatters';
 import { AppIcon } from './AppIcons';
@@ -63,11 +67,20 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
     BusinessProfileService.getProfile()
   );
   const [workspaceDocs, setWorkspaceDocs] = useState<WorkspaceDocument[]>([]);
+  const [lockerDocs, setLockerDocs] = useState<CompanyLockerDocument[]>(() =>
+    CompanyDocLockerService.getDocuments()
+  );
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
     BusinessProfileService.hydrate().then(setSavedProfile).catch(() => undefined);
-    return BusinessProfileService.subscribe(setSavedProfile);
+    const unsubProfile = BusinessProfileService.subscribe(setSavedProfile);
+    CompanyDocLockerService.hydrate().then(setLockerDocs).catch(() => undefined);
+    const unsubLocker = CompanyDocLockerService.subscribe(setLockerDocs);
+    return () => {
+      unsubProfile();
+      unsubLocker();
+    };
   }, []);
 
   useEffect(() => {
@@ -89,7 +102,10 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
   }, [attachedDocs, tenderDetails.bidNumber]);
 
   const activeProfile = profile ?? savedProfile ?? undefined;
-  const activeDocs = attachedDocs ?? workspaceDocs;
+  const activeDocs = useMemo(() => {
+    if (attachedDocs !== undefined) return attachedDocs;
+    return [...workspaceDocs, ...CompanyDocLockerService.toWorkspaceDocuments(lockerDocs)];
+  }, [attachedDocs, workspaceDocs, lockerDocs]);
 
   // Run profile-matched compliance engine ONLY when a real user profile is provided/configured
   const profileReport: DisqualificationShieldReport | null = useMemo(() => {

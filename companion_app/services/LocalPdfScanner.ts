@@ -15,7 +15,8 @@ import {
 } from './GemPdfExtractor.ts';
 import { PortalDocService } from './PortalDocService.ts';
 
-const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v4';
+const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v5';
+const MAX_SEARCHABLE_TEXT_CHARS = 60000;
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
 const PDF_FETCH_TIMEOUT_MS = 15000;
 const PDF_FETCH_USER_AGENT =
@@ -85,6 +86,8 @@ export interface LocalPdfScanResult {
   status: LocalPdfScanStatus;
   details: LocalPdfDetails;
   textLength: number;
+  /** Bounded locally extracted text layer for instant in-app ATC trap & keyword search. */
+  searchableText?: string;
   scannedAtUtc: string;
   note: string;
 }
@@ -349,6 +352,7 @@ function scanSource(
     status: 'EXTRACTED',
     details,
     textLength: text.length,
+    searchableText: text.slice(0, MAX_SEARCHABLE_TEXT_CHARS),
     scannedAtUtc,
     note: 'Details and compliance barriers extracted locally from official GeM PDF text layer. Confirm every requirement before bidding.',
   };
@@ -479,6 +483,11 @@ export class LocalPdfScanner {
       extendedDetails: mergedExtended,
     };
 
+    const mergedSearchableText = [parentScan.searchableText, raScan.searchableText]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, MAX_SEARCHABLE_TEXT_CHARS);
+
     return {
       bidNumber: bid.bidNumber,
       documentUrl: primaryDoc.url,
@@ -486,6 +495,7 @@ export class LocalPdfScanner {
       status: 'EXTRACTED',
       details: mergedDetails,
       textLength: parentScan.textLength + raScan.textLength,
+      searchableText: mergedSearchableText || undefined,
       scannedAtUtc: new Date().toISOString(),
       note: `Extracted locally from RA PDF + Original Bid PDF (${bid.parentBidNumber || 'Parent Bid'}). Confirm all clauses before bidding.`,
     };

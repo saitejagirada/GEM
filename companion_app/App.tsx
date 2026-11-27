@@ -35,7 +35,7 @@ import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
-import { MyWorkScreen } from './screens/MyWorkScreen';
+import { MyWorkScreen, type PreparationSection } from './screens/MyWorkScreen';
 import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
 import { GeMLiveSyncService } from './services/GeMLiveSyncService';
 import { isNetworkOnline } from './utils/network';
@@ -61,16 +61,20 @@ export type SubScreen =
   | 'REG_SELLER'
   | 'HELP';
 
-const BOTTOM_NAV_ITEMS: { id: MainTab; label: string; icon: AppIconName }[] = [
-  { id: 'HOME', label: 'Home', icon: 'home' },
-  { id: 'SEARCH', label: 'Search', icon: 'search' },
-  { id: 'BIDS', label: 'Bids', icon: 'bids' },
-  { id: 'AUCTIONS', label: 'Auctions', icon: 'auctions' },
-  { id: 'MORE', label: 'More', icon: 'more' },
+const BOTTOM_NAV_ITEMS: {
+  id: MainTab;
+  labelKey: 'tabHome' | 'tabSearch' | 'tabBids' | 'tabAuctions' | 'tabMore';
+  icon: AppIconName;
+}[] = [
+  { id: 'HOME', labelKey: 'tabHome', icon: 'home' },
+  { id: 'SEARCH', labelKey: 'tabSearch', icon: 'search' },
+  { id: 'BIDS', labelKey: 'tabBids', icon: 'bids' },
+  { id: 'AUCTIONS', labelKey: 'tabAuctions', icon: 'auctions' },
+  { id: 'MORE', labelKey: 'tabMore', icon: 'more' },
 ];
 
 const MainAppContent: React.FC = () => {
-  const { colors, fontMultiplier, isDark } = useTheme();
+  const { colors, fontMultiplier, isDark, t } = useTheme();
 
   // Branded GeM startup launch splash (eliminates blank white flash on startup)
   const [showSplash, setShowSplash] = useState<boolean>(true);
@@ -96,6 +100,7 @@ const MainAppContent: React.FC = () => {
   const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
   const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
+  const [workInitialSection, setWorkInitialSection] = useState<PreparationSection>('LIVE');
 
   // Dismiss branded GeM splash smoothly after brief launch reveal
   useEffect(() => {
@@ -243,6 +248,7 @@ const MainAppContent: React.FC = () => {
   const openPreparation = useCallback((bid: DeconstructedBidDoc) => {
     setSelectedBid(null);
     setPreparationBidNumber(bid.bidNumber);
+    setWorkInitialSection('DOCUMENTS');
     setSubScreen('PORTFOLIO');
   }, []);
 
@@ -298,75 +304,77 @@ const MainAppContent: React.FC = () => {
         backgroundColor={colors.surface}
       />
 
-      {/* Compact Official GeM Header */}
-      <View
-        style={[
-          styles.headerBar,
-          {
-            backgroundColor: colors.surface,
-            borderBottomColor: colors.borderSubtle,
-          },
-        ]}
-      >
-        {/* Left: Real Official GeM Pinwheel Logo + Wordmark */}
-        <Pressable
-          style={styles.brandRow}
-          unstable_pressDelay={0}
-          hitSlop={8}
-          onPress={() => {
-            setActiveTab('HOME');
-            setSubScreen('NONE');
-          }}
+      {/* Branded GeM Header — Shown on Home Tab Only to Maximize Space on Inner Screens */}
+      {activeTab === 'HOME' && subScreen === 'NONE' && (
+        <View
+          style={[
+            styles.headerBar,
+            {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.borderSubtle,
+            },
+          ]}
         >
-          <Image source={GEM_MARK_IMG} style={styles.gemLogoMark} resizeMode="contain" />
-          <View style={styles.brandTextCol}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.brandGeM, { color: colors.primary }]}>GeM</Text>
-              <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
+          {/* Left: Real Official GeM Pinwheel Logo + Wordmark */}
+          <Pressable
+            style={styles.brandRow}
+            unstable_pressDelay={0}
+            hitSlop={8}
+            onPress={() => {
+              setActiveTab('HOME');
+              setSubScreen('NONE');
+            }}
+          >
+            <Image source={GEM_MARK_IMG} style={styles.gemLogoMark} resizeMode="contain" />
+            <View style={styles.brandTextCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.brandGeM, { color: colors.primary }]}>GeM</Text>
+                <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
+              </View>
+              <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
+                Government e-Marketplace
+              </Text>
             </View>
-            <Text style={[styles.brandSubtitle, { color: colors.textSecondary }]}>
-              Government e-Marketplace
-            </Text>
+          </Pressable>
+
+          {/* Right: Clear 1-Tap Bid Lookup + Portal Quick Action */}
+          <View style={styles.headerRightActions}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.findBidPill,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.borderSubtle,
+                  opacity: pressed ? 0.78 : 1,
+                },
+              ]}
+              unstable_pressDelay={0}
+              onPress={() => setShowLookupModal(true)}
+              hitSlop={6}
+              accessibilityLabel="Find bid by number"
+            >
+              <AppIcon name="search" color={colors.primary} size={14} />
+              <Text style={[styles.findBidText, { color: colors.textPrimary }]}>{t('findBid')}</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.portalQuickBtn,
+                {
+                  backgroundColor: colors.primaryTint,
+                  opacity: pressed ? 0.78 : 1,
+                },
+              ]}
+              unstable_pressDelay={0}
+              onPress={() => setSubScreen('PORTAL')}
+              hitSlop={6}
+              accessibilityLabel="Open official GeM portal"
+            >
+              <Text style={[styles.portalQuickText, { color: colors.primary }]}>{t('portal')}</Text>
+            </Pressable>
           </View>
-        </Pressable>
-
-        {/* Right: Clear 1-Tap Bid Lookup + Portal Quick Action */}
-        <View style={styles.headerRightActions}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.findBidPill,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.borderSubtle,
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}
-            unstable_pressDelay={0}
-            onPress={() => setShowLookupModal(true)}
-            hitSlop={6}
-            accessibilityLabel="Find bid by number"
-          >
-            <AppIcon name="search" color={colors.primary} size={14} />
-            <Text style={[styles.findBidText, { color: colors.textPrimary }]}>Find Bid</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.portalQuickBtn,
-              {
-                backgroundColor: colors.primaryTint,
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}
-            unstable_pressDelay={0}
-            onPress={() => setSubScreen('PORTAL')}
-            hitSlop={6}
-            accessibilityLabel="Open official GeM portal"
-          >
-            <Text style={[styles.portalQuickText, { color: colors.primary }]}>Portal ↗</Text>
-          </Pressable>
         </View>
-      </View>
+      )}
 
       {/* Screen Body */}
       <View style={[styles.screenBody, { backgroundColor: colors.background }]}>
@@ -426,6 +434,7 @@ const MainAppContent: React.FC = () => {
             <MyWorkScreen
               availableBids={bids}
               initialBidNumber={preparationBidNumber}
+              initialSection={workInitialSection}
               onOpenOfficialPortal={() => setSubScreen('PORTAL')}
             />
           </View>
@@ -475,7 +484,14 @@ const MainAppContent: React.FC = () => {
             {activeTab === 'MORE' && (
               <MoreProfileScreen
                 onNavigateTab={handleHomeNavigate}
-                onOpenPortfolio={() => setSubScreen('PORTFOLIO')}
+                onOpenPortfolio={() => {
+                  setWorkInitialSection('LIVE');
+                  setSubScreen('PORTFOLIO');
+                }}
+                onOpenCompanyLocker={() => {
+                  setWorkInitialSection('LOCKER');
+                  setSubScreen('PORTFOLIO');
+                }}
                 onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
             )}
@@ -529,7 +545,7 @@ const MainAppContent: React.FC = () => {
                   },
                 ]}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Text>
             </Pressable>
           );
