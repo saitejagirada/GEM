@@ -104,6 +104,205 @@ export function sanitizeRadarKeyword(raw: string): string {
     .slice(0, 32);
 }
 
+const RADAR_STOP_WORDS = new Set([
+  'and',
+  'for',
+  'with',
+  'the',
+  'of',
+  'in',
+  'to',
+  'on',
+  'at',
+  'by',
+  'from',
+]);
+
+// Words that match thousands of unrelated GeM departments/tenders when sent in OR fullText queries
+// (e.g. "Air" matches Indian Air Force Cricket Bats; "Water" matches Water Tankers; "Office" matches Stationery)
+const GENERIC_MULTIWORD_TOKENS = new Set([
+  'air',
+  'water',
+  'office',
+  'system',
+  'systems',
+  'machine',
+  'machines',
+  'unit',
+  'units',
+  'equipment',
+  'service',
+  'services',
+  'item',
+  'items',
+  'supply',
+  'panel',
+  'panels',
+  'set',
+  'kit',
+  'kits',
+  'work',
+  'works',
+  'new',
+  'high',
+  'smart',
+  'digital',
+  'electric',
+  'power',
+  'auto',
+  'mini',
+  'heavy',
+  'light',
+  'sheet',
+  'board',
+  'box',
+  'stand',
+  'room',
+  'home',
+  'general',
+  'standard',
+  'type',
+  'based',
+  'multi',
+  'all',
+  'portable',
+  'mobile',
+  'industrial',
+  'commercial',
+  'domestic',
+]);
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractRadarTokens(keyword: string): string[] {
+  return sanitizeRadarKeyword(keyword)
+    .toLowerCase()
+    .split(/[\s/&_-]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && !RADAR_STOP_WORDS.has(t));
+}
+
+function tokenMatchesText(haystackLower: string, tokenLower: string): boolean {
+  if (!haystackLower || !tokenLower) return false;
+  if (tokenLower === 'purifier') {
+    return /\bpurif(?:ier|iers|ication|ying|y)\b/i.test(haystackLower);
+  }
+  if (tokenLower === 'conditioner') {
+    return /\bcondition(?:er|ers|ing)\b/i.test(haystackLower);
+  }
+  if (tokenLower === 'medical') {
+    return /\b(?:medical|medicine|medicines|hospital|clinical|surgical|diagnostic|pharma)\b/i.test(
+      haystackLower
+    );
+  }
+  if (tokenLower === 'electrical') {
+    return /\belectric(?:al|s)?\b/i.test(haystackLower);
+  }
+  if (tokenLower === 'vehicles' || tokenLower === 'vehicle') {
+    return /\b(?:vehicle|vehicles|car|cars|bus|buses|ambulance|truck|tractor|suv|sedan|bolero|jeep)\b/i.test(
+      haystackLower
+    );
+  }
+  const stem =
+    tokenLower.endsWith('ies') && tokenLower.length > 4
+      ? `${escapeRegex(tokenLower.slice(0, -3))}(?:y|ies)`
+      : tokenLower.endsWith('s') && tokenLower.length > 4
+        ? `${escapeRegex(tokenLower.slice(0, -1))}s?`
+        : `${escapeRegex(tokenLower)}(?:s|es)?`;
+  return new RegExp(`\\b${stem}\\b`, 'i').test(haystackLower);
+}
+
+/**
+ * Picks the highest-signal search term to send to GeM's Solr `fullText` API.
+ * GeM splits multi-word `fullText` queries with OR logic, so "Air Conditioner" gets drowned
+ * by 3,700+ Indian Air Force tenders unless we anchor on the distinctive word ("Conditioner").
+ */
+export function pickBestGeMSearchQuery(keyword: string): string {
+  const clean = sanitizeRadarKeyword(keyword);
+  const tokens = extractRadarTokens(clean);
+  if (tokens.length <= 1) return clean;
+
+  const distinctive = tokens.filter((t) => !GENERIC_MULTIWORD_TOKENS.has(t));
+  const hasGeneric = tokens.some((t) => GENERIC_MULTIWORD_TOKENS.has(t));
+
+  if (distinctive.length > 0 && hasGeneric) {
+    // Use the longest distinctive word (e.g. "Conditioner", "Purifier", "Chair", "Solar")
+    const best = [...distinctive].sort((a, b) => b.length - a.length)[0];
+    return best.charAt(0).toUpperCase() + best.slice(1);
+  }
+
+  return clean;
+}
+
+/**
+ * Strict on-device relevance filter & ranker for Daily Tender Radar.
+ * Rejects GeM OR-search fallout (e.g. Cricket Bats for "Air Conditioner" or unrelated
+ * Facility Management contracts where a word only appeared in a buyer's office address).
+ */
+export function filterRelevantRadarBids(
+  keyword: string,
+  candidates: DeconstructedBidDoc[]
+): DeconstructedBidDoc[] {
+  const cleanKeyword = sanitizeRadarKeyword(keyword).toLowerCase();
+  const tokens = extractRadarTokens(keyword);
+  if (!cleanKeyword || tokens.length === 0) return candidates;
+
+  const distinctiveTokens = tokens.filter((t) => !GENERIC_MULTIWORD_TOKENS.has(t));
+  const scored: Array<{ bid: DeconstructedBidDoc; score: number }> = [];
+
+  for (const bid of candidates) {
+    const itemText = `${bid.title || ''} ${bid.categoryDomain || ''}`.toLowerCase();
+    if (!itemText.trim()) continue;
+
+    const exactPhrase =
+      cleanKeyword.length >= 3 &&
+      new RegExp(`\\b${escapeRegex(cleanKeyword)}\\b`, 'i').test(itemText);
+
+    let matchedAllCount = 0;
+    let matchedDistinctiveCount = 0;
+    for (const tok of tokens) {
+      if (tokenMatchesText(itemText, tok)) {
+        matchedAllCount += 1;
+        if (!GENERIC_MULTIWORD_TOKENS.has(tok)) {
+          matchedDistinctiveCount += 1;
+        }
+      }
+    }
+
+    let passes = false;
+    if (tokens.length === 1) {
+      passes = exactPhrase || matchedAllCount >= 1;
+    } else if (distinctiveTokens.length > 0) {
+      // Multi-word with distinctive anchor (e.g. "Air Conditioner", "Water Purifier", "Office Chair"):
+      // MUST match exact phrase, ALL tokens, or at least one distinctive non-generic noun
+      passes = exactPhrase || matchedAllCount === tokens.length || matchedDistinctiveCount >= 1;
+    } else {
+      // All tokens are generic (e.g. "Office System"): require exact phrase or all tokens
+      passes = exactPhrase || matchedAllCount === tokens.length;
+    }
+
+    if (!passes) continue;
+
+    const score =
+      (exactPhrase ? 120 : 0) +
+      (matchedAllCount === tokens.length ? 60 : 0) +
+      matchedDistinctiveCount * 35 +
+      matchedAllCount * 10;
+    scored.push({ bid, score });
+  }
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aStart = a.bid.startTimeUtc ? new Date(a.bid.startTimeUtc).getTime() : 0;
+    const bStart = b.bid.startTimeUtc ? new Date(b.bid.startTimeUtc).getTime() : 0;
+    return bStart - aStart;
+  });
+
+  return scored.map((entry) => entry.bid);
+}
+
 /**
  * Formats an ISO UTC timestamp into Google Calendar UTC date format: YYYYMMDDTHHMMSSZ
  */
@@ -323,19 +522,31 @@ export class TenderRadarService {
       highValueOnly: next.highValueOnly ?? this.state.config.highValueOnly,
     };
 
-    // Prune cached results for removed keywords
+    const wasUnconfigured = this.state.config.keywords.length === 0;
+    const filtersChanged =
+      nextConfig.vehicleFilter !== this.state.config.vehicleFilter ||
+      nextConfig.highValueOnly !== this.state.config.highValueOnly;
+
+    // Clear stale cache whenever filters change or Radar is cleared; otherwise prune removed keywords only
     const allowedSet = new Set(dedupedKeywords.map((k) => k.toLowerCase()));
     const prunedByKeyword: Record<string, RadarKeywordResult> = {};
-    for (const [k, v] of Object.entries(this.state.byKeyword)) {
-      if (allowedSet.has(k.toLowerCase())) {
-        prunedByKeyword[k] = v;
+    if (!filtersChanged && dedupedKeywords.length > 0) {
+      for (const [k, v] of Object.entries(this.state.byKeyword)) {
+        if (allowedSet.has(k.toLowerCase())) {
+          prunedByKeyword[k] = v;
+        }
       }
     }
+
+    // Reset seen baseline when clearing Radar or activating fresh from empty so initial results never scream NEW
+    const nextSeen =
+      dedupedKeywords.length === 0 || wasUnconfigured ? [] : this.state.seenBidNumbers;
 
     this.state = {
       ...this.state,
       config: nextConfig,
       byKeyword: prunedByKeyword,
+      seenBidNumbers: nextSeen,
       lastRefreshedAt: 0,
     };
     this.emit();
@@ -474,43 +685,111 @@ export class TenderRadarService {
     let completedCount = 0;
     const newlyDiscoveredIds = new Set<string>();
 
-    await Promise.all(
-      keywords.map(async (keyword) => {
-        const res = await GeMLiveSyncService.queryLivePortal({
-          page: 1,
-          searchBid: keyword,
-          searchType: 'fullText',
-          bidStatusType: 'ongoing_bids',
-          byType,
-          highBidValue: highValueOnly ? 'highValue' : '',
-          sort: 'Bid-Start-Date-Latest',
-        });
+    // Process keywords sequentially (1 polite request at a time) so GeM's PHP ci_session
+    // file lock never serializes/times out concurrent POSTs on Android OkHttp.
+    for (const keyword of keywords) {
+      if (runId !== this.refreshNonce) return this.state;
 
-        if (runId !== this.refreshNonce) return;
+      const portalQuery = pickBestGeMSearchQuery(keyword);
+      const isMultiWord = extractRadarTokens(keyword).length > 1;
 
-        completedCount += 1;
-        for (const b of res.bids) {
+      const page1 = await GeMLiveSyncService.queryLivePortal({
+        page: 1,
+        searchBid: portalQuery,
+        searchType: 'fullText',
+        bidStatusType: 'ongoing_bids',
+        byType,
+        highBidValue: highValueOnly ? 'highValue' : '',
+        sort: 'Bid-Start-Date-Latest',
+      });
+
+      if (runId !== this.refreshNonce) return this.state;
+
+      let combinedRaw = [...(page1.bids || [])];
+      let portalTotal = page1.total || 0;
+      let fetchError = page1.error;
+
+      // Only fetch Page 2 when a multi-word keyword needs more relevant candidates
+      if (!fetchError && isMultiWord && page1.hasMore) {
+        const page1Relevant = filterRelevantRadarBids(keyword, combinedRaw);
+        if (page1Relevant.length < 6) {
+          const page2 = await GeMLiveSyncService.queryLivePortal({
+            page: 2,
+            searchBid: portalQuery,
+            searchType: 'fullText',
+            bidStatusType: 'ongoing_bids',
+            byType,
+            highBidValue: highValueOnly ? 'highValue' : '',
+            sort: 'Bid-Start-Date-Latest',
+          });
+          if (runId !== this.refreshNonce) return this.state;
+          if (!page2.error && page2.bids.length > 0) {
+            const seen = new Set(combinedRaw.map((b) => b.bidNumber));
+            for (const b of page2.bids) {
+              if (!seen.has(b.bidNumber)) {
+                seen.add(b.bidNumber);
+                combinedRaw.push(b);
+              }
+            }
+          }
+        }
+      }
+
+      const relevantBids = filterRelevantRadarBids(keyword, combinedRaw);
+      const activeRelevant = relevantBids.filter((b) => {
+        const status = GeMLiveSyncService.computeLifecycleStatus(b);
+        return status === 'ONGOING' || status === 'BID_TO_RA';
+      });
+
+      completedCount += 1;
+
+      // Preserve existing cached matches on a transient network error instead of blanking to 0
+      const prevBucket = this.state.byKeyword[keyword];
+      if (fetchError && prevBucket && prevBucket.bids.length > 0) {
+        for (const b of prevBucket.bids) {
           newlyDiscoveredIds.add(b.bidNumber);
         }
-
-        const nextByKeyword: Record<string, RadarKeywordResult> = {
-          ...this.state.byKeyword,
-          [keyword]: {
-            keyword,
-            total: res.total,
-            bids: res.bids,
-            error: res.error,
-          },
-        };
-
         this.state = {
           ...this.state,
-          byKeyword: nextByKeyword,
+          byKeyword: {
+            ...this.state.byKeyword,
+            [keyword]: { ...prevBucket, error: fetchError },
+          },
           refreshedKeywordsCount: completedCount,
         };
         this.emit();
-      })
-    );
+        continue;
+      }
+
+      for (const b of activeRelevant) {
+        newlyDiscoveredIds.add(b.bidNumber);
+      }
+
+      // Only report GeM's raw total when single-word and most returned docs genuinely matched;
+      // otherwise report verified relevant count so pills never display bogus OR-search noise counts.
+      const rawCount = combinedRaw.length;
+      const highPrecisionPortalTotal =
+        !isMultiWord && rawCount > 0 && activeRelevant.length >= Math.ceil(rawCount * 0.6)
+          ? portalTotal
+          : activeRelevant.length;
+
+      const nextByKeyword: Record<string, RadarKeywordResult> = {
+        ...this.state.byKeyword,
+        [keyword]: {
+          keyword,
+          total: highPrecisionPortalTotal,
+          bids: activeRelevant,
+          error: fetchError,
+        },
+      };
+
+      this.state = {
+        ...this.state,
+        byKeyword: nextByKeyword,
+        refreshedKeywordsCount: completedCount,
+      };
+      this.emit();
+    }
 
     if (runId !== this.refreshNonce) return this.state;
 
@@ -537,6 +816,21 @@ export class TenderRadarService {
     this.state = {
       ...this.state,
       seenBidNumbers: [bidNumber, ...this.state.seenBidNumbers].slice(0, MAX_SEEN_IDS),
+    };
+    this.emit();
+    await this.persist();
+  }
+
+  public static async markAllSeen(): Promise<void> {
+    const allIds = this.getAggregatedMatches(this.state).map((m) => m.bid.bidNumber);
+    if (allIds.length === 0) return;
+    const merged = Array.from(new Set([...allIds, ...this.state.seenBidNumbers])).slice(
+      0,
+      MAX_SEEN_IDS
+    );
+    this.state = {
+      ...this.state,
+      seenBidNumbers: merged,
     };
     this.emit();
     await this.persist();

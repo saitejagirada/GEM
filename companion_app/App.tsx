@@ -92,6 +92,7 @@ const MainAppContent: React.FC = () => {
   const [marketNavTypeTab, setMarketNavTypeTab] = useState<'Products' | 'Services' | undefined>();
   const [marketNavTrigger, setMarketNavTrigger] = useState<number>(0);
   const [bidsNavSearch, setBidsNavSearch] = useState<string | undefined>();
+  const [bidsNavTrigger, setBidsNavTrigger] = useState<number>(0);
   const [contractsNavSearch, setContractsNavSearch] = useState<string | undefined>();
 
   // Quick lookup modal
@@ -261,7 +262,10 @@ const MainAppContent: React.FC = () => {
       setActiveTab('SEARCH');
       setSubScreen('NONE');
     } else if (target === 'BIDS') {
-      if (params?.search !== undefined) setBidsNavSearch(params.search);
+      if (params?.search !== undefined) {
+        setBidsNavSearch(params.search);
+        setBidsNavTrigger((n) => n + 1);
+      }
       setActiveTab('BIDS');
       setSubScreen('NONE');
     } else if (target === 'AUCTIONS') {
@@ -472,6 +476,7 @@ const MainAppContent: React.FC = () => {
               <BidsHubScreen
                 bids={bids}
                 initialSearch={bidsNavSearch}
+                navTrigger={bidsNavTrigger}
                 onSyncLive={loadData}
                 isSyncing={isSyncing}
                 onInspectBid={(bid) => setSelectedBid(bid)}

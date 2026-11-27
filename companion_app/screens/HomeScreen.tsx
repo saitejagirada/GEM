@@ -103,6 +103,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Tender Radar & Watchlist reactive state
   const [radar, setRadar] = useState<TenderRadarState>(TenderRadarService.getState());
   const [selectedRadarKeyword, setSelectedRadarKeyword] = useState<string>('ALL');
+  const [showAllRadarRows, setShowAllRadarRows] = useState<boolean>(false);
 
   // Inline quick onboarding draft (when user hasn't set up Radar yet)
   const [draftKeywords, setDraftKeywords] = useState<string[]>([]);
@@ -129,21 +130,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (
+      selectedRadarKeyword !== 'ALL' &&
+      !radar.config.keywords.some((k) => k.toLowerCase() === selectedRadarKeyword.toLowerCase())
+    ) {
+      setSelectedRadarKeyword('ALL');
+    }
+  }, [radar.config.keywords, selectedRadarKeyword]);
+
   const hasRadarConfigured = radar.config.keywords.length > 0;
+
+  const allRadarMatches = useMemo(
+    () => TenderRadarService.getAggregatedMatches(radar),
+    [radar]
+  );
 
   const radarMatches = useMemo(
     () =>
-      TenderRadarService.getAggregatedMatches(
-        radar,
-        selectedRadarKeyword === 'ALL' ? undefined : selectedRadarKeyword
-      ),
-    [radar, selectedRadarKeyword]
+      selectedRadarKeyword === 'ALL'
+        ? allRadarMatches
+        : TenderRadarService.getAggregatedMatches(radar, selectedRadarKeyword),
+    [radar, selectedRadarKeyword, allRadarMatches]
   );
 
   const totalNewRadarCount = useMemo(
-    () => TenderRadarService.getAggregatedMatches(radar).filter((m) => m.isNew).length,
-    [radar]
+    () => allRadarMatches.filter((m) => m.isNew).length,
+    [allRadarMatches]
   );
+
+  const radarErrorMessage = useMemo(() => {
+    if (selectedRadarKeyword !== 'ALL') {
+      return radar.byKeyword[selectedRadarKeyword]?.error || '';
+    }
+    const errors = radar.config.keywords
+      .map((kw) => radar.byKeyword[kw]?.error)
+      .filter((e): e is string => Boolean(e));
+    return errors.length === radar.config.keywords.length && errors.length > 0 ? errors[0] : '';
+  }, [radar, selectedRadarKeyword]);
 
   const watchedBidSet = useMemo(
     () => new Set(radar.watched.map((w) => w.bid.bidNumber.trim().toLowerCase())),
@@ -178,19 +202,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   const addCustomDraftKeyword = () => {
-    const clean = sanitizeRadarKeyword(customInput);
-    if (!clean) return;
-    toggleDraftKeyword(clean);
+    const parts = customInput
+      .split(',')
+      .map((p) => sanitizeRadarKeyword(p))
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    setDraftKeywords((prev) => {
+      const next = [...prev];
+      for (const kw of parts) {
+        if (next.length >= 6) break;
+        if (!next.some((k) => k.toLowerCase() === kw.toLowerCase())) {
+          next.push(kw);
+        }
+      }
+      return next;
+    });
     setCustomInput('');
   };
 
   const activateRadar = async () => {
-    const finalList = customInput.trim()
-      ? [...draftKeywords, sanitizeRadarKeyword(customInput)]
-      : draftKeywords;
+    const extra = customInput
+      .split(',')
+      .map((p) => sanitizeRadarKeyword(p))
+      .filter(Boolean);
+    const finalList = [...draftKeywords, ...extra];
     if (finalList.length === 0) return;
     setCustomInput('');
+    setDraftKeywords([]);
     setSelectedRadarKeyword('ALL');
+    setShowAllRadarRows(false);
     await TenderRadarService.saveConfig({ keywords: finalList }, true);
   };
 
@@ -214,18 +254,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   const addEditCustomKeyword = () => {
-    const clean = sanitizeRadarKeyword(editCustomInput);
-    if (!clean) return;
-    toggleEditKeyword(clean);
+    const parts = editCustomInput
+      .split(',')
+      .map((p) => sanitizeRadarKeyword(p))
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    setEditKeywords((prev) => {
+      const next = [...prev];
+      for (const kw of parts) {
+        if (next.length >= 6) break;
+        if (!next.some((k) => k.toLowerCase() === kw.toLowerCase())) {
+          next.push(kw);
+        }
+      }
+      return next;
+    });
     setEditCustomInput('');
   };
 
   const saveEditedRadar = async () => {
-    const finalList = editCustomInput.trim()
-      ? [...editKeywords, sanitizeRadarKeyword(editCustomInput)]
-      : editKeywords;
+    const extra = editCustomInput
+      .split(',')
+      .map((p) => sanitizeRadarKeyword(p))
+      .filter(Boolean);
+    const finalList = [...editKeywords, ...extra];
     setShowRadarModal(false);
     setSelectedRadarKeyword('ALL');
+    setShowAllRadarRows(false);
     await TenderRadarService.saveConfig(
       {
         keywords: finalList,
@@ -545,23 +600,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <AppIcon name="radar" color={colors.primary} size={14} />
                 </View>
                 <View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text style={[styles.sectionTitleText, { color: colors.textPrimary }]}>
                       My Daily Radar
                     </Text>
                     {totalNewRadarCount > 0 ? (
-                      <View style={[styles.newBadgePill, { backgroundColor: colors.successTint }]}>
+                      <Pressable
+                        onPress={() => void TenderRadarService.markAllSeen()}
+                        hitSlop={6}
+                        style={[styles.newBadgePill, { backgroundColor: colors.successTint }]}
+                      >
                         <Text style={[styles.newBadgeText, { color: colors.success }]}>
-                          {totalNewRadarCount} NEW
+                          {totalNewRadarCount} NEW · Mark read
                         </Text>
-                      </View>
+                      </Pressable>
                     ) : null}
                   </View>
                   <Text style={[styles.radarLiveSub, { color: colors.textSecondary }]}>
                     {radar.isRefreshing
-                      ? `Updating live from GeM (${radar.refreshedKeywordsCount}/${radar.config.keywords.length})…`
-                      : activeKeywordTotal > 0
-                        ? `${activeKeywordTotal.toLocaleString('en-IN')} live GeM matches for your business`
+                      ? `Scanning live GeM (${radar.refreshedKeywordsCount}/${radar.config.keywords.length})…`
+                      : radarMatches.length > 0
+                        ? `${radarMatches.length} verified matches${activeKeywordTotal > radarMatches.length ? ` · ${activeKeywordTotal.toLocaleString('en-IN')} live on GeM` : ''}`
                         : 'Saved keywords · 100% private on device'}
                   </Text>
                 </View>
@@ -592,14 +651,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </View>
             </View>
 
-            {/* Saved Keyword Filter Pills with Live GeM Totals */}
+            {/* Saved Keyword Filter Pills with Consistent Verified Match Counts */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.radarTabsRow}
             >
               <Pressable
-                onPress={() => setSelectedRadarKeyword('ALL')}
+                onPress={() => {
+                  setSelectedRadarKeyword('ALL');
+                  setShowAllRadarRows(false);
+                }}
                 style={[
                   styles.radarKwTab,
                   {
@@ -614,17 +676,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     { color: selectedRadarKeyword === 'ALL' ? colors.textInverse : colors.textPrimary },
                   ]}
                 >
-                  All ({TenderRadarService.getAggregatedMatches(radar).length})
+                  All ({allRadarMatches.length})
                 </Text>
               </Pressable>
 
               {radar.config.keywords.map((kw) => {
                 const active = selectedRadarKeyword === kw;
-                const count = radar.byKeyword[kw]?.total;
+                const kwLoadedCount = TenderRadarService.getAggregatedMatches(radar, kw).length;
+                const hasBucket = Boolean(radar.byKeyword[kw]);
                 return (
                   <Pressable
                     key={kw}
-                    onPress={() => setSelectedRadarKeyword(kw)}
+                    onPress={() => {
+                      setSelectedRadarKeyword(kw);
+                      setShowAllRadarRows(false);
+                    }}
                     style={[
                       styles.radarKwTab,
                       {
@@ -640,7 +706,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       ]}
                     >
                       {kw}
-                      {typeof count === 'number' ? ` (${count.toLocaleString('en-IN')})` : ''}
+                      {hasBucket ? ` (${kwLoadedCount})` : ''}
                     </Text>
                   </Pressable>
                 );
@@ -657,15 +723,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       Scanning bidplus.gem.gov.in for {radar.config.keywords.join(', ')}…
                     </Text>
                   </>
+                ) : radarErrorMessage ? (
+                  <>
+                    <Text style={[styles.radarEmptyText, { color: colors.danger }]}>
+                      Could not reach bidplus.gem.gov.in right now.
+                    </Text>
+                    <Pressable
+                      onPress={() => void TenderRadarService.refreshRadar(true)}
+                      style={[
+                        styles.tinyActionPill,
+                        {
+                          marginTop: 8,
+                          backgroundColor: colors.primaryTint,
+                          borderColor: 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.tinyActionText, { color: colors.primary }]}>
+                        Retry Scan ↻
+                      </Text>
+                    </Pressable>
+                  </>
                 ) : (
                   <Text style={[styles.radarEmptyText, { color: colors.textSecondary }]}>
-                    No ongoing tenders matched right now. Tap Edit to broaden your keywords or refresh.
+                    No relevant ongoing tenders matched{' '}
+                    {selectedRadarKeyword !== 'ALL' ? `"${selectedRadarKeyword}"` : 'your filters'}{' '}
+                    right now. Tap Edit to adjust keywords or filters.
                   </Text>
                 )}
               </View>
             ) : (
               <View style={styles.radarListWrap}>
-                {radarMatches.slice(0, 6).map((item, idx) => {
+                {radarMatches.slice(0, showAllRadarRows ? 15 : 5).map((item, idx) => {
                   const { bid } = item;
                   const isSaved = watchedBidSet.has(bid.bidNumber.trim().toLowerCase());
                   const cd = getShortCountdown(bid.closingTimeUtc);
@@ -749,6 +838,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     </Pressable>
                   );
                 })}
+                {radarMatches.length > 5 ? (
+                  <Pressable
+                    onPress={() => setShowAllRadarRows((prev) => !prev)}
+                    style={[styles.radarFooterLink, { borderTopColor: colors.borderSubtle }]}
+                  >
+                    <Text style={[styles.radarFooterLinkText, { color: colors.textSecondary }]}>
+                      {showAllRadarRows
+                        ? 'Show fewer matches ▲'
+                        : `Show ${Math.min(radarMatches.length, 15) - 5} more matches ▼`}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             )}
 
@@ -765,8 +866,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             >
               <Text style={[styles.radarFooterLinkText, { color: colors.primary }]}>
                 {selectedRadarKeyword !== 'ALL'
-                  ? `See all ${activeKeywordTotal > 0 ? activeKeywordTotal.toLocaleString('en-IN') + ' ' : ''}"${selectedRadarKeyword}" tenders in Bids →`
-                  : `Explore all matching tenders in Bids →`}
+                  ? `Search all "${selectedRadarKeyword}" tenders in Bids →`
+                  : radar.config.keywords[0]
+                    ? `Search "${radar.config.keywords[0]}" tenders in Bids →`
+                    : `Explore live tenders in Bids →`}
               </Text>
             </Pressable>
           </View>

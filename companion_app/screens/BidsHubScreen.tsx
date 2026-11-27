@@ -52,6 +52,7 @@ interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
   initialFilter?: string;
   initialSearch?: string;
+  navTrigger?: number;
   onSyncLive?: () => Promise<void> | void;
   isSyncing?: boolean;
   onInspectBid?: (bid: DeconstructedBidDoc) => void;
@@ -83,6 +84,7 @@ function mapStatusTabToPortalParam(tab: GeMStatusTab): GeMPortalStatusType {
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
   initialSearch,
+  navTrigger = 0,
   onSyncLive,
   isSyncing = false,
   onInspectBid,
@@ -100,7 +102,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       setSearchQuery(initialSearch);
       setDebouncedQuery(initialSearch.trim());
     }
-  }, [initialSearch]);
+  }, [initialSearch, navTrigger]);
 
   const [highValueOnly, setHighValueOnly] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-Start-Date-Latest');

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   TenderRadarService,
   buildClosingReminderUrl,
+  filterRelevantRadarBids,
+  pickBestGeMSearchQuery,
   sanitizeRadarKeyword,
 } from '../services/TenderRadarService.ts';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService.ts';
@@ -52,6 +54,32 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
     assert.equal(state.config.highValueOnly, true);
   });
 
+  it('anchors multi-word queries on distinctive nouns and filters out GeM OR-search noise', () => {
+    assert.equal(pickBestGeMSearchQuery('Air Conditioner'), 'Conditioner');
+    assert.equal(pickBestGeMSearchQuery('Water Purifier'), 'Purifier');
+    assert.equal(pickBestGeMSearchQuery('Office Chair'), 'Chair');
+    assert.equal(pickBestGeMSearchQuery('Solar Panel'), 'Solar');
+    assert.equal(pickBestGeMSearchQuery('Laptop'), 'Laptop');
+
+    const mixedAc = [
+      makeBid('GEM/2026/R/778011', 'Cricket Bat,Cricket Ball,Volley Ball Net'),
+      makeBid('GEM/2026/R/778005', 'Repair of Diesel Generators DG Sets'),
+      makeBid('GEM/2026/B/8323725', 'Window Air Conditioner Including Green AC'),
+      makeBid('GEM/2026/B/8249632', 'Split Air Conditioner Wall Mount Type (V3)'),
+    ];
+    const filteredAc = filterRelevantRadarBids('Air Conditioner', mixedAc);
+    assert.equal(filteredAc.length, 2);
+    assert.ok(filteredAc.every((b) => /conditioner/i.test(b.title)));
+
+    const mixedPurifier = [
+      makeBid('GEM/2026/R/777933', 'Telescopic Ladder 24 feet heavy duty'),
+      makeBid('GEM/2026/R/777115', 'ANNUAL MAINTENANCE SERVICES FOR WATER PURIFICATION SYSTEM'),
+      makeBid('GEM/2026/B/8321543', 'Heavy duty Mixer Grinder,Portable water Purifier'),
+    ];
+    const filteredPurifier = filterRelevantRadarBids('Water Purifier', mixedPurifier);
+    assert.equal(filteredPurifier.length, 2);
+  });
+
   it('toggles watched tenders, checks live corrigenda, and notifies subscribers', async () => {
     const origFetchOther = GeMLiveSyncService.fetchBidOtherDetails;
     try {
@@ -85,7 +113,7 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
     }
   });
 
-  it('streams parallel keyword queries, deduplicates overlapping matches, and flags NEW tenders on repeat visits', async () => {
+  it('streams parallel keyword queries, deduplicates overlapping matches, flags NEW on repeat visits, and clears NEW via markAllSeen', async () => {
     const origEnsure = GeMLiveSyncService.ensurePortalSession;
     const origQuery = GeMLiveSyncService.queryLivePortal;
 
@@ -101,21 +129,21 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
         if (kw === 'Solar') {
           const list =
             callRound === 1
-              ? [makeBid('GEM/2026/B/8100001', 'Solar Street Light LED')]
+              ? [makeBid('GEM/2026/B/8100001', 'Solar CCTV Street Light LED')]
               : [
-                  makeBid('GEM/2026/B/8100001', 'Solar Street Light LED'),
+                  makeBid('GEM/2026/B/8100001', 'Solar CCTV Street Light LED'),
                   makeBid('GEM/2026/B/8100099', 'Solar Hybrid Inverter 10kVA'),
                 ];
-          return { bids: list, total: 320, page: 1, hasMore: true, portalOrigin: 'bidplus.gem.gov.in' };
+          return { bids: list, total: 10, page: 1, hasMore: false, portalOrigin: 'bidplus.gem.gov.in' };
         }
         return {
           bids: [
-            makeBid('GEM/2026/B/8100001', 'Solar Street Light LED'), // overlaps with Solar!
+            makeBid('GEM/2026/B/8100001', 'Solar CCTV Street Light LED'), // overlaps with Solar!
             makeBid('GEM/2026/B/8200002', 'IP CCTV Surveillance Camera'),
           ],
-          total: 360,
+          total: 10,
           page: 1,
-          hasMore: true,
+          hasMore: false,
           portalOrigin: 'bidplus.gem.gov.in',
         };
       };
@@ -125,6 +153,7 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
       const matches1 = TenderRadarService.getAggregatedMatches(state1);
 
       assert.equal(matches1.length, 2, 'Overlapping bid should be deduplicated across keywords');
+      assert.equal(matches1.filter((m) => m.isNew).length, 0, 'First run establishes baseline with 0 NEW');
       const overlap = matches1.find((m) => m.bid.bidNumber === 'GEM/2026/B/8100001');
       assert.deepEqual(overlap?.matchedKeywords, ['Solar', 'CCTV']);
 
@@ -135,6 +164,15 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
       assert.equal(matches2.length, 3);
       assert.equal(matches2[0].bid.bidNumber, 'GEM/2026/B/8100099');
       assert.equal(matches2[0].isNew, true);
+
+      // Mark all seen clears NEW badges cleanly
+      await TenderRadarService.markAllSeen();
+      const afterSeen = TenderRadarService.getAggregatedMatches(TenderRadarService.getState());
+      assert.equal(afterSeen.filter((m) => m.isNew).length, 0);
+
+      // Changing vehicleFilter or highValueOnly invalidates stale cached results immediately
+      const afterFilterChange = await TenderRadarService.saveConfig({ highValueOnly: true }, false);
+      assert.deepEqual(Object.keys(afterFilterChange.byKeyword), []);
     } finally {
       GeMLiveSyncService.ensurePortalSession = origEnsure;
       GeMLiveSyncService.queryLivePortal = origQuery;

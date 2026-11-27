@@ -488,7 +488,7 @@ export class GeMLiveSyncService {
       return this.cachedSession;
     }
 
-    if (!forceRefresh && this.sessionPromise) {
+    if (this.sessionPromise) {
       return this.sessionPromise;
     }
 
