@@ -1,74 +1,124 @@
-import React, { useState } from 'react';
+/**
+ * GeM Mobile Companion App - 3-Tab Role-Specific WhatsApp Brief Studio
+ *
+ * Replaces the single generic share sheet with 3 focused, exact-data briefs:
+ *   1. Partner Brief — Clean Deal Sheet snapshot + exact PDF figures + Go/No-Go badge
+ *   2. Ask OEM       — Pre-filled dealer quotation & bid-specific MAF request
+ *   3. Ask CA        — Pre-filled ICAI UDIN Turnover Certificate requisition
+ *
+ * Strictly uses verified *.gem.gov.in PDF links and exact unrounded INR figures.
+ */
+
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  Alert,
   Modal,
+  NativeModules,
   Pressable,
   ScrollView,
   Share,
-  Alert,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import type { DeconstructedBidDoc } from '../types/index';
-import { formatLakhs } from '../utils/formatters';
+import type { DeconstructedBidDoc, UserAgentProfile } from '../types/index';
+import { BusinessProfileService } from '../services/BusinessProfileService';
+import {
+  WhatsAppBriefBuilder,
+  type BriefAudience,
+} from '../services/WhatsAppBriefBuilder';
+import { formatDateSafe, formatInr } from '../utils/formatters';
 
 interface TenderDealSheetCardProps {
   bid: DeconstructedBidDoc;
   visible: boolean;
   onClose: () => void;
+  eligibilitySummary?: string;
   consultantBranding?: {
     agencyName?: string;
     contactPhone?: string;
   };
 }
 
-/**
- * 1080x1350 WhatsApp Deal Sheet Card
- * Designed specifically for high-conversion forwarding in Indian contractor WhatsApp groups.
- * Operates on 100% public data with ZERO login requirements.
- */
+const AUDIENCE_TABS: ReadonlyArray<{ id: BriefAudience; label: string }> = [
+  { id: 'PARTNER', label: 'Partner Brief' },
+  { id: 'OEM', label: 'Ask OEM (MAF)' },
+  { id: 'CA', label: 'Ask CA (UDIN)' },
+];
+
+function copyTextSafe(text: string): boolean {
+  try {
+    const clip = NativeModules?.Clipboard || NativeModules?.RNCClipboard;
+    if (clip && typeof clip.setString === 'function') {
+      clip.setString(text);
+      return true;
+    }
+  } catch {
+    // Fallback handled by caller
+  }
+  return false;
+}
+
 export const TenderDealSheetCard: React.FC<TenderDealSheetCardProps> = ({
   bid,
   visible,
   onClose,
+  eligibilitySummary,
   consultantBranding,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const [audience, setAudience] = useState<BriefAudience>('PARTNER');
   const [copied, setCopied] = useState<boolean>(false);
+  const [profile, setProfile] = useState<UserAgentProfile | null>(() =>
+    BusinessProfileService.getProfile()
+  );
 
-  // Time remaining calculation
+  useEffect(() => {
+    BusinessProfileService.hydrate().then(setProfile).catch(() => undefined);
+    return BusinessProfileService.subscribe(setProfile);
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      setAudience('PARTNER');
+      setCopied(false);
+    }
+  }, [visible, bid.bidNumber]);
+
   const closingDate = new Date(bid.closingTimeUtc || Date.now());
-  const now = new Date();
-  const diffHours = Math.max(0, Math.round((closingDate.getTime() - now.getTime()) / (1000 * 60 * 60)));
+  const isValidClosing = !isNaN(closingDate.getTime());
+  const diffHours = isValidClosing
+    ? Math.max(0, Math.round((closingDate.getTime() - Date.now()) / (1000 * 60 * 60)))
+    : 0;
   const diffDays = Math.floor(diffHours / 24);
-  const remainingText =
-    diffHours <= 0
-      ? 'Bid Closed'
+  const remainingText = !isValidClosing
+    ? 'See PDF'
+    : diffHours <= 0
+      ? 'Closed'
       : diffDays > 0
-      ? `⏳ Closes in ${diffDays}d ${diffHours % 24}h`
-      : `🚨 Closes in ${diffHours} Hours!`;
+        ? `${diffDays}d ${diffHours % 24}h left`
+        : `${diffHours}h left`;
 
-  // Formatting values (strictly exact published/extracted values — zero fabrication)
-  const estVal = bid.estimatedBidValueInr;
   const estValText =
-    estVal && estVal > 0
-      ? formatLakhs(estVal)
+    bid.estimatedBidValueInr && bid.estimatedBidValueInr > 0
+      ? `₹${formatInr(bid.estimatedBidValueInr)}`
       : bid.isHighValue
-        ? 'High Value (≥ ₹2 Cr)'
-        : 'Not disclosed in PDF';
-  const emdVal = bid.emdAmountInr;
+        ? '≥ ₹2 Cr'
+        : 'Not disclosed';
+
   const emdValText =
-    emdVal === undefined
+    bid.emdAmountInr === undefined
       ? 'Check PDF'
-      : emdVal === 0
-        ? 'Not Required (₹0)'
-        : `₹${emdVal.toLocaleString('en-IN')}`;
+      : bid.emdAmountInr === 0
+        ? 'None (₹0)'
+        : `₹${formatInr(bid.emdAmountInr)}`;
+
   const epbgText =
     bid.epbgPercentage === undefined
       ? 'Check PDF'
       : bid.epbgPercentage === 0
-        ? 'Not Required (0%)'
+        ? 'None (0%)'
         : bid.epbgDurationMonths
           ? `${bid.epbgPercentage}% (${bid.epbgDurationMonths} mo)`
           : `${bid.epbgPercentage}%`;
@@ -76,197 +126,344 @@ export const TenderDealSheetCard: React.FC<TenderDealSheetCardProps> = ({
   const isMseExempt = Boolean(bid.isEmdExemptForMse);
   const miiText =
     bid.makeInIndiaClass === 'CLASS_1'
-      ? 'Class-1 (≥50% Local Content)'
+      ? 'Class-1 (≥50% Local)'
       : bid.makeInIndiaClass === 'CLASS_2'
-        ? 'Class-2 (≥20% Local Content)'
+        ? 'Class-2 (≥20% Local)'
         : bid.miiPurchasePreference
-          ? 'MII Preference Applicable'
-          : 'Not specified in PDF';
+          ? 'MII Preference'
+          : 'Not specified';
 
-  const turnoverReq = bid.minAnnualTurnoverInr;
   const turnoverText =
-    turnoverReq && turnoverReq > 0
-      ? formatLakhs(turnoverReq)
-      : 'Not specified in PDF';
-  const expYears = bid.yearsExperienceRequired;
-  const expText =
-    expYears && expYears > 0 ? `${expYears} Years` : 'Not specified in PDF';
+    bid.minAnnualTurnoverInr && bid.minAnnualTurnoverInr > 0
+      ? `₹${formatInr(bid.minAnnualTurnoverInr)}`
+      : 'Not specified';
 
-  const primaryState = bid.consignees?.[0]?.state || 'Pan-India';
+  const expText =
+    bid.yearsExperienceRequired && bid.yearsExperienceRequired > 0
+      ? `${bid.yearsExperienceRequired} Year${bid.yearsExperienceRequired === 1 ? '' : 's'}`
+      : 'Not specified';
+
+  const primaryState =
+    bid.consignees?.find((c) => c.state && c.state !== 'India')?.state || 'See PDF';
+
   const totalQty =
     bid.boqItems?.reduce((sum, item) => sum + (item.quantity || 0), 0) ||
-    bid.consignees?.reduce((sum, c) => sum + (c.quantity || 0), 0) ||
-    1;
+    bid.consignees?.reduce((sum, c) => sum + (c.quantity || 0), 0);
 
-  // WhatsApp text payload for forwarding alongside the visual snapshot
-  const shareText = `⚡ *GeM Tender Alert: ${bid.title || 'Government Procurement'}*
-📍 *Department:* ${bid.department || 'Government Department'}, ${primaryState}
-💰 *Est. Value:* ${estValText}
-🛡️ *EMD Amount:* ${emdValText} (${isMseExempt ? '🟢 MSE/Startup EXEMPT: YES' : 'Exemption: Per Tender'})
-📋 *Turnover Req:* ${turnoverText}
-🏭 *Make in India (MII):* ${miiText}
-⏳ *Deadline:* ${closingDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${remainingText})
-🔖 *GeM Bid No:* ${bid.bidNumber || 'N/A'}
+  const brief = useMemo(
+    () =>
+      WhatsAppBriefBuilder.build(audience, {
+        bid,
+        profile,
+        eligibilitySummary,
+        consultantBranding,
+      }),
+    [audience, bid, profile, eligibilitySummary, consultantBranding]
+  );
 
-👉 *Deconstruct full BOQ, technical specs & check MSE turnover eligibility (100% Free • No Login Needed):*
-https://gemcompanion.in/b/${encodeURIComponent(bid.bidNumber || 'view')}?src=wa
-
-${consultantBranding?.agencyName ? `💼 Shared by: *${consultantBranding.agencyName}* (Ph: ${consultantBranding.contactPhone || ''})\n` : ''}_Deconstructed via GeM Mobile Companion App_`;
-
-  const handleShareToWhatsApp = async () => {
+  const handleShare = async () => {
     try {
       await Share.share({
-        message: shareText,
-        title: `GeM Tender: ${bid.bidNumber || 'Alert'}`,
+        message: brief.message,
+        title: `${brief.title} — ${bid.bidNumber}`,
       });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
     } catch {
-      Alert.alert('Sharing Error', 'Unable to open share sheet.');
+      Alert.alert('Share unavailable', 'Unable to open the share sheet on this device.');
+    }
+  };
+
+  const handleCopy = () => {
+    if (copyTextSafe(brief.message)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } else {
+      void handleShare();
     }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.modalCard, { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' }]}>
-          {/* Header Action Bar */}
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalHeaderTitle, { color: colors.textPrimary }]}>
-              WhatsApp Tender Deal Sheet
-            </Text>
-            <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
-              <Text style={{ fontSize: 18, color: colors.textSecondary, fontWeight: '700' }}>✕</Text>
+        <Pressable style={styles.backdropDismiss} onPress={onClose} />
+        <View
+          style={[
+            styles.modalCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          {/* Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: colors.borderSubtle }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.modalHeaderTitle, { color: colors.textPrimary }]}>
+                WhatsApp Tender Briefs
+              </Text>
+              <Text style={[styles.modalHeaderSub, { color: colors.textSecondary }]}>
+                Exact PDF figures · Verified bidplus.gem.gov.in link
+              </Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              style={styles.closeBtn}
+              accessibilityLabel="Close share sheet"
+            >
+              <Text style={{ fontSize: 18, color: colors.textMuted, fontWeight: '700' }}>✕</Text>
             </Pressable>
           </View>
 
-          <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-            {/* 1080x1350 Aspect Ratio Preview Container */}
-            <View style={styles.dealSheetSurface}>
-              {/* Tricolor Micro-Accent Ribbon */}
-              <View style={styles.tricolorBar}>
-                <View style={[styles.triStrip, { backgroundColor: '#FF9933' }]} />
-                <View style={[styles.triStrip, { backgroundColor: '#FFFFFF' }]} />
-                <View style={[styles.triStrip, { backgroundColor: '#138808' }]} />
-              </View>
+          {/* 3-Tab Audience Switcher */}
+          <View
+            style={[
+              styles.tabBar,
+              { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.borderSubtle },
+            ]}
+          >
+            {AUDIENCE_TABS.map((tab) => {
+              const active = audience === tab.id;
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => {
+                    setAudience(tab.id);
+                    setCopied(false);
+                  }}
+                  style={[
+                    styles.tabBtn,
+                    active && {
+                      backgroundColor: colors.primary,
+                      borderColor: colors.primary,
+                    },
+                    !active && {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.borderSubtle,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabBtnText,
+                      { color: active ? colors.textInverse : colors.textPrimary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-              {/* Deal Sheet Header */}
-              <View style={styles.sheetTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.portalTag}>GeM PUBLIC TENDER SNAPSHOT</Text>
-                  <Text style={styles.bidNumberBadge}>{bid.bidNumber || 'GEM/2026/B/BID'}</Text>
-                </View>
-                <View style={styles.timerPill}>
-                  <Text style={styles.timerText}>{remainingText}</Text>
-                </View>
-              </View>
+          <ScrollView
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {audience === 'PARTNER' ? (
+              /* Visual Deal Sheet Preview */
+              <View
+                style={[
+                  styles.dealSheetSurface,
+                  { backgroundColor: colors.surface, borderColor: colors.primary },
+                ]}
+              >
+                <View style={[styles.topAccentBar, { backgroundColor: colors.primary }]} />
 
-              {/* Agency Co-Branding (If Consultant Mode) */}
-              {consultantBranding?.agencyName ? (
-                <View style={styles.consultantBadge}>
-                  <Text style={styles.consultantBadgeText}>
-                    💼 PREPARED BY: {consultantBranding.agencyName.toUpperCase()}
-                    {consultantBranding.contactPhone ? ` • ${consultantBranding.contactPhone}` : ''}
+                <View style={styles.sheetTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.portalTag, { color: colors.primary }]}>
+                      GeM PUBLIC TENDER BRIEF
+                    </Text>
+                    <Text style={[styles.bidNumberBadge, { color: colors.textPrimary }]}>
+                      {bid.bidNumber || 'GeM Bid'}
+                    </Text>
+                  </View>
+                  <View style={[styles.timerPill, { backgroundColor: colors.dangerTint }]}>
+                    <Text style={[styles.timerText, { color: colors.danger }]}>
+                      {remainingText}
+                    </Text>
+                  </View>
+                </View>
+
+                {consultantBranding?.agencyName || profile?.organizationName ? (
+                  <View style={[styles.senderStrip, { backgroundColor: colors.surfaceSubtle }]}>
+                    <Text style={[styles.senderText, { color: colors.textSecondary }]}>
+                      Prepared by:{' '}
+                      {(consultantBranding?.agencyName || profile?.organizationName || '').trim()}
+                      {consultantBranding?.contactPhone
+                        ? ` · ${consultantBranding.contactPhone}`
+                        : ''}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Text style={[styles.tenderTitle, { color: colors.textPrimary }]} numberOfLines={3}>
+                  {bid.title || 'Government Procurement Tender'}
+                </Text>
+                <Text style={[styles.deptSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {[bid.department, bid.ministry !== bid.department ? bid.ministry : '']
+                    .filter(Boolean)
+                    .join(' · ') || 'Government Department'}
+                </Text>
+
+                {/* Exact 3-Column Financial Matrix */}
+                <View
+                  style={[
+                    styles.financialMatrix,
+                    { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                  ]}
+                >
+                  <View style={styles.finCol}>
+                    <Text style={[styles.finLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
+                    <Text style={[styles.finVal, { color: colors.primary }]} numberOfLines={1}>
+                      {estValText}
+                    </Text>
+                  </View>
+                  <View style={[styles.finDivider, { backgroundColor: colors.borderSubtle }]} />
+                  <View style={styles.finCol}>
+                    <Text style={[styles.finLabel, { color: colors.textMuted }]}>EMD</Text>
+                    <Text style={[styles.finVal, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {emdValText}
+                    </Text>
+                  </View>
+                  <View style={[styles.finDivider, { backgroundColor: colors.borderSubtle }]} />
+                  <View style={styles.finCol}>
+                    <Text style={[styles.finLabel, { color: colors.textMuted }]}>e-PBG</Text>
+                    <Text style={[styles.finVal, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {epbgText}
+                    </Text>
+                  </View>
+                </View>
+
+                {isMseExempt ? (
+                  <View style={[styles.mseBanner, { backgroundColor: colors.successTint }]}>
+                    <Text style={[styles.mseBannerText, { color: colors.success }]}>
+                      MSE / STARTUP EMD EXEMPTION AVAILABLE (OEM ONLY FOR GOODS)
+                    </Text>
+                  </View>
+                ) : null}
+
+                {eligibilitySummary ? (
+                  <View style={[styles.mseBanner, { backgroundColor: colors.primaryTint }]}>
+                    <Text style={[styles.mseBannerText, { color: colors.primary }]}>
+                      PROFILE VERDICT: {eligibilitySummary}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* Eligibility Criteria Table */}
+                <View
+                  style={[
+                    styles.criteriaBox,
+                    { borderColor: colors.borderSubtle, backgroundColor: colors.surface },
+                  ]}
+                >
+                  <Text style={[styles.criteriaHeader, { color: colors.textMuted }]}>
+                    KEY ELIGIBILITY &amp; DELIVERY
+                  </Text>
+                  {[
+                    { label: 'Min. Annual Turnover', val: turnoverText },
+                    { label: 'Past Experience', val: expText },
+                    { label: 'Make in India (MII)', val: miiText },
+                    {
+                      label: 'Quantity & State',
+                      val: `${totalQty !== undefined ? `${totalQty.toLocaleString('en-IN')} Units` : 'See PDF'} · ${primaryState}`,
+                    },
+                    { label: 'Closing (IST)', val: formatDateSafe(bid.closingTimeUtc) },
+                  ].map((row, idx) => (
+                    <View
+                      key={row.label}
+                      style={[
+                        styles.criteriaRow,
+                        idx > 0 && {
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: colors.borderSubtle,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.dbLabel, { color: colors.textSecondary }]}>
+                        {row.label}
+                      </Text>
+                      <Text style={[styles.dbVal, { color: colors.textPrimary }]}>{row.val}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={[styles.sheetFooter, { borderTopColor: colors.borderSubtle }]}>
+                  <Text style={[styles.footerBrand, { color: colors.primary }]}>
+                    Verified GeM Public Feed
+                  </Text>
+                  <Text style={[styles.footerSub, { color: colors.textMuted }]} numberOfLines={1}>
+                    {brief.verifiedPdfUrl.replace(/^https?:\/\//, '')}
                   </Text>
                 </View>
-              ) : null}
-
-              {/* Scope Title */}
-              <Text style={styles.tenderTitle} numberOfLines={2}>
-                {bid.title || 'Supply & Delivery of Materials / Services'}
-              </Text>
-              <Text style={styles.deptSub}>
-                {[bid.department, bid.ministry].filter(Boolean).join(' • ') || 'Central Government Procurement'}
-              </Text>
-
-              {/* The Financial Big Three Matrix (3-Column Surface) */}
-              <View style={styles.financialMatrix}>
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>EST. VALUE</Text>
-                  <Text style={styles.finVal}>{estValText}</Text>
-                </View>
-                <View style={styles.finDivider} />
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>EMD AMOUNT</Text>
-                  <Text style={styles.finVal}>{emdValText}</Text>
-                </View>
-                <View style={styles.finDivider} />
-                <View style={styles.finCol}>
-                  <Text style={styles.finLabel}>e-PBG SECURITY</Text>
-                  <Text style={styles.finVal}>{epbgText}</Text>
-                </View>
               </View>
-
-              {/* High-Impact Green MSE Exemption Banner */}
-              <View style={[styles.mseBanner, { backgroundColor: isMseExempt ? '#DCFCE7' : '#FEF3C7' }]}>
-                <Text style={[styles.mseBannerText, { color: isMseExempt ? '#15803D' : '#92400E' }]}>
-                  {isMseExempt
-                    ? '🟢 MSE & STARTUP EMD EXEMPTION: 100% WAIVED'
-                    : '⚠️ EMD DEPOSIT REQUIRED (Check tender terms)'}
+            ) : (
+              /* Ready-to-Send OEM / CA Message Preview */
+              <View
+                style={[
+                  styles.messagePreviewCard,
+                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                ]}
+              >
+                <View style={styles.previewMetaRow}>
+                  <View style={[styles.audiencePill, { backgroundColor: colors.primaryTint }]}>
+                    <Text style={[styles.audiencePillText, { color: colors.primary }]}>
+                      {audience === 'OEM' ? 'OEM / DISTRIBUTOR BRIEF' : 'CA / AUDITOR BRIEF'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>
+                  {brief.title}
                 </Text>
-              </View>
-
-              {/* 4 Critical Eligibility Dealbreakers */}
-              <View style={styles.dealbreakersCard}>
-                <Text style={styles.dealbreakerHeader}>⚡ CRITICAL ELIGIBILITY CRITERIA</Text>
-
-                <View style={styles.dealbreakerRow}>
-                  <Text style={styles.dbLabel}>• Min. Annual Turnover:</Text>
-                  <Text style={styles.dbVal}>{turnoverText}</Text>
-                </View>
-
-                <View style={styles.dealbreakerRow}>
-                  <Text style={styles.dbLabel}>• Past Experience Years:</Text>
-                  <Text style={styles.dbVal}>{expText}</Text>
-                </View>
-
-                <View style={styles.dealbreakerRow}>
-                  <Text style={styles.dbLabel}>• Make in India (MII):</Text>
-                  <Text style={styles.dbVal}>{miiText}</Text>
-                </View>
-
-                <View style={styles.dealbreakerRow}>
-                  <Text style={styles.dbLabel}>• Reseller OEM Auth (MAF):</Text>
-                  <Text style={styles.dbVal}>{bid.type === 'SERVICE' ? 'Service Contract' : 'Required for Resellers'}</Text>
-                </View>
-              </View>
-
-              {/* Delivery & Quantity Footprint */}
-              <View style={styles.footprintRow}>
-                <Text style={styles.footprintText}>
-                  📦 Total Qty: <Text style={{ fontWeight: '700' }}>{totalQty.toLocaleString('en-IN')} Units</Text>
+                <Text style={[styles.previewSub, { color: colors.textSecondary }]}>
+                  {brief.subtitle}
                 </Text>
-                <Text style={styles.footprintText}>
-                  📍 Consignee:{' '}
-                  <Text style={{ fontWeight: '700' }}>
-                    {primaryState}
+                <View
+                  style={[
+                    styles.messageBodyBox,
+                    { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                  ]}
+                >
+                  <Text style={[styles.messageBodyText, { color: colors.textPrimary }]} selectable>
+                    {brief.message}
                   </Text>
-                </Text>
-              </View>
-
-              {/* Viral Attribution Footer */}
-              <View style={styles.dealSheetFooter}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.footerBrand}>GeM Mobile Companion</Text>
-                  <Text style={styles.footerSub}>Zero-Login Public Discovery • No Passwords Ever</Text>
-                </View>
-                <View style={styles.freeBadge}>
-                  <Text style={styles.freeBadgeText}>100% FREE</Text>
                 </View>
               </View>
-            </View>
+            )}
           </ScrollView>
 
-          {/* Action Footer Button */}
-          <View style={styles.actionRow}>
+          {/* Action Footer */}
+          <View
+            style={[
+              styles.actionRow,
+              { borderTopColor: colors.borderSubtle, backgroundColor: colors.surface },
+            ]}
+          >
             <Pressable
-              style={styles.shareBtn}
-              onPress={handleShareToWhatsApp}
-              android_ripple={{ color: '#25D366' }}
+              style={[
+                styles.copyBtn,
+                {
+                  backgroundColor: copied ? colors.successTint : colors.surfaceSubtle,
+                  borderColor: copied ? colors.success : colors.border,
+                },
+              ]}
+              onPress={handleCopy}
             >
-              <Text style={styles.shareBtnIcon}>📲</Text>
-              <Text style={styles.shareBtnText}>
-                {copied ? 'Copied to WhatsApp!' : 'Share Deal Sheet to WhatsApp'}
+              <Text
+                style={[
+                  styles.copyBtnText,
+                  { color: copied ? colors.success : colors.textPrimary },
+                ]}
+              >
+                {copied ? 'Copied ✓' : 'Copy Text'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.shareBtn, { backgroundColor: colors.success }]}
+              onPress={handleShare}
+            >
+              <Text style={[styles.shareBtnText, { color: '#FFFFFF' }]}>
+                Share {audience === 'PARTNER' ? 'Brief' : audience === 'OEM' ? 'to OEM' : 'to CA'} ↗
               </Text>
             </Pressable>
           </View>
@@ -279,62 +476,60 @@ ${consultantBranding?.agencyName ? `💼 Shared by: *${consultantBranding.agency
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    justifyContent: 'flex-end',
   },
+  backdropDismiss: { flex: 1 },
   modalCard: {
-    width: '100%',
-    maxWidth: 440,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderTopWidth: 1,
     maxHeight: '92%',
-    borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    gap: 10,
   },
-  modalHeaderTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  modalHeaderTitle: { fontSize: 15.5, fontWeight: '800' },
+  modalHeaderSub: { fontSize: 11.5, marginTop: 2 },
   closeBtn: {
-    padding: 4,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  scrollArea: {
+  tabBar: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  tabBtn: {
     flex: 1,
+    minHeight: 38,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
-  scrollContent: {
-    padding: 14,
-  },
+  tabBtnText: { fontSize: 11.5, fontWeight: '800' },
+  scrollArea: { maxHeight: 520 },
+  scrollContent: { padding: 14, paddingBottom: 20 },
   dealSheetSurface: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#0F2C59',
     overflow: 'hidden',
     paddingBottom: 12,
   },
-  tricolorBar: {
-    flexDirection: 'row',
-    height: 4,
-    width: '100%',
-  },
-  triStrip: {
-    flex: 1,
-    height: '100%',
-  },
+  topAccentBar: { height: 4, width: '100%' },
   sheetTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -342,198 +537,132 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 6,
+    gap: 8,
   },
-  portalTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    color: '#0F2C59',
-  },
-  bidNumberBadge: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#1E3A8A',
-    marginTop: 2,
-  },
+  portalTag: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.7 },
+  bidNumberBadge: { fontSize: 13.5, fontWeight: '900', marginTop: 2 },
   timerPill: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 10,
   },
-  timerText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  consultantBadge: {
-    backgroundColor: '#F1F5F9',
+  timerText: { fontSize: 11, fontWeight: '800' },
+  senderStrip: {
     marginHorizontal: 14,
     marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  consultantBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#334155',
-  },
+  senderText: { fontSize: 10.5, fontWeight: '700' },
   tenderTitle: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '800',
-    color: '#0F172A',
     paddingHorizontal: 14,
-    marginTop: 6,
-    lineHeight: 19,
+    marginTop: 8,
+    lineHeight: 20,
   },
   deptSub: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#64748B',
+    fontSize: 11.5,
     paddingHorizontal: 14,
     marginTop: 2,
     marginBottom: 10,
   },
   financialMatrix: {
     flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
     marginHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingVertical: 8,
+    paddingVertical: 9,
     marginBottom: 8,
   },
-  finCol: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  finDivider: {
-    width: 1,
-    backgroundColor: '#E2E8F0',
-    height: '100%',
-  },
-  finLabel: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 0.5,
-  },
-  finVal: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#0F2C59',
-    marginTop: 2,
-    textAlign: 'center',
-  },
+  finCol: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  finDivider: { width: 1, height: '100%' },
+  finLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.5 },
+  finVal: { fontSize: 12, fontWeight: '900', marginTop: 3, textAlign: 'center' },
   mseBanner: {
     marginHorizontal: 14,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 6,
+    borderRadius: 7,
     alignItems: 'center',
     marginBottom: 8,
   },
-  mseBannerText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  dealbreakersCard: {
-    backgroundColor: '#FFFFFF',
+  mseBannerText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3, textAlign: 'center' },
+  criteriaBox: {
     marginHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
     padding: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  dealbreakerHeader: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0F2C59',
-    marginBottom: 6,
-    letterSpacing: 0.5,
-  },
-  dealbreakerRow: {
+  criteriaHeader: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.6, marginBottom: 4 },
+  criteriaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 2,
+    paddingVertical: 6,
+    gap: 10,
   },
-  dbLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  dbVal: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  footprintRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    marginBottom: 8,
-  },
-  footprintText: {
-    fontSize: 10,
-    color: '#64748B',
-  },
-  dealSheetFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+  dbLabel: { fontSize: 11, fontWeight: '600' },
+  dbVal: { fontSize: 11, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
+  sheetFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingTop: 9,
+    gap: 2,
   },
-  footerBrand: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0F2C59',
+  footerBrand: { fontSize: 10.5, fontWeight: '800' },
+  footerSub: { fontSize: 9.5 },
+  messagePreviewCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
   },
-  footerSub: {
-    fontSize: 8,
-    color: '#94A3B8',
-    marginTop: 1,
+  previewMetaRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
   },
-  freeBadge: {
-    backgroundColor: '#0F2C59',
+  audiencePill: {
+    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
   },
-  freeBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#FFFFFF',
+  audiencePillText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.5 },
+  previewTitle: { fontSize: 14.5, fontWeight: '800' },
+  previewSub: { fontSize: 11.5, marginTop: 2, marginBottom: 10 },
+  messageBodyBox: {
+    borderRadius: 9,
+    borderWidth: 1,
+    padding: 12,
+  },
+  messageBodyText: {
+    fontSize: 12.5,
+    lineHeight: 18.5,
   },
   actionRow: {
-    padding: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-  },
-  shareBtn: {
-    backgroundColor: '#25D366',
     flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  copyBtn: {
+    minWidth: 102,
+    minHeight: 46,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  copyBtnText: { fontSize: 13, fontWeight: '800' },
+  shareBtn: {
+    flex: 1,
+    minHeight: 46,
     borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
-  shareBtnIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  shareBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
+  shareBtnText: { fontSize: 13.5, fontWeight: '800' },
 });

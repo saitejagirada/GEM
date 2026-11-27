@@ -41,12 +41,15 @@ import {
   type LocalPdfScanResult,
 } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
+import { TenderRadarService } from '../services/TenderRadarService';
+import { AppIcon } from '../components/AppIcons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/designTokens';
 import { formatDateSafe, formatInr } from '../utils/formatters';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
 import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
+import { BidMarginModal } from '../components/BidMarginModal';
 
 interface BidInspectorScreenProps {
   bid: DeconstructedBidDoc | null;
@@ -114,9 +117,19 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const [documentViewerVisible, setDocumentViewerVisible] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>();
   const [showDealSheet, setShowDealSheet] = useState(false);
+  const [showMarginCalc, setShowMarginCalc] = useState(false);
   const [otherDetails, setOtherDetails] = useState<GeMBidOtherDetails | null>(null);
   const [copiedBidNum, setCopiedBidNum] = useState(false);
   const [activeJump, setActiveJump] = useState<SectionKey>('overview');
+  const [isWatched, setIsWatched] = useState(() => TenderRadarService.isWatched(bid?.bidNumber));
+
+  useEffect(() => {
+    setIsWatched(TenderRadarService.isWatched(bid?.bidNumber));
+    const unsub = TenderRadarService.subscribe(() => {
+      setIsWatched(TenderRadarService.isWatched(bid?.bidNumber));
+    });
+    return () => unsub();
+  }, [bid?.bidNumber]);
 
   useEffect(() => {
     setCheckedDocs({});
@@ -124,6 +137,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     setOtherDetails(null);
     setDocumentViewerVisible(false);
     setShowDealSheet(false);
+    setShowMarginCalc(false);
     setSelectedDocumentId(undefined);
     setCopiedBidNum(false);
     setActiveJump('overview');
@@ -554,6 +568,26 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
               <Pressable
                 style={({ pressed }) => [
+                  styles.watchHeaderBtn,
+                  {
+                    backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
+                    borderColor: isWatched ? colors.warning : colors.borderSubtle,
+                    opacity: pressed ? 0.78 : 1,
+                  },
+                ]}
+                onPress={() => void TenderRadarService.toggleWatch(effectiveBid)}
+                hitSlop={6}
+                accessibilityLabel={isWatched ? 'Remove from watched tenders' : 'Watch tender'}
+              >
+                <AppIcon
+                  name={isWatched ? 'bookmarkFilled' : 'bookmark'}
+                  color={isWatched ? colors.warning : colors.textSecondary}
+                  size={15}
+                />
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
                   styles.sharePillBtn,
                   { backgroundColor: colors.primaryTint, borderColor: colors.primary },
                   pressed && { opacity: 0.78 },
@@ -830,6 +864,33 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                       </Text>
                     </View>
                   </View>
+
+                  {/* 1-Tap Bid Margin & RA Floor Calculator Launcher */}
+                  <Pressable
+                    onPress={() => setShowMarginCalc(true)}
+                    style={({ pressed }) => [
+                      styles.calcTriggerRow,
+                      {
+                        backgroundColor: colors.primaryTint,
+                        borderColor: colors.borderSubtle,
+                        opacity: pressed ? 0.82 : 1,
+                      },
+                    ]}
+                    accessibilityLabel="Open Bid Margin and RA Floor Calculator"
+                  >
+                    <View style={[styles.calcIconBox, { backgroundColor: colors.surface }]}>
+                      <AppIcon name="calculator" color={colors.primary} size={15} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.calcTriggerTitle, { color: colors.primary }]}>
+                        Bid Margin &amp; RA Floor Calculator
+                      </Text>
+                      <Text style={[styles.calcTriggerSub, { color: colors.textSecondary }]}>
+                        Calculate GST quote, walk-away floor &amp; EMD/e-PBG cash
+                      </Text>
+                    </View>
+                    <Text style={[styles.calcTriggerCue, { color: colors.primary }]}>Calculate ›</Text>
+                  </Pressable>
                 </View>
               </View>
 
@@ -1267,6 +1328,14 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
         />
       )}
 
+      {showMarginCalc && (
+        <BidMarginModal
+          bid={effectiveBid}
+          visible={showMarginCalc}
+          onClose={() => setShowMarginCalc(false)}
+        />
+      )}
+
       <BidDocumentViewer
         bid={effectiveBid}
         visible={documentViewerVisible}
@@ -1306,6 +1375,14 @@ const styles = StyleSheet.create({
   },
   copyChipText: { fontSize: 10, fontWeight: '800' },
   headerSubtitle: { fontSize: 11, marginTop: 2 },
+  watchHeaderBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   sharePillBtn: {
     paddingHorizontal: 11,
     minHeight: 34,
@@ -1424,6 +1501,27 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     marginTop: 2,
   },
+  calcTriggerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    minHeight: 48,
+  },
+  calcIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calcTriggerTitle: { fontSize: 12.5, fontWeight: '800' },
+  calcTriggerSub: { fontSize: 10.5, marginTop: 1 },
+  calcTriggerCue: { fontSize: 12, fontWeight: '800' },
   card: {
     borderRadius: 14,
     padding: 14,

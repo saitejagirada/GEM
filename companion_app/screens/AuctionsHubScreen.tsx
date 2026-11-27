@@ -18,9 +18,12 @@ import {
   BackHandler,
   RefreshControl,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
 import { GeMLiveSyncService, type GeMPortalSort } from '../services/GeMLiveSyncService';
+import { TenderRadarService } from '../services/TenderRadarService';
+import { AppIcon } from '../components/AppIcons';
 import { isNetworkOnline } from '../utils/network';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
@@ -110,6 +113,16 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState<boolean>(false);
+  const [watchedSet, setWatchedSet] = useState<Set<string>>(
+    () => new Set(TenderRadarService.getState().watched.map((w) => w.bid.bidNumber.trim().toLowerCase()))
+  );
+
+  useEffect(() => {
+    const unsub = TenderRadarService.subscribe((radarState) => {
+      setWatchedSet(new Set(radarState.watched.map((w) => w.bid.bidNumber.trim().toLowerCase())));
+    });
+    return () => unsub();
+  }, []);
 
   const reqIdRef = useRef<number>(0);
   const loadingMoreRef = useRef<boolean>(false);
@@ -240,6 +253,42 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
             {ra.contractNumber}
           </Text>
           <Text style={[styles.closingText, { color: colors.warning }]}>{ra.closingDateLabel}</Text>
+          {ra.sourceBid ? (
+            <Pressable
+              onPress={() => void TenderRadarService.toggleWatch(ra.sourceBid!)}
+              hitSlop={8}
+              style={[
+                styles.watchMiniBtn,
+                {
+                  backgroundColor: watchedSet.has(ra.contractNumber.trim().toLowerCase())
+                    ? colors.warningTint
+                    : colors.surfaceSubtle,
+                  borderColor: watchedSet.has(ra.contractNumber.trim().toLowerCase())
+                    ? colors.warning
+                    : colors.borderSubtle,
+                },
+              ]}
+              accessibilityLabel={
+                watchedSet.has(ra.contractNumber.trim().toLowerCase())
+                  ? 'Remove from watchlist'
+                  : 'Watch reverse auction'
+              }
+            >
+              <AppIcon
+                name={
+                  watchedSet.has(ra.contractNumber.trim().toLowerCase())
+                    ? 'bookmarkFilled'
+                    : 'bookmark'
+                }
+                color={
+                  watchedSet.has(ra.contractNumber.trim().toLowerCase())
+                    ? colors.warning
+                    : colors.textMuted
+                }
+                size={13}
+              />
+            </Pressable>
+          ) : null}
         </View>
         <Text
           style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
@@ -286,7 +335,7 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
         </View>
       </View>
     ),
-    [colors, fontMultiplier]
+    [colors, fontMultiplier, watchedSet]
   );
 
   if (selectedRa) {
@@ -511,6 +560,14 @@ const styles = StyleSheet.create({
   },
   auctionNumber: { fontSize: 12, fontWeight: '600', flex: 1 },
   closingText: { fontSize: 11, fontWeight: '700' },
+  watchMiniBtn: {
+    width: 28,
+    height: 26,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   auctionTitle: { fontWeight: '700', marginBottom: 4, lineHeight: 18 },
   deptText: { fontSize: 12, marginBottom: 10 },
   metaGrid: {

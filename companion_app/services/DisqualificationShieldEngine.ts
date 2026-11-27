@@ -250,9 +250,15 @@ export class DisqualificationShieldEngine {
     // -----------------------------------------------------------------------
     if (tender.consignees && tender.consignees.length > 0) {
       const targetStates = (profile.targetStates || []).map((s) => s.toLowerCase());
-      const unsupportedStates = tender.consignees
-        .map((c) => c.state)
-        .filter((st) => st && st !== 'India' && !targetStates.includes(st.toLowerCase()));
+      const isPanIndia =
+        targetStates.length === 0 ||
+        targetStates.includes('pan-india') ||
+        targetStates.includes('all india');
+      const unsupportedStates = isPanIndia
+        ? []
+        : tender.consignees
+            .map((c) => c.state)
+            .filter((st) => st && st !== 'India' && !targetStates.includes(st.toLowerCase()));
 
       const uniqueUnsupported = Array.from(new Set(unsupportedStates));
       if (uniqueUnsupported.length > 0) {
@@ -270,7 +276,9 @@ export class DisqualificationShieldEngine {
           category: 'LOGISTICS',
           title: 'Consignee Delivery Coverage',
           severity: 'PASS',
-          reason: `All delivery destinations fall within your verified operational target states.`,
+          reason: isPanIndia
+            ? 'Delivery covered under your Pan-India operational profile.'
+            : 'All delivery destinations fall within your verified operational target states.',
         });
       }
     }
@@ -318,7 +326,7 @@ export class DisqualificationShieldEngine {
       summaryHeading = `Rejected on Technical Opening: ${criticalCount} critical compliance barrier${criticalCount > 1 ? 's' : ''} detected.`;
     } else if (warningCount > 0) {
       overallStatus = 'ELEVATED_RISK';
-      summaryHeading = `Qualified with caution: ${warningCount} item${warningCount > 1 ? 's' : ''} require attention before submission.`;
+      summaryHeading = `Qualified with caution: ${warningCount} item${warningCount > 1 ? 's require' : ' requires'} attention before submission.`;
     }
 
     // Generate Pre-Filled Compliance Templates

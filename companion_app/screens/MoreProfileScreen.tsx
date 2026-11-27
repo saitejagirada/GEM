@@ -8,7 +8,7 @@
  * - Inline interactive Theme (Light / Dark) & Text Size (Small / Medium / Large) controls
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   Pressable,
@@ -19,6 +19,9 @@ import {
 } from 'react-native';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import { AppIcon, type AppIconName } from '../components/AppIcons';
+import { BusinessProfileModal } from '../components/BusinessProfileModal';
+import { BusinessProfileService } from '../services/BusinessProfileService';
+import type { UserAgentProfile } from '../types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const GEM_MARK_IMG = require('../assets/gem-mark.png');
@@ -48,6 +51,15 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onOpenOfficialPortal,
 }) => {
   const { colors, fontMultiplier, isDark, toggleColorMode, fontScale, setFontScale } = useTheme();
+  const [businessProfile, setBusinessProfile] = useState<UserAgentProfile | null>(() =>
+    BusinessProfileService.getProfile()
+  );
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  useEffect(() => {
+    BusinessProfileService.hydrate().then(setBusinessProfile).catch(() => undefined);
+    return BusinessProfileService.subscribe(setBusinessProfile);
+  }, []);
 
   const openPortal = () => {
     if (onOpenOfficialPortal) onOpenOfficialPortal();
@@ -60,6 +72,16 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   };
 
   const workspaceItems: MenuRowItem[] = [
+    {
+      id: 'business-profile',
+      icon: 'profile',
+      iconBg: businessProfile ? colors.successTint : colors.primaryTint,
+      iconColor: businessProfile ? colors.success : colors.primary,
+      title: 'My Business Profile',
+      subtitle: BusinessProfileService.formatProfileSummary(businessProfile),
+      badge: businessProfile ? 'ACTIVE' : '30s SETUP',
+      onPress: () => setShowProfileModal(true),
+    },
     {
       id: 'docs',
       icon: 'document',
@@ -145,14 +167,36 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
               <AppIcon name={row.icon} color={row.iconColor} size={18} />
             </View>
             <View style={styles.menuTextCol}>
-              <Text
-                style={[
-                  styles.menuTitle,
-                  { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier },
-                ]}
-              >
-                {row.title}
-              </Text>
+              <View style={styles.menuTitleRow}>
+                <Text
+                  style={[
+                    styles.menuTitle,
+                    { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier },
+                  ]}
+                >
+                  {row.title}
+                </Text>
+                {row.badge ? (
+                  <View
+                    style={[
+                      styles.menuBadge,
+                      {
+                        backgroundColor:
+                          row.badge === 'ACTIVE' ? colors.successTint : colors.primaryTint,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.menuBadgeText,
+                        { color: row.badge === 'ACTIVE' ? colors.success : colors.primary },
+                      ]}
+                    >
+                      {row.badge}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.menuSub, { color: colors.textSecondary }]}>{row.subtitle}</Text>
             </View>
             <Text style={[styles.chevron, { color: colors.textMuted }]}>›</Text>
@@ -344,6 +388,12 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       <Text style={[styles.versionFooter, { color: colors.textMuted }]}>
         GeM Mobile Companion v2.1 · Beta · Direct Phone ↔ GeM Public Portal
       </Text>
+
+      <BusinessProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSaved={(saved) => setBusinessProfile(saved)}
+      />
     </ScrollView>
   );
 };
@@ -442,9 +492,25 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  menuTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flexWrap: 'wrap',
+    marginBottom: 2,
+  },
   menuTitle: {
     fontWeight: '700',
-    marginBottom: 2,
+  },
+  menuBadge: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  menuBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   menuSub: {
     fontSize: 11.5,

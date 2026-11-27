@@ -1,16 +1,16 @@
 /**
- * GeM Mobile Companion App - Eligibility & Bid Watchouts Component
+ * GeM Mobile Companion App - Eligibility & Go/No-Go Bid Watchouts Component
  *
  * Clean, honest pre-bid compliance breakdown built strictly from clauses extracted
  * locally from the official GeM PDF.
- * - When no seller profile is configured, shows transparent tender requirements and
- *   practical GeM watchouts without fabricating failure/rejection alarms against
- *   dummy profile data.
- * - When an explicit seller profile is provided, runs DisqualificationShieldEngine
- *   against the user's real profile and attached documents.
+ * - Before a Business Profile is configured: shows transparent tender requirements
+ *   from the PDF + a 1-tap "Set up 30s Business Profile" CTA (zero dummy PII).
+ * - Once the user saves their private on-device Business Profile: runs
+ *   DisqualificationShieldEngine live against their real criteria and any attached
+ *   Workspace documents to display a clear GO / CAUTION / NO-GO verdict.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -28,7 +28,11 @@ import {
   DisqualificationShieldEngine,
   type DisqualificationShieldReport,
 } from '../services/DisqualificationShieldEngine';
+import { BusinessProfileService } from '../services/BusinessProfileService';
+import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { formatInr } from '../utils/formatters';
+import { AppIcon } from './AppIcons';
+import { BusinessProfileModal } from './BusinessProfileModal';
 
 interface PreBidDisqualificationShieldProps {
   tenderDetails: ExtractedGeMTenderDetails;
@@ -48,21 +52,54 @@ interface RequirementBullet {
 export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShieldProps> = ({
   tenderDetails,
   profile,
-  attachedDocs = [],
+  attachedDocs,
   onPrepareDocuments,
 }) => {
   const { colors } = useTheme();
-  const [activeTemplate, setActiveTemplate] = useState<{ title: string; content: string } | null>(null);
+  const [activeTemplate, setActiveTemplate] = useState<{ title: string; content: string } | null>(
+    null
+  );
+  const [savedProfile, setSavedProfile] = useState<UserAgentProfile | null>(() =>
+    BusinessProfileService.getProfile()
+  );
+  const [workspaceDocs, setWorkspaceDocs] = useState<WorkspaceDocument[]>([]);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
-  // Run profile-matched compliance engine ONLY when a real user profile is provided
+  useEffect(() => {
+    BusinessProfileService.hydrate().then(setSavedProfile).catch(() => undefined);
+    return BusinessProfileService.subscribe(setSavedProfile);
+  }, []);
+
+  useEffect(() => {
+    if (attachedDocs !== undefined) return;
+    let cancelled = false;
+    WorkspaceStorage.loadDocuments()
+      .then((docs) => {
+        if (cancelled) return;
+        const bidNo = tenderDetails.bidNumber;
+        const matched = bidNo
+          ? docs.filter((d) => !d.linkedBidNumber || d.linkedBidNumber === bidNo)
+          : docs;
+        setWorkspaceDocs(matched);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [attachedDocs, tenderDetails.bidNumber]);
+
+  const activeProfile = profile ?? savedProfile ?? undefined;
+  const activeDocs = attachedDocs ?? workspaceDocs;
+
+  // Run profile-matched compliance engine ONLY when a real user profile is provided/configured
   const profileReport: DisqualificationShieldReport | null = useMemo(() => {
-    if (!profile) return null;
-    return DisqualificationShieldEngine.evaluateShield(tenderDetails, profile, attachedDocs);
-  }, [tenderDetails, profile, attachedDocs]);
+    if (!activeProfile) return null;
+    return DisqualificationShieldEngine.evaluateShield(tenderDetails, activeProfile, activeDocs);
+  }, [tenderDetails, activeProfile, activeDocs]);
 
   // Generate clean ready-to-share compliance letters without fabricating seller stats
   const draftTemplates = useMemo(() => {
-    const templateProfile: UserAgentProfile = profile || {
+    const templateProfile: UserAgentProfile = activeProfile || {
       id: 'template-only',
       organizationName: '[Your Company Name]',
       msmeCategory: 'MICRO',
@@ -78,7 +115,7 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
       ca: DisqualificationShieldEngine.generateCaRequestTemplate(tenderDetails, templateProfile),
       oem: DisqualificationShieldEngine.generateOemMafTemplate(tenderDetails, templateProfile),
     };
-  }, [tenderDetails, profile]);
+  }, [tenderDetails, activeProfile]);
 
   // Honest tender-derived requirements & GeM rule watchouts (when no user profile is set)
   const publishedWatchouts = useMemo<RequirementBullet[]>(() => {
@@ -105,12 +142,11 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
     }
 
     if (tenderDetails.minAnnualTurnoverInr && tenderDetails.minAnnualTurnoverInr > 0) {
-      const lakhs = (tenderDetails.minAnnualTurnoverInr / 100000).toFixed(1);
       items.push({
         id: 'turnover',
         tag: 'TURNOVER',
         tone: 'info',
-        title: `Minimum ₹${lakhs} Lakhs average annual turnover`,
+        title: `Minimum ₹${formatInr(tenderDetails.minAnnualTurnoverInr)} average annual turnover`,
         detail: tenderDetails.mseExemptionForExpAndTurnover
           ? 'Buyer enabled MSE/Startup turnover relaxation — verify exact supporting document clause in PDF.'
           : 'Keep audited balance sheets or a CA Turnover Certificate with valid ICAI UDIN ready.',
@@ -194,92 +230,160 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
 
   const stateEntries = Object.entries(tenderDetails.consigneeStateDistribution || {});
 
-  if (!profileReport && publishedWatchouts.length === 0 && stateEntries.length === 0) {
-    return null;
-  }
+  const verdictMeta = useMemo(() => {
+    if (!profileReport) return null;
+    if (profileReport.overallStatus === 'BATTLE_READY') {
+      return {
+        label: 'GO · ELIGIBLE',
+        bg: colors.successTint,
+        fg: colors.success,
+        border: colors.success,
+        headline: 'Your business profile meets the published criteria for this tender.',
+      };
+    }
+    if (profileReport.overallStatus === 'ELEVATED_RISK') {
+      return {
+        label: `CAUTION · ${profileReport.warningCount} CHECK${profileReport.warningCount === 1 ? '' : 'S'}`,
+        bg: colors.warningTint,
+        fg: colors.warning,
+        border: colors.warning,
+        headline: profileReport.summaryHeading,
+      };
+    }
+    return {
+      label: `NO-GO · ${profileReport.criticalDisqualificationCount} BLOCKER${profileReport.criticalDisqualificationCount === 1 ? '' : 'S'}`,
+      bg: colors.dangerTint,
+      fg: colors.danger,
+      border: colors.danger,
+      headline: profileReport.summaryHeading,
+    };
+  }, [profileReport, colors]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {profileReport ? 'Eligibility Check' : 'Eligibility & Key Watchouts'}
+            {profileReport ? 'Go / No-Go Eligibility Verdict' : 'Eligibility & Key Watchouts'}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {profileReport
-              ? 'Matched against your saved seller profile'
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+            {profileReport && activeProfile
+              ? BusinessProfileService.formatProfileSummary(activeProfile)
               : 'Key rules extracted directly from the official GeM PDF'}
           </Text>
         </View>
         {profileReport ? (
-          <View
+          <Pressable
+            onPress={() => setShowProfileModal(true)}
+            hitSlop={8}
             style={[
-              styles.scoreBadge,
-              {
-                backgroundColor:
-                  profileReport.overallStatus === 'BATTLE_READY'
-                    ? colors.successTint
-                    : profileReport.overallStatus === 'ELEVATED_RISK'
-                      ? colors.warningTint
-                      : colors.dangerTint,
-              },
+              styles.editProfilePill,
+              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
             ]}
           >
-            <Text
-              style={[
-                styles.scoreBadgeText,
-                {
-                  color:
-                    profileReport.overallStatus === 'BATTLE_READY'
-                      ? colors.success
-                      : profileReport.overallStatus === 'ELEVATED_RISK'
-                        ? colors.warning
-                        : colors.danger,
-                },
-              ]}
-            >
-              {profileReport.shieldScore}% Ready
-            </Text>
-          </View>
+            <Text style={[styles.editProfileText, { color: colors.primary }]}>Edit Profile</Text>
+          </Pressable>
         ) : null}
       </View>
 
+      {/* Live Go / Caution / No-Go Verdict Banner (Mode 2) OR 30s Profile Setup Prompt (Mode 1) */}
+      {profileReport && verdictMeta ? (
+        <View
+          style={[
+            styles.verdictBanner,
+            { backgroundColor: verdictMeta.bg, borderColor: verdictMeta.border },
+          ]}
+        >
+          <View style={styles.verdictTopRow}>
+            <Text style={[styles.verdictBadgeText, { color: verdictMeta.fg }]}>
+              {verdictMeta.label}
+            </Text>
+            <Text style={[styles.verdictCounts, { color: verdictMeta.fg }]}>
+              {profileReport.passedCount} OK · {profileReport.warningCount} Check ·{' '}
+              {profileReport.criticalDisqualificationCount} Blocker
+            </Text>
+          </View>
+          <Text style={[styles.verdictHeadline, { color: colors.textPrimary }]}>
+            {verdictMeta.headline}
+          </Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => setShowProfileModal(true)}
+          style={({ pressed }) => [
+            styles.setupPromptBox,
+            {
+              backgroundColor: colors.primaryTint,
+              borderColor: colors.primary,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <View style={[styles.setupIconWrap, { backgroundColor: colors.surface }]}>
+            <AppIcon name="profile" color={colors.primary} size={16} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.setupPromptTitle, { color: colors.primary }]}>
+              Check if your business qualifies
+            </Text>
+            <Text style={[styles.setupPromptSub, { color: colors.textSecondary }]}>
+              Set up 30s private profile (OEM/Reseller, Turnover, MSE) for instant Go/No-Go verdicts.
+            </Text>
+          </View>
+          <Text style={[styles.setupPromptCta, { color: colors.primary }]}>Setup ›</Text>
+        </Pressable>
+      )}
+
       {/* Mode 1: Honest published rules (default when no seller profile is configured) */}
       {!profileReport ? (
-        <View style={styles.listWrap}>
-          {publishedWatchouts.map((item, idx) => {
-            const tagBg =
-              item.tone === 'positive'
-                ? colors.successTint
-                : item.tone === 'caution'
-                  ? colors.warningTint
-                  : colors.primaryTint;
-            const tagFg =
-              item.tone === 'positive'
-                ? colors.success
-                : item.tone === 'caution'
-                  ? colors.warning
-                  : colors.primary;
+        publishedWatchouts.length > 0 ? (
+          <View style={styles.listWrap}>
+            {publishedWatchouts.map((item, idx) => {
+              const tagBg =
+                item.tone === 'positive'
+                  ? colors.successTint
+                  : item.tone === 'caution'
+                    ? colors.warningTint
+                    : colors.primaryTint;
+              const tagFg =
+                item.tone === 'positive'
+                  ? colors.success
+                  : item.tone === 'caution'
+                    ? colors.warning
+                    : colors.primary;
 
-            return (
-              <View
-                key={item.id}
-                style={[
-                  styles.watchoutRow,
-                  idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle },
-                ]}
-              >
-                <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
-                  <Text style={[styles.tagPillText, { color: tagFg }]}>{item.tag}</Text>
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.watchoutRow,
+                    idx > 0 && {
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderTopColor: colors.borderSubtle,
+                    },
+                  ]}
+                >
+                  <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
+                    <Text style={[styles.tagPillText, { color: tagFg }]}>{item.tag}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
+                      {item.title}
+                    </Text>
+                    <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
+                      {item.detail}
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{item.title}</Text>
-                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>{item.detail}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.noRulesNote, { color: colors.textSecondary }]}>
+            No mandatory turnover, EMD, or experience thresholds were flagged in the scanned summary.
+            Confirm full terms inside the official Bid PDF.
+          </Text>
+        )
       ) : (
         /* Mode 2: Real profile comparison (clean, calm, zero emojis) */
         <View style={styles.listWrap}>
@@ -292,22 +396,29 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                 ? colors.warningTint
                 : colors.successTint;
             const tagFg = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
-            const tagText = isCritical ? 'ACTION' : isWarning ? 'CHECK' : 'OK';
+            const tagText = isCritical ? 'BLOCKER' : isWarning ? 'CHECK' : 'OK';
 
             return (
               <View
                 key={check.id}
                 style={[
                   styles.watchoutRow,
-                  idx > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSubtle },
+                  idx > 0 && {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopColor: colors.borderSubtle,
+                  },
                 ]}
               >
                 <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
                   <Text style={[styles.tagPillText, { color: tagFg }]}>{tagText}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>{check.title}</Text>
-                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>{check.reason}</Text>
+                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
+                    {check.title}
+                  </Text>
+                  <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
+                    {check.reason}
+                  </Text>
                   {check.remediation ? (
                     <Text style={[styles.remediationLine, { color: colors.primary }]}>
                       Next step: {check.remediation}
@@ -344,7 +455,9 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
 
       {/* Useful 1-Tap Compliance Letter Drafts */}
       <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
-        <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>QUICK LETTER DRAFTS</Text>
+        <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>
+          QUICK LETTER DRAFTS
+        </Text>
         <View style={styles.chipWrap}>
           <Pressable
             style={({ pressed }) => [
@@ -371,7 +484,9 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
             ]}
             onPress={() => handleOpenTemplate('CA_UDIN_REQUEST')}
           >
-            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>CA UDIN Request ↗</Text>
+            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
+              CA UDIN Request ↗
+            </Text>
           </Pressable>
 
           <Pressable
@@ -385,7 +500,9 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
             ]}
             onPress={() => handleOpenTemplate('OEM_MAF_REQUEST')}
           >
-            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>OEM MAF Request ↗</Text>
+            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
+              OEM MAF Request ↗
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -413,7 +530,12 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
       >
         <View style={styles.modalBackdrop}>
           <Pressable style={{ flex: 1 }} onPress={() => setActiveTemplate(null)} />
-          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={[styles.modalHeader, { borderBottomColor: colors.borderSubtle }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]} numberOfLines={2}>
                 {activeTemplate?.title}
@@ -440,13 +562,20 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
           </View>
         </View>
       </Modal>
+
+      {/* Private On-Device Business Profile Modal */}
+      <BusinessProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSaved={(saved) => setSavedProfile(saved)}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 14,
     marginBottom: 12,
@@ -456,24 +585,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   title: {
-    fontSize: 14.5,
+    fontSize: 15,
     fontWeight: '800',
   },
   subtitle: {
     fontSize: 11.5,
     marginTop: 2,
   },
-  scoreBadge: {
+  editProfilePill: {
     borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 32,
+    justifyContent: 'center',
   },
-  scoreBadgeText: {
-    fontSize: 11,
+  editProfileText: {
+    fontSize: 11.5,
     fontWeight: '800',
+  },
+  verdictBanner: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 11,
+    marginBottom: 6,
+  },
+  verdictTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  verdictBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  verdictCounts: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  verdictHeadline: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  setupPromptBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 11,
+    marginBottom: 8,
+    minHeight: 54,
+  },
+  setupIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setupPromptTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  setupPromptSub: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  setupPromptCta: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  noRulesNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    paddingVertical: 6,
   },
   listWrap: {
     marginTop: 2,

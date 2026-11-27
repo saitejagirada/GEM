@@ -29,6 +29,8 @@ import {
 } from '../services/GeMLiveSyncService';
 import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
+import { TenderRadarService } from '../services/TenderRadarService';
+import { AppIcon } from '../components/AppIcons';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SearchField,
@@ -120,13 +122,22 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   // Bottom Sheet Filter State
   const [showFilterModal, setShowFilterModal] = useState<boolean>(false);
+  const [watchedSet, setWatchedSet] = useState<Set<string>>(
+    () => new Set(TenderRadarService.getState().watched.map((w) => w.bid.bidNumber.trim().toLowerCase()))
+  );
 
-  // Subscribe to global GeMLiveSyncService stats (does NOT reset paginated list)
+  // Subscribe to global GeMLiveSyncService stats + Watchlist changes
   useEffect(() => {
     const unsub = GeMLiveSyncService.subscribe((_, stats) => {
       setLiveStats(stats);
     });
-    return () => unsub();
+    const unsubRadar = TenderRadarService.subscribe((radarState) => {
+      setWatchedSet(new Set(radarState.watched.map((w) => w.bid.bidNumber.trim().toLowerCase())));
+    });
+    return () => {
+      unsub();
+      unsubRadar();
+    };
   }, []);
 
   // Debounce search input so typing delegates smoothly to bidplus.gem.gov.in
@@ -355,7 +366,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             },
           ]}
         >
-          {/* Card Header: Type Tag, High Value Tag, Bid Number */}
+          {/* Card Header: Type Tag, High Value Tag, Bid Number & Watch Button */}
           <View style={styles.cardHeaderRow}>
             <View style={styles.cardHeaderLeft}>
               <StatusBadge
@@ -376,7 +387,43 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
                 {item.bidNumber}
               </Text>
             </View>
-            {item.isHighValue ? <StatusBadge label="≥ ₹2 Cr" tone="success" /> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {item.isHighValue ? <StatusBadge label="≥ ₹2 Cr" tone="success" /> : null}
+              <Pressable
+                onPress={() => void TenderRadarService.toggleWatch(item)}
+                hitSlop={8}
+                style={[
+                  styles.watchMiniBtn,
+                  {
+                    backgroundColor: watchedSet.has(item.bidNumber.trim().toLowerCase())
+                      ? colors.warningTint
+                      : colors.surfaceSubtle,
+                    borderColor: watchedSet.has(item.bidNumber.trim().toLowerCase())
+                      ? colors.warning
+                      : colors.borderSubtle,
+                  },
+                ]}
+                accessibilityLabel={
+                  watchedSet.has(item.bidNumber.trim().toLowerCase())
+                    ? 'Remove from watchlist'
+                    : 'Watch tender'
+                }
+              >
+                <AppIcon
+                  name={
+                    watchedSet.has(item.bidNumber.trim().toLowerCase())
+                      ? 'bookmarkFilled'
+                      : 'bookmark'
+                  }
+                  color={
+                    watchedSet.has(item.bidNumber.trim().toLowerCase())
+                      ? colors.warning
+                      : colors.textMuted
+                  }
+                  size={13}
+                />
+              </Pressable>
+            </View>
           </View>
 
           {/* Bid Title */}
@@ -464,7 +511,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         </View>
       );
     },
-    [colors, fontMultiplier, handleOpenDoc, handleInspect]
+    [colors, fontMultiplier, watchedSet, handleOpenDoc, handleInspect]
   );
 
   const busy = (isSyncing && displayedBids.length === 0) || isQuerying;
@@ -804,6 +851,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
     flexShrink: 1,
+  },
+  watchMiniBtn: {
+    width: 30,
+    height: 28,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bidTitle: {
     fontWeight: '700',

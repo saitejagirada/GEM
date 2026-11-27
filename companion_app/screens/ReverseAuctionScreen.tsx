@@ -31,12 +31,15 @@ import {
   type LocalPdfScanResult,
 } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
+import { TenderRadarService } from '../services/TenderRadarService';
+import { AppIcon } from '../components/AppIcons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/designTokens';
 import { StatusBadge } from '../components/SharedUI';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
 import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
+import { BidMarginModal } from '../components/BidMarginModal';
 import { formatDateSafe, formatInr } from '../utils/formatters';
 
 export interface PublicReverseAuctionRecord {
@@ -118,8 +121,18 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>();
   const [showDealSheet, setShowDealSheet] = useState(false);
+  const [showMarginCalc, setShowMarginCalc] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [activeJump, setActiveJump] = useState<RaSectionKey>('overview');
+  const [isWatched, setIsWatched] = useState(() => TenderRadarService.isWatched(auction.contractNumber));
+
+  useEffect(() => {
+    setIsWatched(TenderRadarService.isWatched(auction.contractNumber));
+    const unsub = TenderRadarService.subscribe(() => {
+      setIsWatched(TenderRadarService.isWatched(auction.contractNumber));
+    });
+    return () => unsub();
+  }, [auction.contractNumber]);
 
   const baseBid = useMemo<DeconstructedBidDoc>(() => {
     if (auction.sourceBid) return auction.sourceBid;
@@ -480,6 +493,24 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         </Pressable>
         <StatusBadge label="LIVE RA" tone="success" dot />
         <Pressable
+          style={[
+            styles.watchChipBtn,
+            {
+              backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
+              borderColor: isWatched ? colors.warning : colors.borderSubtle,
+            },
+          ]}
+          onPress={() => void TenderRadarService.toggleWatch(effectiveBid)}
+          hitSlop={6}
+          accessibilityLabel={isWatched ? 'Remove from watched auctions' : 'Watch auction'}
+        >
+          <AppIcon
+            name={isWatched ? 'bookmarkFilled' : 'bookmark'}
+            color={isWatched ? colors.warning : colors.textSecondary}
+            size={14}
+          />
+        </Pressable>
+        <Pressable
           style={[styles.shareChip, { backgroundColor: colors.primaryTint }]}
           onPress={() => setShowDealSheet(true)}
           hitSlop={6}
@@ -702,6 +733,33 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
                 </Text>
               </View>
             </View>
+
+            {/* 1-Tap Bid Margin & RA Floor Calculator Launcher */}
+            <Pressable
+              onPress={() => setShowMarginCalc(true)}
+              style={({ pressed }) => [
+                styles.calcTriggerRow,
+                {
+                  backgroundColor: colors.primaryTint,
+                  borderColor: colors.borderSubtle,
+                  opacity: pressed ? 0.82 : 1,
+                },
+              ]}
+              accessibilityLabel="Open Bid Margin and RA Floor Calculator"
+            >
+              <View style={[styles.calcIconBox, { backgroundColor: colors.surface }]}>
+                <AppIcon name="calculator" color={colors.primary} size={15} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.calcTriggerTitle, { color: colors.primary }]}>
+                  RA Walk-Away Floor &amp; Margin Calculator
+                </Text>
+                <Text style={[styles.calcTriggerSub, { color: colors.textSecondary }]}>
+                  Set your safe decrement floor before entering live RA
+                </Text>
+              </View>
+              <Text style={[styles.calcTriggerCue, { color: colors.primary }]}>Calculate ›</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -942,6 +1000,14 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
           onClose={() => setShowDealSheet(false)}
         />
       )}
+
+      {showMarginCalc && (
+        <BidMarginModal
+          bid={effectiveBid}
+          visible={showMarginCalc}
+          onClose={() => setShowMarginCalc(false)}
+        />
+      )}
     </View>
   );
 };
@@ -970,6 +1036,14 @@ const styles = StyleSheet.create({
   copyChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   copyChipText: { fontSize: 9.5, fontWeight: '800' },
   navSubtitle: { fontSize: 11, marginTop: 1 },
+  watchChipBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   shareChip: {
     paddingHorizontal: 10,
     minHeight: 32,
@@ -1054,6 +1128,27 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.5, marginBottom: 3 },
   kpiValue: { fontSize: 14.5, fontWeight: '800' },
   kpiSub: { fontSize: 10.5, marginTop: 2 },
+  calcTriggerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    minHeight: 48,
+  },
+  calcIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calcTriggerTitle: { fontSize: 12.5, fontWeight: '800' },
+  calcTriggerSub: { fontSize: 10.5, marginTop: 1 },
+  calcTriggerCue: { fontSize: 12, fontWeight: '800' },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

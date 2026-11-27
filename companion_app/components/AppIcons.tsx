@@ -21,7 +21,13 @@ export type AppIconName =
   | 'seller'
   | 'help'
   | 'theme'
-  | 'textSize';
+  | 'textSize'
+  | 'radar'
+  | 'bookmark'
+  | 'bookmarkFilled'
+  | 'calendar'
+  | 'profile'
+  | 'calculator';
 
 interface AppIconProps {
   name: AppIconName;
@@ -390,6 +396,237 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
           <View style={{ width: stroke, height: s * 0.46, backgroundColor: color, borderRadius: 1 }} />
           <View style={{ width: stroke, height: s * 0.66, backgroundColor: color, borderRadius: 1 }} />
           <View style={{ width: stroke, height: s * 0.84, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      );
+
+    case 'radar':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.84,
+              height: s * 0.84,
+              borderRadius: s * 0.42,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <View
+              style={{
+                width: s * 0.46,
+                height: s * 0.46,
+                borderRadius: s * 0.23,
+                borderWidth: stroke * 0.85,
+                borderColor: color,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: s * 0.16,
+                  height: s * 0.16,
+                  borderRadius: s * 0.08,
+                  backgroundColor: color,
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      );
+
+    case 'bookmark':
+    case 'bookmarkFilled': {
+      const filled = name === 'bookmarkFilled';
+      const bw = Math.round(s * 0.62);
+      const bh = Math.round(s * 0.8);
+      if (filled) {
+        const notchH = Math.max(3, Math.round(bh * 0.34));
+        const bodyH = bh - notchH;
+        const halfW = bw / 2;
+        return (
+          <View style={[styles.box, { width: s, height: s }]}>
+            <View style={{ width: bw, height: bh, alignItems: 'center' }}>
+              <View
+                style={{
+                  width: bw,
+                  height: bodyH + 0.5,
+                  borderTopLeftRadius: 2.5,
+                  borderTopRightRadius: 2.5,
+                  backgroundColor: color,
+                }}
+              />
+              <View style={{ flexDirection: 'row', width: bw, height: notchH, marginTop: -0.5 }}>
+                <View
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderTopWidth: notchH,
+                    borderTopColor: color,
+                    borderRightWidth: halfW,
+                    borderRightColor: 'transparent',
+                  }}
+                />
+                <View
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderTopWidth: notchH,
+                    borderTopColor: color,
+                    borderLeftWidth: halfW,
+                    borderLeftColor: 'transparent',
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        );
+      }
+      const innerW = Math.max(4, bw - stroke * 2);
+      const diagSide = innerW * 0.74;
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: bw,
+              height: bh,
+              borderTopLeftRadius: 2.5,
+              borderTopRightRadius: 2.5,
+              borderTopWidth: stroke,
+              borderLeftWidth: stroke,
+              borderRightWidth: stroke,
+              borderColor: color,
+              overflow: 'hidden',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <View
+              style={{
+                width: diagSide,
+                height: diagSide,
+                borderTopWidth: stroke,
+                borderLeftWidth: stroke,
+                borderColor: color,
+                transform: [{ translateY: diagSide * 0.5 }, { rotate: '45deg' }],
+              }}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    case 'calendar':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.78,
+              height: s * 0.74,
+              borderRadius: 2.5,
+              borderWidth: stroke,
+              borderColor: color,
+              overflow: 'hidden',
+            }}
+          >
+            <View style={{ height: s * 0.22, backgroundColor: color }} />
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <View
+                style={{
+                  width: s * 0.18,
+                  height: s * 0.18,
+                  borderRadius: 1.5,
+                  backgroundColor: color,
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      );
+
+    case 'profile':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.82,
+              height: s * 0.82,
+              borderRadius: s * 0.41,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              overflow: 'hidden',
+              paddingTop: s * 0.1,
+            }}
+          >
+            <View
+              style={{
+                width: s * 0.28,
+                height: s * 0.28,
+                borderRadius: s * 0.14,
+                borderWidth: stroke * 0.9,
+                borderColor: color,
+                marginBottom: s * 0.06,
+              }}
+            />
+            <View
+              style={{
+                width: s * 0.56,
+                height: s * 0.28,
+                borderTopLeftRadius: s * 0.28,
+                borderTopRightRadius: s * 0.28,
+                borderWidth: stroke * 0.9,
+                borderBottomWidth: 0,
+                borderColor: color,
+                marginBottom: -stroke * 0.5,
+              }}
+            />
+          </View>
+        </View>
+      );
+
+    case 'calculator':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.72,
+              height: s * 0.86,
+              borderRadius: 2.5,
+              borderWidth: stroke,
+              borderColor: color,
+              padding: s * 0.1,
+              justifyContent: 'space-between',
+            }}
+          >
+            <View
+              style={{
+                height: s * 0.18,
+                borderRadius: 1.2,
+                backgroundColor: color,
+              }}
+            />
+            <View style={{ gap: s * 0.09 }}>
+              {[0, 1].map((row) => (
+                <View key={row} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  {[0, 1, 2].map((col) => (
+                    <View
+                      key={col}
+                      style={{
+                        width: Math.max(2, s * 0.11),
+                        height: Math.max(2, s * 0.11),
+                        borderRadius: 1,
+                        backgroundColor: color,
+                      }}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
       );
 
