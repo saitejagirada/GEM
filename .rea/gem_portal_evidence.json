@@ -1,0 +1,383 @@
+{
+  "$schema": "https://raw.githubusercontent.com/morluto/rea/main/schemas/evidence-dossier-v1.json",
+  "dossier_name": "Government e-Marketplace (GeM) National Portal Reverse Engineering Dossier",
+  "target_system": {
+    "name": "GeM National Public Procurement Portal",
+    "primary_domain": "https://gem.gov.in",
+    "governing_body": "Ministry of Commerce and Industry, Government of India",
+    "regulatory_framework": "General Financial Rules (GFR) 2017 - Rule 149",
+    "zero_login_public_access": true,
+    "description": "Public reverse-engineering analysis detailing the complete architecture, DOM hierarchy, sub-domains, endpoints, and data contracts across gem.gov.in, mkp.gem.gov.in, and bidplus.gem.gov.in."
+  },
+  "subdomains": [
+    {
+      "subdomain": "https://gem.gov.in",
+      "purpose": "National Public Procurement Portal Apex Gateway & Public Transparency Records",
+      "public_access": "Full public read access without authentication",
+      "key_endpoints": [
+        {
+          "path": "/",
+          "method": "GET",
+          "purpose": "Portal home with tricolor header, language selector, dark mode, font scaler (A-, A, A+), national metrics",
+          "auth_required": false
+        },
+        {
+          "path": "/view_contracts",
+          "method": "GET",
+          "purpose": "Public executed contracts registry with buyer department, supplier, order value, and CRAC acceptance date",
+          "auth_required": false
+        },
+        {
+          "path": "/cppp",
+          "method": "GET",
+          "purpose": "Central Public Procurement Portal integration, state tenders, and national procurement datasets",
+          "auth_required": false
+        },
+        {
+          "path": "/odop-category",
+          "method": "GET",
+          "purpose": "One District One Product (ODOP) indigenous craft and agricultural listings across 750+ districts",
+          "auth_required": false
+        },
+        {
+          "path": "/gem-advantages",
+          "method": "GET",
+          "purpose": "Statutory advantages for MSEs, startups, and women entrepreneurs under Public Procurement Policy",
+          "auth_required": false
+        },
+        {
+          "path": "/userFaqs",
+          "method": "GET",
+          "purpose": "Comprehensive FAQ directory for Buyers, Primary Users, Consignees, and Sellers",
+          "auth_required": false
+        },
+        {
+          "path": "/help",
+          "method": "GET",
+          "purpose": "Document help, incident management manuals, and video walkthroughs",
+          "auth_required": false
+        },
+        {
+          "path": "/contactUs",
+          "method": "GET",
+          "purpose": "Toll-free helpdesk numbers (1800-419-3436, 1800-102-3436) and regional nodal offices",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://mkp.gem.gov.in",
+      "purpose": "Public Marketplace Catalog, Product & Service Taxonomy, and Registration Gateway",
+      "public_access": "Full public catalog browsing without authentication; login required only for Cart checkout & Seller listing",
+      "key_endpoints": [
+        {
+          "path": "/search?q={query}",
+          "method": "GET",
+          "purpose": "Catalog full-text search across 10,917+ products and services",
+          "auth_required": false
+        },
+        {
+          "path": "/browse_nodes/browse_list#!/categories",
+          "method": "GET",
+          "purpose": "Full category taxonomy hierarchy",
+          "auth_required": false
+        },
+        {
+          "path": "/services#!/browse/",
+          "method": "GET",
+          "purpose": "Trending & Emerging Services catalog with service level agreements (SLAs)",
+          "auth_required": false
+        },
+        {
+          "path": "/registration/signup#!/buyer",
+          "method": "GET",
+          "purpose": "Buyer registration portal requiring government email verification (@nic.in, @gov.in)",
+          "auth_required": false
+        },
+        {
+          "path": "/registration/signup#!/seller",
+          "method": "GET",
+          "purpose": "Seller onboarding portal with PAN, Aadhaar, and Udyam MSME verification",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://bidplus.gem.gov.in",
+      "purpose": "Public Tenders, Bidding Engine, and Reverse Auction Monitoring",
+      "public_access": "All bid notices, BOQ specifications, corrigenda, and PDF documents are public without login",
+      "key_endpoints": [
+        {
+          "path": "/all-bids",
+          "method": "GET",
+          "purpose": "Live public bids stream establishing CSRF session cookie `csrf_bd_gem_nk`",
+          "auth_required": false
+        },
+        {
+          "path": "/all-bids-data",
+          "method": "POST",
+          "purpose": "Paginated public Solr query endpoint returning active tenders, quantities, and consignees",
+          "auth_required": false,
+          "payload_schema": {
+            "page": "integer",
+            "param": { "searchBid": "string" },
+            "filter": {
+              "bidStatusType": "ongoing_bids | closed_bids",
+              "byType": "all | product | service | boq | custom",
+              "highBidValue": "string",
+              "byEndDate": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" },
+              "sort": "Bid-End-Date-Oldest | Bid-End-Date-Latest"
+            }
+          }
+        },
+        {
+          "path": "/advance-search",
+          "method": "GET",
+          "purpose": "Multi-attribute filter: Ministry, State, Department, Tender Value, Due Date",
+          "auth_required": false
+        },
+        {
+          "path": "/bidresultlists",
+          "method": "GET",
+          "purpose": "Published evaluation results, disqualified technical bids, L1 ranks, and award contracts",
+          "auth_required": false
+        },
+        {
+          "path": "/showbidDocument/{b_id}",
+          "method": "GET",
+          "purpose": "Direct official PDF tender notice containing technical specifications and terms",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://forwardauction.gem.gov.in",
+      "purpose": "Government E-Scrap, Condemned Vehicles & Surplus Property Disposal",
+      "public_access": "Public lot inspection and auction schedule browsing without login",
+      "key_endpoints": [
+        {
+          "path": "/eprocure/home",
+          "method": "GET",
+          "purpose": "Live ongoing forward auctions directory across all departments",
+          "auth_required": false
+        },
+        {
+          "path": "/eprocure/bidder-registration",
+          "method": "GET",
+          "purpose": "Forward auction buyer/bidder registration guidelines",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://bidnext.gem.gov.in & https://www.ireps.gov.in",
+      "purpose": "Indian Railways E-Procurement System (IREPS) Integration",
+      "public_access": "Public read access for Zonal Railways procurement tenders and supply contracts",
+      "key_endpoints": [
+        {
+          "path": "/bidnext/public.jsp",
+          "method": "GET",
+          "purpose": "Public railway tenders and high-capacity freight procurement",
+          "auth_required": false
+        },
+        {
+          "path": "/epsn/anonymSearchPO.do?searchParam=showPageSupply",
+          "method": "GET",
+          "purpose": "Railway Purchase Orders and awarded supply contracts",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://bestprice.gem.gov.in",
+      "purpose": "Proprietary Best Price (PBP) Notices and Single-Source Procurement",
+      "public_access": "Public PBP notices browsing without login",
+      "key_endpoints": [
+        {
+          "path": "/",
+          "method": "GET",
+          "purpose": "PBP notice directory and PAC (Proprietary Article Certificate) justifications",
+          "auth_required": false
+        }
+      ]
+    },
+    {
+      "subdomain": "https://elearning.gem.gov.in",
+      "purpose": "GeM Learning Management System (LMS) Interactive Training",
+      "public_access": "Public catalog of interactive courses, webinars, and certification syllabi",
+      "key_endpoints": [
+        {
+          "path": "/",
+          "method": "GET",
+          "purpose": "Training modules for Buyers (Primary Users, HODs, Consignees) and Sellers (OEMs, Resellers)",
+          "auth_required": false
+        }
+      ]
+    }
+  ],
+  "dom_taxonomy": {
+    "popular_product_categories": [
+      {
+        "category": "IT Products",
+        "subcategories": [
+          "Entry And Mid Level Desktop Computer",
+          "Entry and Mid Level Laptop Notebook",
+          "Computer Printers",
+          "Tablet Computers(V2)(Q2)"
+        ]
+      },
+      {
+        "category": "Automobiles",
+        "subcategories": [
+          "Buses",
+          "Tractors",
+          "Cars",
+          "Utility Vehicles"
+        ]
+      },
+      {
+        "category": "Furniture",
+        "subcategories": [
+          "Class Room Desking",
+          "Executive Table",
+          "Revolving Chair",
+          "Movable File Storage System"
+        ]
+      },
+      {
+        "category": "Medical Products",
+        "subcategories": [
+          "Alcohol Based Hand Sanitizer",
+          "Surgical Gloves as per IS 4148",
+          "Disposable Syringes as per IS 10258"
+        ]
+      },
+      {
+        "category": "Stationery Items",
+        "subcategories": [
+          "Diaries Printed Plain Register",
+          "Gel Pen",
+          "Maplitho Paper"
+        ]
+      },
+      {
+        "category": "Electrical Appliances",
+        "subcategories": [
+          "Led Luminaire",
+          "Molded Case Circuit Breakers (MCCB)",
+          "Telecommunication Cable"
+        ]
+      },
+      {
+        "category": "Electronic Equipments",
+        "subcategories": [
+          "Television TV",
+          "Domestic Refrigerators"
+        ]
+      },
+      {
+        "category": "Textile Products",
+        "subcategories": [
+          "Handloom Cotton Bed Sheets",
+          "Cotton Towels as per IS 7056"
+        ]
+      },
+      {
+        "category": "Pipes and Fittings",
+        "subcategories": [
+          "Steel Tubes, Tubulars And Fittings",
+          "Commercial CPVC Pipe Fittings"
+        ]
+      }
+    ],
+    "services_taxonomy": {
+      "trending_services": [
+        "Paper-based Printing Services",
+        "Custom Bid for Services",
+        "Short Term Cab & Taxi Hiring Services",
+        "Non Paper Printing Services - Quantity Based",
+        "Event or Seminar or Workshop or Exhibition or Expo Management Service",
+        "Bus Hiring Service - Short Term",
+        "Security Manpower Service (Version 2.0)",
+        "Goods Transport Service – Per KM Based Service",
+        "Vehicle Hiring Service - Per Vehicle-Day basis",
+        "Repair, Maintenance, and Installation of Plant/ Systems/Equipments (Version 2)",
+        "Manpower Outsourcing Services - Minimum wage",
+        "Monthly Basis Cab & Taxi Hiring Services",
+        "Catering service (Event Based)",
+        "Manpower Outsourcing Services - Fixed Remuneration",
+        "Repair and Overhauling Service",
+        "Catering service (Duration Based)",
+        "Catering Service per Packet based",
+        "Annual Maintenance Service - Desktops, Laptops and Peripherals",
+        "Non Paper Printing Services - Area Based",
+        "Facility Management Services - LumpSum Based"
+      ],
+      "emerging_services": [
+        "Service for Safety and Emergency Response Training",
+        "Enterprise Email Messaging Service",
+        "Empanelment of Manpower Outsourcing Service Providers (UPCOS)",
+        "Drone as a Service - Version 2",
+        "CSR Project Monitoring, Evaluation and Impact Assessment Service",
+        "Hiring of MSP for Operation and Management of ICT and Network Infrastructure",
+        "Operation and Maintenance of High Value Medical Equipment Revenue Share Basis",
+        "Service for Chemical Treatment of Cooling Water",
+        "Revenue Based Services - H1 Evaluation",
+        "Newspaper & Magazine Supply Service (Version 2)"
+      ]
+    },
+    "outlet_stores": [
+      {
+        "id": "saras",
+        "name": "Saras Ajeevika",
+        "description": "Rural women self-help groups (SHG) authentic handicrafts, handlooms, and natural products",
+        "statutory_mandate": "National Rural Livelihoods Mission (NRLM)"
+      },
+      {
+        "id": "odop",
+        "name": "One District One Product (ODOP)",
+        "description": "Indigenous products from all 750+ districts across India promoting local crafts and agriculture",
+        "statutory_mandate": "Department for Promotion of Industry and Internal Trade (DPIIT)"
+      },
+      {
+        "id": "startup-runway",
+        "name": "GeM Startup Runway",
+        "description": "Special fast-track procurement for DPIIT-recognized tech startups without prior turnover or experience barriers",
+        "statutory_mandate": "Public Procurement Policy Rule 173(i)"
+      },
+      {
+        "id": "womaniya",
+        "name": "Womaniya on GeM",
+        "description": "Dedicated marketplace showcase for women entrepreneurs and women-led self-help groups",
+        "statutory_mandate": "Ministry of Women and Child Development"
+      },
+      {
+        "id": "millets",
+        "name": "Shree Anna (Millets)",
+        "description": "Indigenous nutrient-rich millets and value-added processed food items from certified farmer producer organizations",
+        "statutory_mandate": "International Year of Millets & National Food Security"
+      }
+    ]
+  },
+  "statutory_procurement_rules": {
+    "gfr_rule_149": {
+      "direct_purchase_threshold_inr": 50000,
+      "direct_purchase_rule": "Available for goods/services meeting quality specifications up to ₹50,000 without price comparison.",
+      "l1_comparison_min_inr": 50000,
+      "l1_comparison_max_inr": 500000,
+      "l1_comparison_rule": "Comparison between at least 3 distinct OEMs/manufacturers meeting required specifications to identify L1 price.",
+      "mandatory_bidding_threshold_inr": 500000,
+      "mandatory_bidding_rule": "Mandatory online competitive bidding or reverse auction (RA) on bidplus.gem.gov.in."
+    },
+    "msme_statutory_benefits": {
+      "emd_waiver_percentage": 100,
+      "prior_turnover_exemption": true,
+      "prior_experience_exemption": true,
+      "annual_procurement_quota_percentage": 25,
+      "sub_quota_women_mse_percentage": 3,
+      "sub_quota_sc_st_mse_percentage": 4,
+      "l1_plus_fifteen_percent_purchase_preference": true,
+      "crac_mandatory_payment_days": 10
+    }
+  }
+}
