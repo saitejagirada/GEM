@@ -79,6 +79,8 @@ A high-performance mobile companion application and automated ingestion pipeline
 
 ---
 
+[![OctoCounts](https://api.octocounts.com/badge/saitejagirada/GEM/branch/main)](https://octocounts.com/github/saitejagirada/GEM/tree/main)
+
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
