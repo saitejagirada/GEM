@@ -144,4 +144,78 @@ describe('GeMServicesClient & Live Services Taxonomy', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('persists provider list to disk cache across app restarts and refetches only when forceRefresh is triggered', async () => {
+    const originalFetch = globalThis.fetch;
+    const diskStore = new Map<string, string>();
+    let fetchCalls = 0;
+    let includeNewMercury = false;
+
+    GeMServicesClient.clearSellersCacheForTests();
+    GeMServicesClient.setSellersPersistenceForTests({
+      async read(id) {
+        return diskStore.get(id) ?? null;
+      },
+      async write(id, raw) {
+        diskStore.set(id, raw);
+      },
+    });
+
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      const seller_list: Record<string, { name: string }> = {
+        '101': { name: 'APEX MANPOWER SERVICES' },
+        '102': { name: 'GARUDA FACILITY SOLUTIONS' },
+      };
+      if (includeNewMercury) {
+        seller_list['5072482'] = { name: 'MERCURY SALES AND SERVICES' };
+      }
+      return new Response(
+        JSON.stringify({
+          result: {
+            seller_list,
+            srvc_catalog_hash: {},
+            pagination_meta: { total_items: Object.keys(seller_list).length, per_page: 100, page: 1 },
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    try {
+      // 1. Cold fetch populates memory + disk cache
+      const first = await GeMServicesClient.fetchAllServiceSellers('services_test_disk_cache');
+      assert.equal(first.sellers.length, 2);
+      assert.equal(first.isComplete, true);
+      assert.equal(fetchCalls, 1);
+      assert.ok(diskStore.has('services_test_disk_cache'));
+
+      // 2. Simulate full app restart (clear in-memory cache) -> loads from disk with 0 network calls!
+      GeMServicesClient.clearSellersCacheForTests();
+      const hydrated = await GeMServicesClient.fetchAllServiceSellers('services_test_disk_cache');
+      assert.equal(hydrated.sellers.length, 2);
+      assert.equal(fetchCalls, 1, 'Restart must serve disk cache without refetching GeM');
+
+      // 3. Searching "Mercury" misses cache -> forceRefresh refetches live and updates disk cache
+      assert.equal(filterAndSortServiceSellers(hydrated.sellers, 'Mercury', 'ALL').length, 0);
+      includeNewMercury = true;
+      const refreshed = await GeMServicesClient.fetchAllServiceSellers('services_test_disk_cache', {
+        forceRefresh: true,
+      });
+      assert.equal(fetchCalls, 2);
+      assert.equal(refreshed.sellers.length, 3);
+      assert.equal(filterAndSortServiceSellers(refreshed.sellers, 'Mercury', 'ALL').length, 1);
+
+      // 4. Subsequent restart now finds "Mercury" straight from disk cache with 0 network calls
+      GeMServicesClient.clearSellersCacheForTests();
+      const afterRestart2 = await GeMServicesClient.loadCachedServiceSellers('services_test_disk_cache');
+      assert.ok(afterRestart2);
+      assert.equal(afterRestart2.sellers.length, 3);
+      assert.equal(filterAndSortServiceSellers(afterRestart2.sellers, 'Mercury', 'ALL').length, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      GeMServicesClient.setSellersPersistenceForTests(null);
+      GeMServicesClient.clearSellersCacheForTests();
+    }
+  });
 });

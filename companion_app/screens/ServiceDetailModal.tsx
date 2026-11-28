@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -78,11 +78,16 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
 
   const [sellers, setSellers] = useState<LiveGeMServiceSeller[]>([]);
   const [sellersTotal, setSellersTotal] = useState(0);
+  const [sellersCachedAtUtc, setSellersCachedAtUtc] = useState<string | null>(null);
+  const [sellersServedFromCache, setSellersServedFromCache] = useState(false);
+  const [hasRefetchedLiveThisSession, setHasRefetchedLiveThisSession] = useState(false);
+  const [refetchReasonQuery, setRefetchReasonQuery] = useState<string | null>(null);
   const [isLoadingSellers, setIsLoadingSellers] = useState(false);
   const [isSyncingAllSellers, setIsSyncingAllSellers] = useState(false);
   const [sellerSearchInput, setSellerSearchInput] = useState('');
   const [sellerSearchQuery, setSellerSearchQuery] = useState('');
   const [sellerFilterMode, setSellerFilterMode] = useState<ServiceSellerFilterMode>('ALL');
+  const activeFetchRunRef = useRef(0);
 
   const [selectedSeller, setSelectedSeller] = useState<LiveGeMServiceSeller | null>(null);
   const [sellerDetail, setSellerDetail] = useState<LiveGeMServiceSellerDetail | null>(null);
@@ -100,15 +105,21 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
   useEffect(() => {
     if (!service || !visible) return;
     let cancelled = false;
+    const runId = ++activeFetchRunRef.current;
 
-    const cachedAll = GeMServicesClient.getCachedAllServiceSellers(service.gemServiceId);
+    const memCached = GeMServicesClient.getCachedAllServiceSellers(service.gemServiceId);
+    const hasMemComplete = Boolean(memCached && memCached.isComplete && memCached.sellers.length > 0);
 
     setActiveTab('PROVIDERS');
     setDetail(null);
-    setSellers(cachedAll ? cachedAll.sellers : []);
-    setSellersTotal(cachedAll ? cachedAll.total : 0);
-    setIsLoadingSellers(!cachedAll);
-    setIsSyncingAllSellers(!cachedAll);
+    setSellers(memCached ? memCached.sellers : []);
+    setSellersTotal(memCached ? memCached.total : 0);
+    setSellersCachedAtUtc(memCached?.cachedAtUtc ?? null);
+    setSellersServedFromCache(hasMemComplete);
+    setHasRefetchedLiveThisSession(false);
+    setRefetchReasonQuery(null);
+    setIsLoadingSellers(!memCached);
+    setIsSyncingAllSellers(false);
     setSellerSearchInput('');
     setSellerSearchQuery('');
     setSellerFilterMode('ALL');
@@ -131,18 +142,46 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
         if (!cancelled) setIsLoadingDetail(false);
       });
 
-    if (!cachedAll) {
-      GeMServicesClient.fetchAllServiceSellers(service.gemServiceId, {
-        isCancelled: () => cancelled,
-        onProgress: (nextSellers, total, isComplete) => {
-          if (cancelled) return;
-          setSellers(nextSellers);
-          setSellersTotal(total);
+    if (!hasMemComplete) {
+      (async () => {
+        // Hydrate persisted on-device cache first — 0 network calls when complete cache exists!
+        const diskCached = await GeMServicesClient.loadCachedServiceSellers(service.gemServiceId);
+        if (cancelled || activeFetchRunRef.current !== runId) return;
+
+        if (diskCached && diskCached.sellers.length > 0) {
+          setSellers(diskCached.sellers);
+          setSellersTotal(diskCached.total);
+          setSellersCachedAtUtc(diskCached.cachedAtUtc);
           setIsLoadingSellers(false);
-          setIsSyncingAllSellers(!isComplete);
-        },
-      }).finally(() => {
-        if (!cancelled) {
+          if (diskCached.isComplete) {
+            setSellersServedFromCache(true);
+            setIsSyncingAllSellers(false);
+            return;
+          }
+        }
+
+        // Only fetch live when no complete on-device cache exists yet
+        setIsSyncingAllSellers(true);
+        const result = await GeMServicesClient.fetchAllServiceSellers(service.gemServiceId, {
+          isCancelled: () => cancelled || activeFetchRunRef.current !== runId,
+          onProgress: (nextSellers, total, isComplete, cachedAt) => {
+            if (cancelled || activeFetchRunRef.current !== runId) return;
+            setSellers(nextSellers);
+            setSellersTotal(total);
+            if (cachedAt) setSellersCachedAtUtc(cachedAt);
+            setIsLoadingSellers(false);
+            setIsSyncingAllSellers(!isComplete);
+          },
+        });
+        if (!cancelled && activeFetchRunRef.current === runId) {
+          setSellersCachedAtUtc(result.cachedAtUtc);
+          setSellersServedFromCache(false);
+          setHasRefetchedLiveThisSession(true);
+          setIsLoadingSellers(false);
+          setIsSyncingAllSellers(false);
+        }
+      })().catch(() => {
+        if (!cancelled && activeFetchRunRef.current === runId) {
           setIsLoadingSellers(false);
           setIsSyncingAllSellers(false);
         }
@@ -210,10 +249,60 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
     [sellers]
   );
 
+  const triggerLiveSellersRefetch = useCallback(
+    (reasonQuery?: string) => {
+      if (!service || isSyncingAllSellers) return;
+      const runId = ++activeFetchRunRef.current;
+      setRefetchReasonQuery(reasonQuery ?? null);
+      setIsSyncingAllSellers(true);
+      GeMServicesClient.fetchAllServiceSellers(service.gemServiceId, {
+        forceRefresh: true,
+        isCancelled: () => activeFetchRunRef.current !== runId,
+        onProgress: (nextSellers, total, isComplete, cachedAt) => {
+          if (activeFetchRunRef.current !== runId) return;
+          setSellers(nextSellers);
+          setSellersTotal(total);
+          if (cachedAt) setSellersCachedAtUtc(cachedAt);
+          setIsLoadingSellers(false);
+          setIsSyncingAllSellers(!isComplete);
+        },
+      })
+        .then((result) => {
+          if (activeFetchRunRef.current !== runId) return;
+          setSellersCachedAtUtc(result.cachedAtUtc);
+          setSellersServedFromCache(false);
+          setHasRefetchedLiveThisSession(true);
+          setRefetchReasonQuery(null);
+          setIsSyncingAllSellers(false);
+        })
+        .catch(() => {
+          if (activeFetchRunRef.current !== runId) return;
+          setRefetchReasonQuery(null);
+          setIsSyncingAllSellers(false);
+        });
+    },
+    [service, isSyncingAllSellers]
+  );
+
   const handleApplySellerSearch = useCallback(() => {
     Keyboard.dismiss();
-    setSellerSearchQuery(sellerSearchInput.trim());
-  }, [sellerSearchInput]);
+    const trimmed = sellerSearchInput.trim();
+    setSellerSearchQuery(trimmed);
+
+    // Cache-first search: only refetch live from GeM when the searched provider is NOT in cache
+    if (trimmed.length >= 2 && !isSyncingAllSellers && !hasRefetchedLiveThisSession) {
+      const cacheMatches = filterAndSortServiceSellers(sellers, trimmed, 'ALL');
+      if (cacheMatches.length === 0) {
+        triggerLiveSellersRefetch(trimmed);
+      }
+    }
+  }, [
+    sellerSearchInput,
+    sellers,
+    isSyncingAllSellers,
+    hasRefetchedLiveThisSession,
+    triggerLiveSellersRefetch,
+  ]);
 
   const handleOpenSellerDetail = useCallback(
     (seller: LiveGeMServiceSeller) => {
@@ -560,7 +649,9 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                           <View style={styles.syncProgressTopRow}>
                             <ActivityIndicator size="small" color={colors.primary} />
                             <Text style={[styles.syncProgressText, { color: colors.primary }]}>
-                              Fetching all providers from GeM…{' '}
+                              {refetchReasonQuery
+                                ? `“${refetchReasonQuery}” not in cache — refreshing GeM… `
+                                : 'Fetching & caching providers from GeM… '}
                               {sellers.length.toLocaleString('en-IN')} /{' '}
                               {Math.max(sellersTotal, sellers.length).toLocaleString('en-IN')} (
                               {Math.min(
@@ -603,9 +694,28 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                         <View style={styles.listIntroRow}>
                           <Text style={[styles.listIntro, { color: colors.textSecondary, flex: 1 }]}>
                             {sellerSearchQuery || sellerFilterMode !== 'ALL'
-                              ? `${filteredSellers.length.toLocaleString('en-IN')} matched across all ${sellers.length.toLocaleString('en-IN')} live GeM providers`
-                              : `All ${sellers.length.toLocaleString('en-IN')} live GeM providers loaded · Tap any provider for details`}
+                              ? `${filteredSellers.length.toLocaleString('en-IN')} matched in ${sellersServedFromCache ? 'cached' : 'live'} ${sellers.length.toLocaleString('en-IN')} providers`
+                              : sellersServedFromCache && sellersCachedAtUtc
+                                ? `${sellers.length.toLocaleString('en-IN')} cached providers · Saved ${formatDateSafe(sellersCachedAtUtc)}`
+                                : `All ${sellers.length.toLocaleString('en-IN')} providers cached on device · Tap any provider`}
                           </Text>
+                          <Pressable
+                            onPress={() => triggerLiveSellersRefetch()}
+                            hitSlop={8}
+                            style={({ pressed }) => [
+                              styles.refreshCacheBtn,
+                              {
+                                backgroundColor: colors.surfaceSubtle,
+                                borderColor: colors.borderSubtle,
+                                opacity: pressed ? 0.7 : 1,
+                              },
+                            ]}
+                            accessibilityLabel="Refresh provider list from GeM"
+                          >
+                            <Text style={[styles.refreshCacheBtnText, { color: colors.primary }]}>
+                              Refresh ↻
+                            </Text>
+                          </Pressable>
                         </View>
                       )}
                     </View>
@@ -658,6 +768,27 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                               the filter.
                             </Text>
                             <View style={styles.emptyActionRow}>
+                              {sellerSearchQuery ? (
+                                <Pressable
+                                  style={[
+                                    styles.clearFilterBtn,
+                                    {
+                                      borderColor: colors.primary,
+                                      backgroundColor: colors.primary,
+                                    },
+                                  ]}
+                                  onPress={() => triggerLiveSellersRefetch(sellerSearchQuery)}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.clearFilterBtnText,
+                                      { color: colors.textInverse },
+                                    ]}
+                                  >
+                                    Check Live GeM ↻
+                                  </Text>
+                                </Pressable>
+                              ) : null}
                               <Pressable
                                 style={[
                                   styles.clearFilterBtn,
@@ -1314,8 +1445,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   switchTabCtaText: { fontSize: 12, fontWeight: '800' },
-  listIntroRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  listIntroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   listIntro: { fontSize: 11.5, fontWeight: '600' },
+  refreshCacheBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshCacheBtnText: { fontSize: 11.5, fontWeight: '700' },
   sellerSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',

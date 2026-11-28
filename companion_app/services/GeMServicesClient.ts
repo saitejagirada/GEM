@@ -181,6 +181,83 @@ export interface LiveGeMServiceSellersResponse {
   hasMore: boolean;
 }
 
+export interface CachedServiceSellersRecord {
+  version: 1;
+  serviceId: string;
+  total: number;
+  cachedAtUtc: string;
+  isComplete: boolean;
+  sellers: LiveGeMServiceSeller[];
+}
+
+export interface SellersPersistenceAdapter {
+  read(serviceId: string): Promise<string | null>;
+  write(serviceId: string, raw: string): Promise<void>;
+}
+
+const SELLERS_CACHE_DIR = 'gem-service-providers-v1/';
+const SELLERS_ASYNC_PREFIX = '@gem-mobile-companion/service-sellers-v1:';
+const MAX_CACHED_SERVICES_IN_MEMORY = 12;
+
+type CompactSellerTuple = [string, string, number, string | number | null];
+
+interface CompactPersistedSellersPayload {
+  v: 1;
+  id: string;
+  t: number;
+  at: string;
+  c: boolean;
+  s: CompactSellerTuple[];
+}
+
+function sanitizeCacheFileKey(serviceId: string): string {
+  return serviceId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 96);
+}
+
+function serializeCachedSellers(record: CachedServiceSellersRecord): string {
+  const payload: CompactPersistedSellersPayload = {
+    v: 1,
+    id: record.serviceId,
+    t: record.total,
+    at: record.cachedAtUtc,
+    c: record.isComplete,
+    s: record.sellers.map((s) => [s.sellerId, s.name, s.verifiedProjects, s.totalValue ?? null]),
+  };
+  return JSON.stringify(payload);
+}
+
+function deserializeCachedSellers(raw: string): CachedServiceSellersRecord | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<CompactPersistedSellersPayload>;
+    if (parsed?.v !== 1 || typeof parsed.id !== 'string' || !Array.isArray(parsed.s)) {
+      return null;
+    }
+    const sellers: LiveGeMServiceSeller[] = [];
+    for (const tuple of parsed.s) {
+      if (!Array.isArray(tuple) || typeof tuple[0] !== 'string' || typeof tuple[1] !== 'string') {
+        continue;
+      }
+      sellers.push({
+        sellerId: tuple[0],
+        name: tuple[1],
+        verifiedProjects: Number(tuple[2] ?? 0),
+        totalValue: tuple[3] ?? null,
+      });
+    }
+    if (sellers.length === 0) return null;
+    return {
+      version: 1,
+      serviceId: parsed.id,
+      total: Math.max(Number(parsed.t ?? sellers.length), sellers.length),
+      cachedAtUtc: typeof parsed.at === 'string' ? parsed.at : new Date().toISOString(),
+      isComplete: Boolean(parsed.c),
+      sellers,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Strips HTML tags and decodes common HTML entities returned in GeM service
  * descriptions and Service STC / SLA tables into readable plain text.
@@ -233,10 +310,89 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = REQUEST_TIMEOUT_
 export class GeMServicesClient {
   private static detailCache = new Map<string, LiveGeMServiceDetail>();
   private static sellerDetailCache = new Map<string, LiveGeMServiceSellerDetail>();
-  private static allSellersCache = new Map<string, { sellers: LiveGeMServiceSeller[]; total: number }>();
+  private static allSellersCache = new Map<string, CachedServiceSellersRecord>();
+  private static persistenceAdapterOverride: SellersPersistenceAdapter | null = null;
   private static directoryPageCache = new Map<string, LiveGeMServiceListResponse>();
   private static fullDirectoryCache: { services: LiveGeMServiceSummary[]; total: number } | null = null;
   private static fullDirectoryPromise: Promise<{ services: LiveGeMServiceSummary[]; total: number }> | null = null;
+
+  public static setSellersPersistenceForTests(adapter: SellersPersistenceAdapter | null): void {
+    this.persistenceAdapterOverride = adapter;
+  }
+
+  public static clearSellersCacheForTests(): void {
+    this.allSellersCache.clear();
+  }
+
+  private static setMemorySellersCache(serviceId: string, record: CachedServiceSellersRecord): void {
+    if (this.allSellersCache.has(serviceId)) {
+      this.allSellersCache.delete(serviceId);
+    }
+    this.allSellersCache.set(serviceId, record);
+    if (this.allSellersCache.size > MAX_CACHED_SERVICES_IN_MEMORY) {
+      const oldestKey = this.allSellersCache.keys().next().value;
+      if (oldestKey) this.allSellersCache.delete(oldestKey);
+    }
+  }
+
+  private static async readPersistedSellersRaw(serviceId: string): Promise<string | null> {
+    if (this.persistenceAdapterOverride) {
+      return this.persistenceAdapterOverride.read(serviceId);
+    }
+    const safeKey = sanitizeCacheFileKey(serviceId);
+    // Primary: native cache file via expo-file-system (no 2MB Android SQLite row limit)
+    try {
+      const fs = await import('expo-file-system');
+      const baseDir = fs.cacheDirectory || fs.documentDirectory;
+      if (baseDir) {
+        const filePath = `${baseDir}${SELLERS_CACHE_DIR}${safeKey}.json`;
+        const info = await fs.getInfoAsync(filePath);
+        if (info.exists) {
+          return await fs.readAsStringAsync(filePath);
+        }
+      }
+    } catch {
+      // Fall through to AsyncStorage fallback
+    }
+    // Fallback: AsyncStorage (for environments without expo-file-system)
+    try {
+      const mod = await import('@react-native-async-storage/async-storage');
+      const storage = mod.default || mod;
+      return await storage.getItem(`${SELLERS_ASYNC_PREFIX}${safeKey}`);
+    } catch {
+      return null;
+    }
+  }
+
+  private static async writePersistedSellersRaw(serviceId: string, raw: string): Promise<void> {
+    if (this.persistenceAdapterOverride) {
+      await this.persistenceAdapterOverride.write(serviceId, raw);
+      return;
+    }
+    const safeKey = sanitizeCacheFileKey(serviceId);
+    try {
+      const fs = await import('expo-file-system');
+      const baseDir = fs.cacheDirectory || fs.documentDirectory;
+      if (baseDir) {
+        const dirPath = `${baseDir}${SELLERS_CACHE_DIR}`;
+        const dirInfo = await fs.getInfoAsync(dirPath);
+        if (!dirInfo.exists) {
+          await fs.makeDirectoryAsync(dirPath, { intermediates: true });
+        }
+        await fs.writeAsStringAsync(`${dirPath}${safeKey}.json`, raw);
+        return;
+      }
+    } catch {
+      // Fall through to AsyncStorage fallback
+    }
+    try {
+      const mod = await import('@react-native-async-storage/async-storage');
+      const storage = mod.default || mod;
+      await storage.setItem(`${SELLERS_ASYNC_PREFIX}${safeKey}`, raw);
+    } catch {
+      // Non-fatal in non-native/test environments
+    }
+  }
 
   public static buildPortalUrl(serviceId: string): string {
     return `${MKP_ORIGIN}/services#!/browse/${encodeURIComponent(serviceId)}/open`;
@@ -496,41 +652,89 @@ export class GeMServicesClient {
   }
 
   /**
-   * Returns cached full provider list for a service if already fetched this session.
+   * Returns in-memory cached provider list synchronously if already hydrated this session.
    */
   public static getCachedAllServiceSellers(
     serviceId: string
-  ): { sellers: LiveGeMServiceSeller[]; total: number } | null {
+  ): CachedServiceSellersRecord | null {
     const cleanId = serviceId.trim();
     if (!cleanId) return null;
     return this.allSellersCache.get(cleanId) ?? null;
   }
 
   /**
-   * Automatically fetches ALL live registered GeM Service Providers for a service in one
-   * pass (no manual "next, next" paging) by fast-painting page 1 (100 sellers) and then
-   * streaming all remaining 500-seller chunks concurrently via 5 parallel workers.
+   * Loads persisted provider cache from device disk (survives app restarts) and hydrates
+   * the in-memory cache so subsequent opens & searches execute in 0ms with zero network calls.
+   */
+  public static async loadCachedServiceSellers(
+    serviceId: string
+  ): Promise<CachedServiceSellersRecord | null> {
+    const cleanId = serviceId.trim();
+    if (!cleanId) return null;
+
+    const mem = this.allSellersCache.get(cleanId);
+    if (mem && mem.sellers.length > 0) return mem;
+
+    const raw = await this.readPersistedSellersRaw(cleanId);
+    if (!raw) return null;
+
+    const parsed = deserializeCachedSellers(raw);
+    if (parsed && parsed.sellers.length > 0) {
+      this.setMemorySellersCache(cleanId, parsed);
+      return parsed;
+    }
+    return null;
+  }
+
+  private static async persistSellersRecord(record: CachedServiceSellersRecord): Promise<void> {
+    if (record.sellers.length === 0) return;
+    this.setMemorySellersCache(record.serviceId, record);
+    await this.writePersistedSellersRaw(record.serviceId, serializeCachedSellers(record));
+  }
+
+  /**
+   * Cache-first provider loader:
+   * - Serves persisted on-device cache immediately (zero network requests) unless
+   *   `forceRefresh` is requested (e.g. when a searched provider is missing from cache)
+   *   or the previous cached snapshot was incomplete.
+   * - Merges newly fetched batches into any existing cached sellers and persists
+   *   checkpoints to disk so partial/interrupted sweeps are never lost.
    */
   public static async fetchAllServiceSellers(
     serviceId: string,
     options?: {
+      forceRefresh?: boolean;
       onProgress?: (
         sellers: LiveGeMServiceSeller[],
         total: number,
-        isComplete: boolean
+        isComplete: boolean,
+        cachedAtUtc?: string
       ) => void;
       isCancelled?: () => boolean;
       chunkSize?: number;
       concurrency?: number;
     }
-  ): Promise<{ sellers: LiveGeMServiceSeller[]; total: number }> {
+  ): Promise<CachedServiceSellersRecord> {
     const cleanId = serviceId.trim();
-    if (!cleanId) return { sellers: [], total: 0 };
+    const emptyRecord: CachedServiceSellersRecord = {
+      version: 1,
+      serviceId: cleanId,
+      total: 0,
+      cachedAtUtc: new Date().toISOString(),
+      isComplete: true,
+      sellers: [],
+    };
+    if (!cleanId) return emptyRecord;
 
-    const cached = this.allSellersCache.get(cleanId);
-    if (cached && cached.sellers.length > 0) {
-      options?.onProgress?.(cached.sellers, cached.total, true);
-      return cached;
+    const existingCache = await this.loadCachedServiceSellers(cleanId);
+    if (!options?.forceRefresh && existingCache && existingCache.isComplete && existingCache.sellers.length > 0) {
+      options?.onProgress?.(
+        existingCache.sellers,
+        existingCache.total,
+        true,
+        existingCache.cachedAtUtc
+      );
+      return existingCache;
     }
 
     const sellerById = new Map<string, LiveGeMServiceSeller>();
@@ -548,47 +752,104 @@ export class GeMServicesClient {
       }
     };
 
-    // Step 1: Fast first paint (100 sellers in ~1s so UI renders immediately)
+    // Seed with any already-cached providers so UI stays populated & flaky network never wipes progress
+    if (existingCache && existingCache.sellers.length > 0) {
+      mergeSellers(existingCache.sellers);
+      options?.onProgress?.(
+        Array.from(sellerById.values()),
+        Math.max(existingCache.total, sellerById.size),
+        false,
+        existingCache.cachedAtUtc
+      );
+    }
+
+    // Step 1: Fast first paint (100 sellers in ~1s so UI renders immediately on cold fetch)
     const first = await this.fetchServiceSellers(cleanId, 1, 100);
     if (options?.isCancelled?.()) {
-      return { sellers: first.sellers, total: first.total };
+      const partialList = Array.from(sellerById.values());
+      const partialRecord: CachedServiceSellersRecord = {
+        version: 1,
+        serviceId: cleanId,
+        total: Math.max(first.total, existingCache?.total ?? 0, partialList.length),
+        cachedAtUtc: existingCache?.cachedAtUtc ?? new Date().toISOString(),
+        isComplete: Boolean(existingCache?.isComplete),
+        sellers: partialList,
+      };
+      if (partialList.length > 0 && (!existingCache || partialList.length > existingCache.sellers.length)) {
+        await this.persistSellersRecord(partialRecord);
+      }
+      return partialRecord;
     }
+
     mergeSellers(first.sellers);
     let total = Math.max(first.total, sellerById.size);
 
+    // Network failed completely on refresh? Keep serving the existing cache honestly.
+    if (first.sellers.length === 0 && existingCache && existingCache.sellers.length > 0) {
+      options?.onProgress?.(
+        existingCache.sellers,
+        existingCache.total,
+        true,
+        existingCache.cachedAtUtc
+      );
+      return existingCache;
+    }
+
     if (!first.hasMore || total <= first.sellers.length) {
       const doneList = Array.from(sellerById.values());
-      const doneResult = { sellers: doneList, total: Math.max(total, doneList.length) };
-      if (doneList.length > 0) {
-        this.allSellersCache.set(cleanId, doneResult);
-      }
-      options?.onProgress?.(doneResult.sellers, doneResult.total, true);
-      return doneResult;
+      const doneRecord: CachedServiceSellersRecord = {
+        version: 1,
+        serviceId: cleanId,
+        total: Math.max(total, doneList.length),
+        cachedAtUtc: new Date().toISOString(),
+        isComplete: true,
+        sellers: doneList,
+      };
+      await this.persistSellersRecord(doneRecord);
+      options?.onProgress?.(doneRecord.sellers, doneRecord.total, true, doneRecord.cachedAtUtc);
+      return doneRecord;
     }
 
     options?.onProgress?.(Array.from(sellerById.values()), total, false);
 
-    // Step 2: Parallel 500-seller streaming across ALL remaining pages automatically
+    // Step 2: Parallel 500-seller streaming across remaining pages with periodic disk checkpoints
     const chunkSize = Math.min(500, Math.max(100, options?.chunkSize ?? 500));
     const concurrency = Math.min(6, Math.max(2, options?.concurrency ?? 5));
     const totalChunkPages = Math.ceil(total / chunkSize);
     const pageQueue: number[] = Array.from({ length: totalChunkPages }, (_, idx) => idx + 1);
 
     let nextIndex = 0;
+    let failedChunks = 0;
+    let completedChunks = 0;
+
     const worker = async () => {
       while (nextIndex < pageQueue.length) {
         if (options?.isCancelled?.()) return;
         const pageNum = pageQueue[nextIndex++];
         let res = await this.fetchServiceSellers(cleanId, pageNum, chunkSize, 22000);
-        // Retry once cleanly if GeM briefly stalled on a 500-row chunk
         if (res.sellers.length === 0 && !options?.isCancelled?.()) {
           res = await this.fetchServiceSellers(cleanId, pageNum, chunkSize, 24000);
         }
         if (options?.isCancelled?.()) return;
+        completedChunks += 1;
         if (res.sellers.length > 0) {
           mergeSellers(res.sellers);
           total = Math.max(total, res.total, sellerById.size);
           options?.onProgress?.(Array.from(sellerById.values()), total, false);
+          // Checkpoint to disk every 6 chunks (~3,000 providers) so interruptions never lose work
+          if (completedChunks % 6 === 0) {
+            const snap = Array.from(sellerById.values());
+            void this.persistSellersRecord({
+              version: 1,
+              serviceId: cleanId,
+              total: Math.max(total, snap.length),
+              cachedAtUtc: new Date().toISOString(),
+              isComplete: false,
+              sellers: snap,
+            });
+          }
+        } else {
+          failedChunks += 1;
         }
       }
     };
@@ -599,17 +860,36 @@ export class GeMServicesClient {
 
     const finalList = Array.from(sellerById.values());
     const finalTotal = Math.max(total, finalList.length);
-    const finalResult = { sellers: finalList, total: finalTotal };
+    const wasCancelled = Boolean(options?.isCancelled?.());
+    // Consider complete if uninterrupted and we received >=95% of reported total (or 0 failed chunks)
+    const isComplete =
+      !wasCancelled &&
+      finalList.length > 0 &&
+      (failedChunks === 0 || finalList.length >= Math.floor(finalTotal * 0.95));
 
-    if (!options?.isCancelled?.()) {
-      // Cache only when we completed an uninterrupted full sweep
-      if (finalList.length > 0) {
-        this.allSellersCache.set(cleanId, finalResult);
-      }
-      options?.onProgress?.(finalResult.sellers, finalResult.total, true);
+    const finalRecord: CachedServiceSellersRecord = {
+      version: 1,
+      serviceId: cleanId,
+      total: finalTotal,
+      cachedAtUtc: new Date().toISOString(),
+      isComplete,
+      sellers: finalList,
+    };
+
+    if (finalList.length > 0) {
+      await this.persistSellersRecord(finalRecord);
     }
 
-    return finalResult;
+    if (!wasCancelled) {
+      options?.onProgress?.(
+        finalRecord.sellers,
+        finalRecord.total,
+        true,
+        finalRecord.cachedAtUtc
+      );
+    }
+
+    return finalRecord;
   }
 
   /**
