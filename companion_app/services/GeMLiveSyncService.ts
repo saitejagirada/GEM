@@ -191,6 +191,10 @@ export class GeMLiveSyncService {
     this.sessionPromise = null;
   }
 
+  public static getCachedCookieHeader(): string {
+    return this.cachedSession?.cookieHeader || '';
+  }
+
   public static computeLifecycleStatus(bid: DeconstructedBidDoc, now: Date = new Date()): BidLifecycleStatus {
     if (bid.isCancelled || bid.lifecycleStatus === 'CANCELLED') return 'CANCELLED';
     if (bid.lifecycleStatus === 'AWARDED') return 'AWARDED';

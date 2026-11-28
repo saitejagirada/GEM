@@ -15,16 +15,16 @@ import {
   ScrollView,
   Alert,
   Linking,
+  Pressable,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import { isNetworkOnline } from '../utils/network';
-import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import {
   SearchField,
   CompactChip,
-  StatusBadge,
   PrimaryButton,
   SecondaryButton,
 } from '../components/SharedUI';
@@ -32,6 +32,13 @@ import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { formatDateSafe } from '../utils/formatters';
 import type { DeconstructedBidDoc } from '../types/index';
+
+function formatCompactClosedDate(closingTimeUtc?: string): string {
+  if (!closingTimeUtc) return 'See PDF';
+  const d = new Date(closingTimeUtc);
+  if (Number.isNaN(d.getTime())) return 'See PDF';
+  return formatDateSafe(closingTimeUtc, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 type ConcludedFilter = 'ALL' | 'GOODS' | 'SERVICES' | 'RA';
 
@@ -158,29 +165,37 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
     const isRa = item.isRa || item.type === 'RA';
     const isService = item.type === 'SERVICE';
     const qty = item.boqItems?.[0]?.quantity;
+    const typeLabel = isRa ? 'RA CONCLUDED' : isService ? 'SERVICE BID' : 'CONCLUDED';
+    const dotColor = isRa ? colors.warning : isService ? colors.violet : colors.primary;
 
     return (
-      <View
-        style={[
+      <Pressable
+        onPress={() => setSelectedBid(item)}
+        style={({ pressed }) => [
           styles.contractCard,
           {
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: colors.borderSubtle,
+            opacity: pressed ? 0.84 : 1,
           },
         ]}
       >
         <View style={styles.cardHeaderRow}>
-          <StatusBadge
-            label={isRa ? 'RA CONCLUDED' : isService ? 'SERVICE BID' : 'BID CONCLUDED'}
-            tone={isRa ? 'warning' : 'neutral'}
-          />
-          <Text style={[styles.contractNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.bidNumber}
-          </Text>
+          <View style={styles.cardHeaderLeft}>
+            <View style={[styles.typeDot, { backgroundColor: dotColor }]} />
+            <Text style={[styles.typeEyebrow, { color: dotColor }]}>{typeLabel}</Text>
+            <Text style={[styles.metaSep, { color: colors.textMuted }]}>·</Text>
+            <Text style={[styles.contractNumber, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.bidNumber}
+            </Text>
+          </View>
+          <View style={[styles.closedPill, { backgroundColor: colors.surfaceSubtle }]}>
+            <Text style={[styles.closedPillText, { color: colors.textSecondary }]}>Closed</Text>
+          </View>
         </View>
 
         <Text
-          style={[styles.contractTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
+          style={[styles.contractTitle, { color: colors.textPrimary, fontSize: 15.5 * fontMultiplier }]}
           numberOfLines={2}
         >
           {item.title}
@@ -189,66 +204,88 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
         <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
           {[item.department, item.ministry !== item.department ? item.ministry : '']
             .filter(Boolean)
-            .join(' • ') || 'Department not published'}
+            .join(' · ') || 'Department not published'}
         </Text>
 
-        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-          <View style={styles.metricItem}>
-            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSED (IST)</Text>
+        <View style={[styles.metricsRow, { borderTopColor: colors.borderSubtle }]}>
+          <View style={[styles.metricCol, { borderRightColor: colors.borderSubtle }]}>
+            <Text style={[styles.metricLabel, { color: colors.textMuted }]}>CLOSED DATE</Text>
             <Text style={[styles.metricValue, { color: colors.textPrimary }]} numberOfLines={1}>
-              {formatDateSafe(item.closingTimeUtc)}
+              {formatCompactClosedDate(item.closingTimeUtc)}
             </Text>
           </View>
-          <View style={styles.metricItem}>
+          <View style={styles.metricColLast}>
             <Text style={[styles.metricLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-            <Text style={[styles.metricValue, { color: colors.textPrimary }]}>
-              {qty !== undefined ? `${qty.toLocaleString('en-IN')} Units` : 'In PDF'}
+            <Text
+              style={[
+                styles.metricValue,
+                { color: qty !== undefined ? colors.textPrimary : colors.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {qty !== undefined
+                ? `${qty.toLocaleString('en-IN')} ${qty === 1 ? 'Unit' : 'Units'}`
+                : 'In PDF'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.cardActionsRow}>
-          <SecondaryButton
-            label="View PDF"
+        <View style={[styles.cardFooterRow, { borderTopColor: colors.borderSubtle }]}>
+          <Pressable
             onPress={() => setDocumentBid(item)}
-            style={{ flex: 1, marginRight: 8 }}
-          />
-          <PrimaryButton
-            label="Inspect Record"
-            onPress={() => setSelectedBid(item)}
-            style={{ flex: 1.3 }}
-          />
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.pdfPillBtn,
+              { backgroundColor: colors.surfaceSubtle, opacity: pressed ? 0.68 : 1 },
+            ]}
+          >
+            <Text style={[styles.pdfPillText, { color: colors.textPrimary }]}>View PDF</Text>
+          </Pressable>
+          <Text style={[styles.inspectCue, { color: colors.primary }]}>Inspect Record ›</Text>
         </View>
-      </View>
+      </Pressable>
     );
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Official Executed Contracts Portal Handoff Banner */}
-      <View style={[styles.handoffBanner, { backgroundColor: colors.surfaceSubtle, borderBottomColor: colors.border }]}>
-        <View style={styles.handoffCopy}>
-          <Text style={[styles.handoffEyebrow, { color: colors.primary }]}>OFFICIAL CONTRACTS & RESULTS</Text>
-          <Text style={[styles.handoffText, { color: colors.textSecondary }]}>
-            {totalCount > 0
-              ? `${totalCount.toLocaleString('en-IN')} concluded public bids on bidplus.gem.gov.in. Signed GeM contracts & CRAC/PFMS records open on gem.gov.in.`
-              : 'Concluded bids stream live from bidplus.gem.gov.in. Signed contracts open on the official GeM portal.'}
-          </Text>
+      {/* Elevated White Apple Header */}
+      <View
+        style={[
+          styles.stickyHeader,
+          { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.headerTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.countHeadline, { color: colors.textSecondary }]}>
+              {totalCount > 0
+                ? `${totalCount.toLocaleString('en-IN')} concluded public bids on GeM`
+                : 'Live concluded bids from bidplus.gem.gov.in'}
+            </Text>
+          </View>
+          <Pressable
+            onPress={openContractsPortal}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.contractsPillBtn,
+              { backgroundColor: colors.primaryTint, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Text style={[styles.contractsPillText, { color: colors.primary }]}>
+              GeM Contracts ↗
+            </Text>
+          </Pressable>
         </View>
-        <SecondaryButton
-          label="Open gem.gov.in/view_contracts ↗"
-          onPress={openContractsPortal}
-          style={{ marginTop: 8 }}
-        />
-      </View>
 
-      {/* Search & Filter Toolbar */}
-      <View style={styles.topSection}>
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search concluded bids by number, item or dept"
-          style={{ marginBottom: 10 }}
+          style={[
+            styles.embeddedSearch,
+            { backgroundColor: colors.surfaceSubtle, borderColor: 'transparent' },
+          ]}
         />
 
         <ScrollView
@@ -289,7 +326,7 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
         onEndReachedThreshold={0.45}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isRefreshing && records.length > 0}
             onRefresh={() => loadConcludedRecords(1, false)}
             colors={[colors.primary]}
             tintColor={colors.primary}
@@ -367,43 +404,112 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  handoffBanner: {
-    paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+  stickyHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 11,
+    paddingBottom: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  handoffCopy: { flexShrink: 1 },
-  handoffEyebrow: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  handoffText: { fontSize: 11, lineHeight: 15, marginTop: 3 },
-  topSection: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 8 },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  countHeadline: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  contractsPillBtn: {
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contractsPillText: { fontSize: 12, fontWeight: '600' },
+  embeddedSearch: { height: 42, marginBottom: 10 },
   filterChipRow: { flexDirection: 'row', alignItems: 'center' },
-  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 4, paddingBottom: 40 },
+  listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 },
   contractCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
     marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 7,
+    gap: 8,
   },
-  contractNumber: { fontSize: 12, fontWeight: '600', marginLeft: 8, flexShrink: 1 },
-  contractTitle: { fontWeight: '700', marginBottom: 4, lineHeight: 20 },
-  deptText: { fontSize: 12, marginBottom: 10 },
-  metaGrid: {
+  cardHeaderLeft: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    borderRadius: 10,
-    padding: 8,
-    marginBottom: 12,
+    alignItems: 'center',
+    flex: 1,
+    gap: 5,
   },
-  metricItem: { width: '50%', padding: 4 },
-  metricLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 2 },
-  metricValue: { fontSize: 12, fontWeight: '700' },
-  cardActionsRow: { flexDirection: 'row', alignItems: 'center' },
+  typeDot: { width: 6, height: 6, borderRadius: 3 },
+  typeEyebrow: { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.4 },
+  metaSep: { fontSize: 11 },
+  contractNumber: {
+    fontSize: 12,
+    fontWeight: '500',
+    flexShrink: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  closedPill: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  closedPillText: { fontSize: 11, fontWeight: '600' },
+  contractTitle: {
+    fontWeight: '600',
+    marginBottom: 4,
+    lineHeight: 21.5,
+    letterSpacing: -0.25,
+  },
+  deptText: { fontSize: 13, lineHeight: 18 },
+  metricsRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 11,
+    paddingTop: 10,
+  },
+  metricCol: {
+    flex: 1,
+    paddingRight: 10,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  metricColLast: {
+    flex: 1,
+    paddingLeft: 12,
+  },
+  metricLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.45, marginBottom: 2 },
+  metricValue: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
+    paddingTop: 10,
+  },
+  pdfPillBtn: {
+    minHeight: 34,
+    paddingHorizontal: 13,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfPillText: { fontSize: 12.5, fontWeight: '600' },
+  inspectCue: { fontSize: 13.5, fontWeight: '600' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
   emptyBadge: {
     width: 44,
@@ -413,7 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  emptyBadgeText: { fontSize: 17, fontWeight: '900' },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
-  emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18 },
+  emptyBadgeText: { fontSize: 16, fontWeight: '700' },
+  emptyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4, textAlign: 'center' },
+  emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18.5 },
 });

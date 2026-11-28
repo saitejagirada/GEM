@@ -32,10 +32,27 @@ import {
   SearchField,
   SegmentedTabs,
   CompactChip,
-  StatusBadge,
   PrimaryButton,
   SecondaryButton,
 } from '../components/SharedUI';
+import { formatDateSafe } from '../utils/formatters';
+
+function formatCompactAuctionClose(closingTimeUtc?: string): string {
+  if (!closingTimeUtc) return 'See PDF';
+  const d = new Date(closingTimeUtc);
+  if (Number.isNaN(d.getTime())) return 'See PDF';
+  const day = formatDateSafe(closingTimeUtc, { day: 'numeric', month: 'short' });
+  const time = formatDateSafe(closingTimeUtc, { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${day} · ${time}`;
+}
+
+function isUrgentClosing(closingTimeUtc?: string): boolean {
+  if (!closingTimeUtc) return false;
+  const d = new Date(closingTimeUtc);
+  if (Number.isNaN(d.getTime())) return false;
+  const diff = d.getTime() - Date.now();
+  return diff > 0 && diff < 24 * 3600000;
+}
 
 type TabMode = 'Live Reverse' | 'Forward e-Scrap';
 
@@ -278,101 +295,188 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
   }, [isLoadingMore, isRefreshing, effectiveHasMore, lastPageFetched, loadAuctionBatch]);
 
   const renderAuctionCard = useCallback(
-    ({ item: ra }: { item: ReverseAuctionDetailItem }) => (
-      <View
-        style={[
-          styles.auctionCard,
-          { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-        ]}
-      >
-        <View style={styles.cardHeaderRow}>
-          <StatusBadge label="LIVE RA" tone="success" dot />
-          <Text style={[styles.auctionNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-            {ra.contractNumber}
-          </Text>
-          <Text style={[styles.closingText, { color: colors.warning }]}>{ra.closingDateLabel}</Text>
-          {ra.sourceBid ? (
-            <Pressable
-              onPress={() => void TenderRadarService.toggleWatch(ra.sourceBid!)}
-              hitSlop={8}
-              style={[
-                styles.watchMiniBtn,
-                {
-                  backgroundColor: watchedSet.has(ra.contractNumber.trim().toLowerCase())
-                    ? colors.warningTint
-                    : colors.surfaceSubtle,
-                  borderColor: watchedSet.has(ra.contractNumber.trim().toLowerCase())
-                    ? colors.warning
-                    : colors.borderSubtle,
-                },
-              ]}
-              accessibilityLabel={
-                watchedSet.has(ra.contractNumber.trim().toLowerCase())
-                  ? 'Remove from watchlist'
-                  : 'Watch reverse auction'
-              }
-            >
-              <AppIcon
-                name={
-                  watchedSet.has(ra.contractNumber.trim().toLowerCase())
-                    ? 'bookmarkFilled'
-                    : 'bookmark'
-                }
-                color={
-                  watchedSet.has(ra.contractNumber.trim().toLowerCase())
-                    ? colors.warning
-                    : colors.textMuted
-                }
-                size={13}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-        <Text
-          style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 14 * fontMultiplier }]}
-          numberOfLines={2}
+    ({ item: ra }: { item: ReverseAuctionDetailItem }) => {
+      const isWatched = watchedSet.has(ra.contractNumber.trim().toLowerCase());
+      const urgent = isUrgentClosing(ra.closingTimeUtc);
+      const isClosed = ra.closingDateLabel === 'Closed';
+      const shortCountdown = (ra.closingDateLabel || 'See PDF').replace(/^Ends in\s+/i, '');
+
+      return (
+        <Pressable
+          onPress={() => setSelectedRa(ra)}
+          style={({ pressed }) => [
+            styles.auctionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.borderSubtle,
+              opacity: pressed ? 0.84 : 1,
+            },
+          ]}
+          accessibilityLabel={`Inspect reverse auction ${ra.contractNumber}`}
         >
-          {ra.title}
-        </Text>
-        <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={2}>
-          {[ra.department, ra.buyerOrganization !== ra.department ? ra.buyerOrganization : '']
-            .filter(Boolean)
-            .join(' • ') || 'Department unstated'}
-        </Text>
-        <View style={[styles.metaGrid, { backgroundColor: colors.surfaceSubtle }]}>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>
-              {ra.sourceBid?.parentBidNumber ? 'PARENT BID' : 'PUBLIC SOURCE'}
-            </Text>
-            <Text style={[styles.metaValue, { color: colors.primary }]} numberOfLines={1}>
-              {ra.sourceBid?.parentBidNumber || 'GeM live feed'}
+          {/* Row 1: Type Eyebrow + RA Number | Live Countdown + Bookmark */}
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={[styles.typeDot, { backgroundColor: colors.danger }]} />
+              <Text style={[styles.typeEyebrow, { color: colors.danger }]}>LIVE RA</Text>
+              <Text style={[styles.metaSep, { color: colors.textMuted }]}>·</Text>
+              <Text style={[styles.auctionNumber, { color: colors.textSecondary }]} numberOfLines={1}>
+                {ra.contractNumber}
+              </Text>
+            </View>
+            <View style={styles.cardHeaderRight}>
+              <View
+                style={[
+                  styles.countdownPill,
+                  {
+                    backgroundColor: isClosed
+                      ? colors.surfaceSubtle
+                      : urgent
+                        ? colors.dangerTint
+                        : colors.warningTint,
+                  },
+                ]}
+              >
+                {!isClosed ? (
+                  <View
+                    style={[
+                      styles.countdownDot,
+                      { backgroundColor: urgent ? colors.danger : colors.warning },
+                    ]}
+                  />
+                ) : null}
+                <Text
+                  style={[
+                    styles.countdownText,
+                    {
+                      color: isClosed
+                        ? colors.textMuted
+                        : urgent
+                          ? colors.danger
+                          : colors.warning,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {isClosed ? 'Closed' : `${shortCountdown} left`}
+                </Text>
+              </View>
+              {ra.sourceBid ? (
+                <Pressable
+                  onPress={() => void TenderRadarService.toggleWatch(ra.sourceBid!)}
+                  hitSlop={10}
+                  style={({ pressed }) => [
+                    styles.watchMiniBtn,
+                    {
+                      backgroundColor: isWatched ? colors.warningTint : 'transparent',
+                      opacity: pressed ? 0.65 : 1,
+                    },
+                  ]}
+                  accessibilityLabel={
+                    isWatched ? 'Remove from watchlist' : 'Watch reverse auction'
+                  }
+                >
+                  <AppIcon
+                    name={isWatched ? 'bookmarkFilled' : 'bookmark'}
+                    color={isWatched ? colors.warning : colors.textMuted}
+                    size={15}
+                  />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Row 2: Title + Department */}
+          <Text
+            style={[
+              styles.auctionTitle,
+              { color: colors.textPrimary, fontSize: 15.5 * fontMultiplier },
+            ]}
+            numberOfLines={2}
+          >
+            {ra.title}
+          </Text>
+          <Text style={[styles.deptText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {[ra.department, ra.buyerOrganization !== ra.department ? ra.buyerOrganization : '']
+              .filter(Boolean)
+              .join(' · ') || 'Department not published'}
+          </Text>
+
+          {/* Row 3: Hairline 3-Column Metrics Strip */}
+          <View style={[styles.metricsTrioRow, { borderTopColor: colors.borderSubtle }]}>
+            <View style={[styles.trioCol, { borderRightColor: colors.borderSubtle }]}>
+              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>
+                {ra.sourceBid?.parentBidNumber ? 'PARENT BID' : 'SOURCE'}
+              </Text>
+              <Text
+                style={[styles.metaValue, { color: colors.primary }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+              >
+                {ra.sourceBid?.parentBidNumber || 'GeM Live'}
+              </Text>
+            </View>
+            <View style={[styles.trioColMid, { borderRightColor: colors.borderSubtle }]}>
+              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+              <Text
+                style={[
+                  styles.metaValue,
+                  {
+                    color:
+                      ra.publishedQuantity && ra.totalQuantity !== undefined
+                        ? colors.textPrimary
+                        : colors.textMuted,
+                  },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+              >
+                {ra.publishedQuantity && ra.totalQuantity !== undefined
+                  ? `${ra.totalQuantity.toLocaleString('en-IN')} ${ra.totalQuantity === 1 ? 'Unit' : 'Units'}`
+                  : 'In PDF'}
+              </Text>
+            </View>
+            <View style={styles.trioColLast}>
+              <Text style={[styles.metaLabel, { color: colors.textMuted }]}>CLOSES</Text>
+              <Text
+                style={[styles.metaValue, { color: colors.textPrimary }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+              >
+                {formatCompactAuctionClose(ra.closingTimeUtc)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Row 4: Quiet Apple Footer */}
+          <View style={[styles.cardFooterRow, { borderTopColor: colors.borderSubtle }]}>
+            {ra.sourceBid ? (
+              <Pressable
+                onPress={() => setDocumentBid(ra.sourceBid || null)}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.pdfPillBtn,
+                  { backgroundColor: colors.surfaceSubtle, opacity: pressed ? 0.68 : 1 },
+                ]}
+              >
+                <AppIcon name="document" color={colors.primary} size={13} />
+                <Text style={[styles.pdfPillText, { color: colors.textPrimary }]}>
+                  {t('viewPdf')}
+                </Text>
+              </Pressable>
+            ) : (
+              <View />
+            )}
+            <Text style={[styles.inspectCueText, { color: colors.primary }]}>
+              {t('inspectAuction')} ›
             </Text>
           </View>
-          <View style={styles.metaCol}>
-            <Text style={[styles.metaLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-            <Text style={[styles.metaValue, { color: colors.textPrimary }]}>
-              {ra.publishedQuantity && ra.totalQuantity !== undefined
-                ? ra.totalQuantity.toLocaleString('en-IN')
-                : 'In PDF'}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.cardActionsRow}>
-          {ra.sourceBid ? (
-            <SecondaryButton
-              label={t('viewPdf')}
-              onPress={() => setDocumentBid(ra.sourceBid || null)}
-              style={{ flex: 1, marginRight: 8 }}
-            />
-          ) : null}
-          <PrimaryButton
-            label={t('inspectAuction')}
-            onPress={() => setSelectedRa(ra)}
-            style={{ flex: 1.4 }}
-          />
-        </View>
-      </View>
-    ),
+        </Pressable>
+      );
+    },
     [colors, fontMultiplier, watchedSet, t]
   );
 
@@ -388,13 +492,35 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.topSection}>
+      {/* Elevated White Apple Sticky Header */}
+      <View
+        style={[
+          styles.stickyHeader,
+          { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.headerTitleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Auctions</Text>
+            <View style={styles.liveCountRow}>
+              <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
+              <Text style={[styles.progressMeta, { color: colors.textSecondary }]}>
+                {activeTab === 'Forward e-Scrap'
+                  ? 'Official forwardauction.gem.gov.in handoff'
+                  : totalPortalRas > 0
+                    ? `${totalPortalRas.toLocaleString('en-IN')} live reverse auctions on GeM`
+                    : 'Live reverse auctions directly from GeM'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <SegmentedTabs
           options={['Live Reverse', 'Forward e-Scrap']}
           selected={activeTab}
           onSelect={(tab) => setActiveTab(tab as TabMode)}
           counts={totalPortalRas > 0 ? { 'Live Reverse': totalPortalRas } : undefined}
-          style={{ marginBottom: 10 }}
+          style={{ marginBottom: activeTab === 'Live Reverse' ? 10 : 0 }}
         />
 
         {activeTab === 'Live Reverse' && (
@@ -403,7 +529,10 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder={t('auctionsSearchPlaceholder')}
-              style={{ marginBottom: 10 }}
+              style={[
+                styles.embeddedSearch,
+                { backgroundColor: colors.surfaceSubtle, borderColor: 'transparent' },
+              ]}
             />
 
             <ScrollView
@@ -432,13 +561,6 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
                 onPress={() => setHighValueOnly((p) => !p)}
               />
             </ScrollView>
-
-            {totalPortalRas > 0 && !isLoading ? (
-              <Text style={[styles.progressMeta, { color: colors.textSecondary }]}>
-                Showing {reverseAuctions.length.toLocaleString('en-IN')} of{' '}
-                {totalPortalRas.toLocaleString('en-IN')} live reverse auctions on GeM
-              </Text>
-            ) : null}
           </>
         )}
       </View>
@@ -458,7 +580,7 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
           onEndReachedThreshold={0.45}
           refreshControl={
             <RefreshControl
-              refreshing={isRefreshing && !isLoading}
+              refreshing={isRefreshing && reverseAuctions.length > 0}
               onRefresh={() => loadAuctionBatch(1, false)}
               colors={[colors.primary]}
               tintColor={colors.primary}
@@ -579,48 +701,136 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topSection: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  stickyHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 11,
+  },
+  pageTitle: {
+    fontSize: 21,
+    fontWeight: '700',
+    letterSpacing: -0.45,
+    lineHeight: 25,
+  },
+  liveCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  progressMeta: { fontSize: 12, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  embeddedSearch: { height: 42, marginBottom: 10 },
   chipRow: { flexDirection: 'row', alignItems: 'center' },
-  progressMeta: { fontSize: 11.5, fontWeight: '500', marginTop: 8, fontVariant: ['tabular-nums'] },
-  listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 },
+  listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 },
   auctionCard: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
     marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 9,
+    marginBottom: 7,
     gap: 8,
   },
-  auctionNumber: { fontSize: 12.5, fontWeight: '600', flex: 1, fontVariant: ['tabular-nums'] },
-  closingText: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 5,
+  },
+  typeDot: { width: 6, height: 6, borderRadius: 3 },
+  typeEyebrow: { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.4 },
+  metaSep: { fontSize: 11 },
+  auctionNumber: {
+    fontSize: 12,
+    fontWeight: '500',
+    flexShrink: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  countdownPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+  },
+  countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
+  countdownText: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   watchMiniBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  auctionTitle: { fontWeight: '600', marginBottom: 4, lineHeight: 20, letterSpacing: -0.15 },
-  deptText: { fontSize: 12.5, marginBottom: 12, lineHeight: 17 },
-  metaGrid: {
-    flexDirection: 'row',
-    borderRadius: 10,
-    padding: 11,
-    marginBottom: 10,
-    justifyContent: 'space-between',
+  auctionTitle: {
+    fontWeight: '600',
+    marginBottom: 4,
+    lineHeight: 21.5,
+    letterSpacing: -0.25,
   },
-  metaCol: { flex: 1 },
-  metaLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.45, marginBottom: 3 },
-  metaValue: { fontSize: 13.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  cardActionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  deptText: { fontSize: 13, lineHeight: 18 },
+  metricsTrioRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 11,
+    paddingTop: 10,
+  },
+  trioCol: {
+    flex: 1.25,
+    paddingRight: 8,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  trioColMid: {
+    flex: 0.78,
+    paddingHorizontal: 8,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  trioColLast: {
+    flex: 1.08,
+    paddingLeft: 8,
+  },
+  metaLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.45, marginBottom: 2 },
+  metaValue: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
+    paddingTop: 10,
+  },
+  pdfPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+  },
+  pdfPillText: { fontSize: 12.5, fontWeight: '600' },
+  inspectCueText: { fontSize: 13.5, fontWeight: '600' },
   footerWrap: { marginTop: 6, marginBottom: 18, alignItems: 'center' },
-  footerText: { fontSize: 11.5, fontWeight: '600', textAlign: 'center' },
+  footerText: { fontSize: 12, fontWeight: '500', textAlign: 'center', fontVariant: ['tabular-nums'] },
   loadingMoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -628,7 +838,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     gap: 10,
   },
-  loadingMoreText: { fontSize: 12.5, fontWeight: '600' },
+  loadingMoreText: { fontSize: 13, fontWeight: '500' },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
   emptyBadge: {
     width: 44,
@@ -638,7 +848,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
-  emptyBadgeText: { fontSize: 15, fontWeight: '900' },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
-  emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18 },
+  emptyBadgeText: { fontSize: 15, fontWeight: '700' },
+  emptyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4, textAlign: 'center' },
+  emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18.5 },
 });

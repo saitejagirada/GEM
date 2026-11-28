@@ -153,7 +153,14 @@ export interface UserAgentProfile {
   productCategories: string[]; // e.g. ['LED Luminaire', 'Cables', 'Switchgear']
   targetStates: string[]; // e.g. ['Uttar Pradesh', 'Delhi', 'Haryana']
   isOem: boolean;
+  isServiceProvider?: boolean;
   hasUdyamCertificate: boolean;
+  gstin?: string;
+  panNumber?: string;
+  udyamNumber?: string;
+  registeredAddress?: string;
+  maxSingleOrderValueInr?: number;
+  hasVerifiedUdin?: boolean;
   acceptedOrders?: AcceptedOrder[];
 }
 
@@ -375,6 +382,12 @@ export interface WorkspaceDocument {
   linkedBidNumber?: string;
   source: 'DEVICE_PICKER';
   persistence: WorkspaceDocumentPersistence;
+  /** Tags extracted locally on-device from PDF text (e.g. MII_DECLARATION, CA_UDIN_TURNOVER). */
+  extractedTags?: string[];
+  /** Concise human-readable facts detected locally from the uploaded PDF. */
+  extractedHighlights?: string[];
+  /** True only when an 18-character ICAI UDIN was parsed from the PDF text layer. */
+  hasVerifiedUdin?: boolean;
 }
 
 export type OfficialHandoffStatus = 'OPENED_OFFICIAL_PORTAL' | 'USER_REPORTED_SUBMITTED';

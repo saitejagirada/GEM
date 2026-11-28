@@ -313,4 +313,26 @@ Bidder Turn Over Criteria: The minimum average annual financial turnover of the 
     assert.equal(parsed.yearsExperienceRequired, 3);
     assert.equal(parsed.pastPerformancePercentage, 70);
   });
+
+  it('rejoins PDF line-wrapped parenthetical items like Certificate (Requested in\\nATC) and drops orphan fragments', () => {
+    const wrappedSample = `
+Experience Criteria,Bidder Turnover,Certificate (Requested in
+ATC),Additional Doc 1 (Requested in
+ATC),Additional Doc 2 (Requested in
+Document required : ATC),Additional Doc 4 (Requested in ATC),Compliance of BoQ specification and
+supporting document
+from seller : *In case any bidder is seeking exemption
+`;
+    const docs = GemPdfExtractor.extractRequiredDocumentsList(wrappedSample);
+    assert.ok(docs.includes('Experience Criteria'));
+    assert.ok(docs.includes('Bidder Turnover'));
+    assert.ok(docs.includes('Certificate (Requested in ATC)'));
+    assert.ok(docs.includes('Additional Doc 1 (Requested in ATC)'));
+    assert.ok(docs.includes('Additional Doc 4 (Requested in ATC)'));
+    assert.ok(docs.includes('Compliance of BoQ specification and supporting document'));
+    assert.ok(!docs.some((d) => d.includes('ATC))')), 'Must not double-close parentheses');
+    assert.ok(!docs.includes('ATC)'), 'Must not emit broken fragment "ATC)"');
+    assert.ok(!docs.includes('supporting document'), 'Must not emit lowercase wrap continuation fragment');
+    assert.ok(!docs.some((d) => d.endsWith('Requested in')), 'Must not emit truncated open-paren fragment');
+  });
 });

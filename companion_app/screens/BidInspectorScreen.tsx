@@ -34,8 +34,14 @@ import type {
   DeconstructedBidDoc,
   OfficialBidDocument,
   OfficialBidDocumentKind,
+  WorkspaceDocument,
 } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
+import {
+  CompanyDocLockerService,
+  type CompanyLockerDocument,
+} from '../services/CompanyDocLockerService';
+import { WorkspaceStorage } from '../services/WorkspaceStorage';
 import { GeMLiveSyncService, type GeMBidOtherDetails } from '../services/GeMLiveSyncService';
 import {
   LocalPdfScanner,
@@ -133,6 +139,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   const sectionsOffsetYRef = useRef<number>(0);
 
   const [checkedDocs, setCheckedDocs] = useState<Record<string, boolean>>({});
+  const [lockerDocs, setLockerDocs] = useState<CompanyLockerDocument[]>(() =>
+    CompanyDocLockerService.getDocuments()
+  );
+  const [workspaceDocs, setWorkspaceDocs] = useState<WorkspaceDocument[]>([]);
   const [pdfScan, setPdfScan] = useState<LocalPdfScanResult | null>(null);
   const [isScanningPdf, setIsScanningPdf] = useState(false);
   const [documentViewerVisible, setDocumentViewerVisible] = useState(false);
@@ -158,6 +168,17 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   }, [bid?.bidNumber]);
 
   useEffect(() => {
+    CompanyDocLockerService.hydrate().then(setLockerDocs).catch(() => undefined);
+    const unsubLocker = CompanyDocLockerService.subscribe(setLockerDocs);
+    WorkspaceStorage.loadDocuments().then(setWorkspaceDocs).catch(() => undefined);
+    const unsubWs = WorkspaceStorage.subscribeDocuments(setWorkspaceDocs);
+    return () => {
+      unsubLocker();
+      unsubWs();
+    };
+  }, []);
+
+  useEffect(() => {
     setCheckedDocs({});
     setPdfScan(null);
     setOtherDetails(null);
@@ -174,6 +195,11 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     if (!bid || !visible) return;
 
     let cancelled = false;
+    WorkspaceStorage.loadChecklistTicks(bid.bidNumber)
+      .then((savedTicks) => {
+        if (!cancelled) setCheckedDocs(savedTicks);
+      })
+      .catch(() => undefined);
     setIsScanningPdf(true);
     LocalPdfScanner.scanBidDocuments(bid)
       .then((result) => {
@@ -317,10 +343,13 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   };
 
   const toggleDoc = (docName: string) => {
-    setCheckedDocs((prev) => ({
-      ...prev,
-      [docName]: !prev[docName],
-    }));
+    setCheckedDocs((prev) => {
+      const next = { ...prev, [docName]: !prev[docName] };
+      if (bid?.bidNumber) {
+        void WorkspaceStorage.saveChecklistTicks(bid.bidNumber, next);
+      }
+      return next;
+    });
   };
 
   const handlePrepareDocuments = () => {
@@ -354,7 +383,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     if (isScanningPdf) return;
     setIsScanningPdf(true);
     try {
-      const result = await LocalPdfScanner.scanBidDocuments(bid);
+      const result = await LocalPdfScanner.scanBidDocuments(bid, { forceRefresh: true });
       setPdfScan(result);
       if (result.status === 'NO_TEXT_LAYER') {
         Alert.alert('No readable text layer', result.note);
@@ -540,7 +569,23 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 
   const typeInfo = BidDocService.getProcurementTypeLabel(bid);
   const isRaBid = Boolean(bid.isRa || bid.type === 'RA');
-  const checkedCount = requiredDocuments.filter((d) => checkedDocs[d]).length;
+  const bidSpecificWorkspaceDocs = workspaceDocs.filter(
+    (d) => d.linkedBidNumber === effectiveBid.bidNumber
+  );
+  const checklistMatch = CompanyDocLockerService.matchBidChecklistWithLocker(
+    requiredDocuments,
+    bidSpecificWorkspaceDocs,
+    lockerDocs
+  );
+  const lockerMatchMap = new Map(
+    checklistMatch.matchedFromLocker.map((m) => [m.requirement, m.doc.name])
+  );
+  const bidFileMatchMap = new Map(
+    checklistMatch.matchedFromBidFiles.map((m) => [m.requirement, m.fileName])
+  );
+  const checkedCount = requiredDocuments.filter(
+    (d) => Boolean(checkedDocs[d] || lockerMatchMap.has(d) || bidFileMatchMap.has(d))
+  ).length;
   const checklistRatio =
     requiredDocuments.length > 0 ? checkedCount / requiredDocuments.length : 0;
 
@@ -1213,6 +1258,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   >
                     <PreBidDisqualificationShield
                       tenderDetails={ext}
+                      isServiceTender={effectiveBid.type === 'SERVICE'}
                       onPrepareDocuments={handlePrepareDocuments}
                     />
                   </View>
@@ -1359,7 +1405,10 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                       </View>
 
                       {requiredDocuments.map((doc, idx) => {
-                        const isChecked = !!checkedDocs[doc];
+                        const lockerFile = lockerMatchMap.get(doc);
+                        const bidFile = bidFileMatchMap.get(doc);
+                        const autoMatched = Boolean(lockerFile || bidFile);
+                        const isChecked = Boolean(checkedDocs[doc] || autoMatched);
                         return (
                           <View key={idx}>
                             {idx > 0 ? (
@@ -1386,15 +1435,32 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                                   {isChecked ? '✓' : ''}
                                 </Text>
                               </View>
-                              <Text
-                                style={[
-                                  styles.checkLabel,
-                                  { color: isChecked ? colors.textPrimary : colors.textSecondary },
-                                  isChecked && { fontWeight: '600' },
-                                ]}
-                              >
-                                {doc}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={[
+                                    styles.checkLabel,
+                                    { color: isChecked ? colors.textPrimary : colors.textSecondary },
+                                    isChecked && { fontWeight: '600' },
+                                  ]}
+                                >
+                                  {doc}
+                                </Text>
+                                {lockerFile ? (
+                                  <Text
+                                    style={[styles.checkAutoSource, { color: colors.success }]}
+                                    numberOfLines={1}
+                                  >
+                                    Company Vault · {lockerFile}
+                                  </Text>
+                                ) : bidFile ? (
+                                  <Text
+                                    style={[styles.checkAutoSource, { color: colors.primary }]}
+                                    numberOfLines={1}
+                                  >
+                                    Bid Packet · {bidFile}
+                                  </Text>
+                                ) : null}
+                              </View>
                             </TouchableOpacity>
                           </View>
                         );
@@ -1958,7 +2024,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   checkMark: { fontSize: 12.5, fontWeight: '700' },
-  checkLabel: { fontSize: 14, flex: 1, lineHeight: 20 },
+  checkLabel: { fontSize: 14, lineHeight: 20 },
+  checkAutoSource: { fontSize: 11.5, fontWeight: '500', marginTop: 2 },
   boqItemRow: {
     paddingHorizontal: 16,
     paddingVertical: 14,

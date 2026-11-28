@@ -89,4 +89,64 @@ describe('CompanyDocLockerService - Reusable Seller Locker & Auto-Matching', () 
     assert.ok(projected.some((d) => /turnover|udin/i.test(d.name)));
     assert.ok(projected.some((d) => /crac|experience/i.test(d.name)));
   });
+
+  it('supports multiple files in CRAC/ISO slots and prevents false ATC/Registration matches', async () => {
+    const crac1 = await CompanyDocLockerService.saveSlotDocument('EXPERIENCE', {
+      name: 'Railways_CRAC_2024.pdf',
+      uri: 'file:///tmp/crac1.pdf',
+    });
+    const crac2 = await CompanyDocLockerService.saveSlotDocument('EXPERIENCE', {
+      name: 'Defence_CRAC_2025.pdf',
+      uri: 'file:///tmp/crac2.pdf',
+    });
+    await CompanyDocLockerService.saveSlotDocument('ISO_QUALITY', {
+      name: 'ISO_9001_2015.pdf',
+      uri: 'file:///tmp/iso9001.pdf',
+    });
+    await CompanyDocLockerService.saveSlotDocument('UDYAM', {
+      name: 'Udyam_Cert.pdf',
+      uri: 'file:///tmp/udyam.pdf',
+    });
+
+    assert.strictEqual(CompanyDocLockerService.getDocumentsForSlot('EXPERIENCE').length, 2);
+    assert.strictEqual(CompanyDocLockerService.getFilledSlotCount(), 3);
+
+    // Tightened regexes: ISO must NOT falsely satisfy generic ATC requests; Udyam must NOT falsely satisfy GST Registration
+    const match = CompanyDocLockerService.matchBidChecklistWithLocker(
+      [
+        'Certificate (Requested in ATC)',
+        'Additional Doc 1 (Requested in ATC)',
+        'GST Registration Certificate',
+        'ISO 9001 Certificate',
+        'Make in India Local Content Declaration',
+      ],
+      [
+        {
+          id: 'bid-doc-1',
+          name: 'scan_001.pdf', // Generic filename, matched purely by PDF-extracted content tag!
+          uri: 'file:///tmp/scan_001.pdf',
+          addedAtUtc: new Date().toISOString(),
+          kind: 'COMPLIANCE',
+          source: 'DEVICE_PICKER',
+          persistence: 'PERSISTED',
+          extractedTags: ['MII_DECLARATION'],
+        },
+      ],
+      CompanyDocLockerService.getDocuments()
+    );
+
+    assert.strictEqual(match.matchedFromLocker.length, 1);
+    assert.strictEqual(match.matchedFromLocker[0].requirement, 'ISO 9001 Certificate');
+    assert.strictEqual(match.matchedFromBidFiles.length, 1);
+    assert.strictEqual(match.matchedFromBidFiles[0].requirement, 'Make in India Local Content Declaration');
+    assert.deepStrictEqual(match.missingRequirements, [
+      'Certificate (Requested in ATC)',
+      'Additional Doc 1 (Requested in ATC)',
+      'GST Registration Certificate',
+    ]);
+
+    await CompanyDocLockerService.removeDocumentById(crac1.id);
+    assert.strictEqual(CompanyDocLockerService.getDocumentsForSlot('EXPERIENCE').length, 1);
+    assert.strictEqual(CompanyDocLockerService.getDocumentsForSlot('EXPERIENCE')[0].id, crac2.id);
+  });
 });

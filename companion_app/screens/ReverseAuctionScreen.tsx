@@ -15,6 +15,8 @@ import {
   Alert,
   Linking,
   NativeModules,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   Share,
@@ -36,7 +38,6 @@ import { TenderRadarService } from '../services/TenderRadarService';
 import { AppIcon } from '../components/AppIcons';
 import { useTheme } from '../theme/ThemeContext';
 import type { ThemeColors } from '../theme/designTokens';
-import { StatusBadge } from '../components/SharedUI';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { PreBidDisqualificationShield } from '../components/PreBidDisqualificationShield';
 import { TenderDealSheetCard } from '../components/TenderDealSheetCard';
@@ -122,6 +123,9 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
 }) => {
   const { colors, fontMultiplier } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const jumpScrollRef = useRef<ScrollView>(null);
+  const jumpTabXRef = useRef<Partial<Record<RaSectionKey, number>>>({});
+  const jumpLockUntilRef = useRef<number>(0);
   const sectionYRef = useRef<Partial<Record<RaSectionKey, number>>>({});
   const sectionsOffsetYRef = useRef<number>(0);
 
@@ -238,7 +242,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
   const handleRetryScan = () => {
     if (isScanningPdf) return;
     setIsScanningPdf(true);
-    LocalPdfScanner.scanBidDocuments(baseBid)
+    LocalPdfScanner.scanBidDocuments(baseBid, { forceRefresh: true })
       .then((res) => setPdfScan(res))
       .catch(() => undefined)
       .finally(() => setIsScanningPdf(false));
@@ -253,8 +257,17 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
     }
   };
 
+  const syncJumpTabIntoView = (key: RaSectionKey) => {
+    const tabX = jumpTabXRef.current[key];
+    if (typeof tabX === 'number') {
+      jumpScrollRef.current?.scrollTo({ x: Math.max(0, tabX - 24), animated: true });
+    }
+  };
+
   const scrollToSection = (key: RaSectionKey) => {
+    jumpLockUntilRef.current = Date.now() + 450;
     setActiveJump(key);
+    syncJumpTabIntoView(key);
     if (key === 'overview') {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
@@ -262,9 +275,41 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
     const y = sectionYRef.current[key];
     if (typeof y === 'number') {
       scrollRef.current?.scrollTo({
-        y: Math.max(0, sectionsOffsetYRef.current + y - 8),
+        y: Math.max(0, sectionsOffsetYRef.current + y - 10),
         animated: true,
       });
+    }
+  };
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Date.now() < jumpLockUntilRef.current) return;
+    const scrollY = e.nativeEvent.contentOffset.y;
+    if (scrollY < 40) {
+      if (activeJump !== 'overview') {
+        setActiveJump('overview');
+        syncJumpTabIntoView('overview');
+      }
+      return;
+    }
+    const probeY = scrollY + 96;
+    const orderedKeys: RaSectionKey[] = [
+      'docs',
+      'terms',
+      'eligibility',
+      'atc',
+      'similar',
+      'portal',
+    ];
+    let matched: RaSectionKey = 'overview';
+    for (const key of orderedKeys) {
+      const sy = sectionYRef.current[key];
+      if (typeof sy === 'number' && sectionsOffsetYRef.current + sy <= probeY) {
+        matched = key;
+      }
+    }
+    if (matched !== activeJump) {
+      setActiveJump(matched);
+      syncJumpTabIntoView(matched);
     }
   };
 
@@ -467,49 +512,48 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
     const isPdf = format === 'PDF';
 
     return (
-      <Pressable
-        key={doc.id}
-        style={({ pressed }) => [
-          styles.docRow,
-          !isFirstInGroup && {
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.borderSubtle,
-          },
-          pressed && { opacity: 0.74 },
-        ]}
-        onPress={() => openInlineDoc(doc.id)}
-      >
-        <View style={[styles.docBadge, { backgroundColor: badge.bg }]}>
-          <Text style={[styles.docBadgeText, { color: badge.fg }]}>{badge.label}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-            {doc.label}
-          </Text>
-          <Text style={[styles.docSub, { color: colors.textSecondary }]} numberOfLines={1}>
-            {doc.subtitle || (isPdf ? 'Official GeM PDF · Read inside app' : `Official ${format} file`)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.docActionPill,
-            {
-              backgroundColor: isPdf ? colors.primaryTint : colors.surfaceSubtle,
-              borderColor: isPdf ? 'transparent' : colors.borderSubtle,
-            },
-          ]}
+      <View key={doc.id}>
+        {!isFirstInGroup ? (
+          <View style={[styles.insetDivider, { backgroundColor: colors.borderSubtle, marginLeft: 68 }]} />
+        ) : null}
+        <Pressable
+          style={({ pressed }) => [styles.docRow, pressed && { opacity: 0.68 }]}
+          onPress={() => openInlineDoc(doc.id)}
         >
-          <Text style={[styles.docActionCue, { color: isPdf ? colors.primary : colors.textPrimary }]}>
+          <View style={[styles.docBadge, { backgroundColor: badge.bg }]}>
+            <Text style={[styles.docBadgeText, { color: badge.fg }]}>{badge.label}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+              {doc.label}
+            </Text>
+            <Text style={[styles.docSub, { color: colors.textSecondary }]} numberOfLines={1}>
+              {doc.subtitle || (isPdf ? 'Official GeM PDF · Read inside app' : `Official ${format} file`)}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.docActionCue,
+              { color: isPdf ? colors.primary : colors.textSecondary },
+            ]}
+          >
             {isPdf ? 'Read ›' : 'Open ↗'}
           </Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     );
   };
 
+  const closingDayDisplay = isValidDate
+    ? formatDateSafe(auction.closingTimeUtc, { day: 'numeric', month: 'short', year: 'numeric' })
+    : 'See PDF';
+  const closingTimeDisplay = isValidDate
+    ? formatDateSafe(auction.closingTimeUtc, { hour: 'numeric', minute: '2-digit', hour12: true })
+    : '';
+
   return (
     <View style={[styles.screenRoot, { backgroundColor: colors.background }]}>
-      {/* Slim 48dp Native Top Bar (Frameless & Clean) */}
+      {/* 1. Refined 52dp Apple-Style Navigation Bar */}
       <View
         style={[
           styles.fixedHeader,
@@ -520,13 +564,13 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
           <Pressable
             onPress={onBack}
             hitSlop={10}
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.65 }]}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Back to auctions"
           >
-            <Text style={[styles.backArrow, { color: colors.textPrimary }]}>←</Text>
+            <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
           </Pressable>
         )}
-        <Pressable style={{ flex: 1 }} onPress={handleCopyId} hitSlop={6}>
+        <Pressable style={styles.headerCenter} onPress={handleCopyId} hitSlop={6}>
           <View style={styles.navTitleRow}>
             <Text
               style={[styles.navTitle, { color: colors.textPrimary, fontSize: 15 * fontMultiplier }]}
@@ -550,13 +594,22 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
               </Text>
             </View>
           </View>
+          <Text
+            style={[
+              styles.headerSubMeta,
+              { color: isClosingSoon ? colors.danger : colors.textMuted },
+            ]}
+            numberOfLines={1}
+          >
+            Live Reverse Auction · {remainingLabel}
+          </Text>
         </Pressable>
         <Pressable
           style={({ pressed }) => [
             styles.watchChipBtn,
             {
               backgroundColor: isWatched ? colors.warningTint : 'transparent',
-              opacity: pressed ? 0.7 : 1,
+              opacity: pressed ? 0.65 : 1,
             },
           ]}
           onPress={() => void TenderRadarService.toggleWatch(effectiveBid)}
@@ -572,7 +625,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         <Pressable
           style={({ pressed }) => [
             styles.shareChip,
-            { backgroundColor: colors.primaryTint, opacity: pressed ? 0.75 : 1 },
+            { backgroundColor: colors.primaryTint, opacity: pressed ? 0.7 : 1 },
           ]}
           onPress={() => setShowDealSheet(true)}
           hitSlop={6}
@@ -581,7 +634,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         </Pressable>
       </View>
 
-      {/* Sleek Native Underline Section Tabs */}
+      {/* 2. Live Scroll-Spy Section Strip */}
       <View
         style={[
           styles.jumpBar,
@@ -589,6 +642,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         ]}
       >
         <ScrollView
+          ref={jumpScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.jumpBarRow}
@@ -598,6 +652,9 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
             return (
               <Pressable
                 key={item.key}
+                onLayout={(e) => {
+                  jumpTabXRef.current[item.key] = e.nativeEvent.layout.x;
+                }}
                 onPress={() => scrollToSection(item.key)}
                 style={[
                   styles.jumpTab,
@@ -613,7 +670,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
                         : item.highlight
                           ? colors.success
                           : colors.textSecondary,
-                      fontWeight: active ? '800' : '600',
+                      fontWeight: active ? '600' : '500',
                     },
                   ]}
                 >
@@ -630,20 +687,25 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={32}
       >
-        {/* 1. Full-Bleed Editorial Overview + Compact Hairline Metric Strip */}
+        {/* 1. Executive Editorial Overview Sheet (Apple Stocks / Wallet Hierarchy) */}
         <View
           style={[
             styles.overviewSheet,
             { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
           ]}
         >
-          {/* Live Corrigendum / Pre-Bid Representation Compact Strip */}
+          {/* Live Corrigendum / Pre-Bid Representation Calm Banner */}
           {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
             <View
               style={[
                 styles.corrigendumBanner,
-                { backgroundColor: colors.warningTint, borderColor: colors.warning },
+                {
+                  backgroundColor: colors.warningTint,
+                  borderLeftColor: colors.warning,
+                },
               ]}
             >
               <View style={styles.corrigendumBannerTop}>
@@ -667,8 +729,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
                       styles.corrigendumActionBtn,
                       {
                         backgroundColor: colors.surface,
-                        borderColor: colors.warning,
-                        opacity: pressed ? 0.78 : 1,
+                        opacity: pressed ? 0.72 : 1,
                       },
                     ]}
                   >
@@ -687,8 +748,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
                       styles.corrigendumActionBtn,
                       {
                         backgroundColor: colors.surface,
-                        borderColor: colors.primary,
-                        opacity: pressed ? 0.78 : 1,
+                        opacity: pressed ? 0.72 : 1,
                       },
                     ]}
                   >
@@ -701,7 +761,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
             </View>
           )}
 
-          {/* Single Crisp Metadata Row */}
+          {/* Calm Category Eyebrow + Countdown Pill */}
           <View style={styles.heroTopRow}>
             <View style={styles.metaInlineRow}>
               <View style={[styles.typeDot, { backgroundColor: colors.danger }]} />
@@ -710,7 +770,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
               </Text>
               {effectiveBid.isHighValue ? (
                 <Text style={[styles.metaHighValue, { color: colors.success }]}>
-                  · High Value (≥ ₹2 Cr)
+                  · High Value
                 </Text>
               ) : null}
             </View>
@@ -738,8 +798,15 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
           </View>
 
           <Text
-            style={[styles.auctionTitle, { color: colors.textPrimary, fontSize: 16 * fontMultiplier }]}
-            numberOfLines={3}
+            style={[
+              styles.auctionTitle,
+              {
+                color: colors.textPrimary,
+                fontSize: 19.5 * fontMultiplier,
+                lineHeight: 25 * fontMultiplier,
+              },
+            ]}
+            numberOfLines={4}
           >
             {auction.title}
           </Text>
@@ -753,54 +820,64 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
               .join(' · ') || 'Department unstated'}
           </Text>
 
-          {/* Compact Hairline-Divided 2×2 Key-Facts Matrix */}
-          <View
-            style={[
-              styles.metricMatrix,
-              { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceSubtle },
-            ]}
-          >
-            <View style={[styles.metricRow, { borderBottomColor: colors.borderSubtle }]}>
-              <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
-                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-                <Text style={[styles.kpiValue, { color: colors.primary }]} numberOfLines={1}>
+          {/* 2-Tier Executive Summary Block: Value & Deadline Spotlight + 3-Col Financial Trio */}
+          <View style={[styles.metricMatrix, { backgroundColor: colors.surfaceSubtle }]}>
+            <View style={[styles.spotlightRow, { borderBottomColor: colors.borderSubtle }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>ESTIMATED VALUE</Text>
+                <Text style={[styles.spotlightValue, { color: colors.primary }]} numberOfLines={1}>
                   {estDisplay}
                 </Text>
                 {(isHighValueFallback || totalQty !== undefined) ? (
                   <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
                     {isHighValueFallback
                       ? totalQty !== undefined
-                        ? `GeM flag · Qty ${totalQty.toLocaleString('en-IN')}`
-                        : 'GeM High Value flag'
-                      : `Qty ${totalQty!.toLocaleString('en-IN')} Units`}
+                        ? `GeM High Value · Qty ${totalQty.toLocaleString('en-IN')}`
+                        : 'GeM High Value flag (≥ ₹2 Cr)'
+                      : `Quantity ${totalQty!.toLocaleString('en-IN')} Units`}
                   </Text>
                 ) : null}
               </View>
-              <View style={styles.metricCell}>
-                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD</Text>
-                <Text
-                  style={[
-                    styles.kpiValue,
-                    { color: emdIsPositive ? colors.success : colors.textPrimary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {emdShortDisplay}
+              <View style={styles.closingCol}>
+                <Text style={[styles.kpiLabel, { color: colors.textMuted, textAlign: 'right' }]}>
+                  CLOSES (IST)
                 </Text>
-                {effectiveBid.isEmdExemptForMse ? (
-                  <Text style={[styles.kpiSub, { color: colors.success }]} numberOfLines={1}>
-                    MSE Exempt (OEM)
+                <Text style={[styles.closingDateVal, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {closingDayDisplay}
+                </Text>
+                {closingTimeDisplay ? (
+                  <Text style={[styles.kpiSub, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>
+                    {closingTimeDisplay}
                   </Text>
                 ) : null}
               </View>
             </View>
 
-            <View style={styles.metricRowBottom}>
-              <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
+            <View style={styles.trioRow}>
+              <View style={[styles.trioCell, { borderRightColor: colors.borderSubtle }]}>
+                <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD</Text>
+                <Text
+                  style={[
+                    styles.trioValue,
+                    { color: emdIsPositive ? colors.success : colors.textPrimary },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                >
+                  {emdShortDisplay}
+                </Text>
+                {effectiveBid.isEmdExemptForMse ? (
+                  <Text style={[styles.trioSub, { color: colors.success }]} numberOfLines={1}>
+                    MSE Exempt
+                  </Text>
+                ) : null}
+              </View>
+              <View style={[styles.trioCell, { borderRightColor: colors.borderSubtle }]}>
                 <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>e-PBG</Text>
                 <Text
                   style={[
-                    styles.kpiValue,
+                    styles.trioValue,
                     {
                       color:
                         effectiveBid.epbgPercentage === 0
@@ -811,289 +888,324 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
                     },
                   ]}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
                 >
                   {effectiveBid.epbgPercentage === 0 ? 'None (0%)' : epbgDisplay}
                 </Text>
               </View>
-              <View style={styles.metricCell}>
+              <View style={styles.trioCellLast}>
                 <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>DELIVERY</Text>
                 <Text
                   style={[
-                    styles.kpiValue,
+                    styles.trioValue,
                     { color: effectiveBid.deliveryPeriodDays ? colors.primary : colors.textPrimary },
                   ]}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
                 >
-                  {effectiveBid.deliveryPeriodDays && primaryState
-                    ? `${effectiveBid.deliveryPeriodDays}d · ${primaryState}`
-                    : deliveryDisplay}
+                  {deliveryDisplay}
                 </Text>
+                {primaryState ? (
+                  <Text style={[styles.trioSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {primaryState}
+                  </Text>
+                ) : null}
               </View>
             </View>
           </View>
 
-          {/* Slim 1-Row Quick Tools Strip */}
-          <View style={styles.quickActionBar}>
-            <Text style={[styles.closesInlineText, { color: colors.textSecondary }]} numberOfLines={1}>
-              Closes {formatDateSafe(auction.closingTimeUtc)}
-            </Text>
-            <Pressable
-              onPress={() => setShowMarginCalc(true)}
-              style={({ pressed }) => [
-                styles.calcInlineChip,
-                {
-                  backgroundColor: colors.primaryTint,
-                  opacity: pressed ? 0.78 : 1,
-                },
-              ]}
-              accessibilityLabel="Open Bid Margin and RA Floor Calculator"
-            >
-              <AppIcon name="calculator" color={colors.primary} size={13} />
-              <Text style={[styles.calcInlineText, { color: colors.primary }]}>
-                Margin &amp; RA Calc ›
+          {/* Apple Wallet-Style Interactive Action Row for Margin & RA Calculator */}
+          <Pressable
+            onPress={() => setShowMarginCalc(true)}
+            style={({ pressed }) => [
+              styles.calcActionRow,
+              { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.68 : 1 },
+            ]}
+            accessibilityLabel="Open Bid Margin and RA Floor Calculator"
+          >
+            <View style={[styles.calcIconBadge, { backgroundColor: colors.primaryTint }]}>
+              <AppIcon name="calculator" color={colors.primary} size={15} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.calcRowTitle, { color: colors.textPrimary }]}>
+                Bid Margin &amp; RA Floor Calculator
               </Text>
-            </Pressable>
-          </View>
+              <Text style={[styles.calcRowSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                Calculate GST quote, safe floor &amp; working capital
+              </Text>
+            </View>
+            <Text style={[styles.calcRowCue, { color: colors.primary }]}>Open ›</Text>
+          </Pressable>
         </View>
 
+        {/* Unified 16pt Inset-Grouped Content Stack */}
         <View
           style={styles.sectionsContainer}
           onLayout={(e) => {
             sectionsOffsetYRef.current = e.nativeEvent.layout.y;
           }}
         >
-
-        {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
-        <View
-          onLayout={(e) => {
-            sectionYRef.current.docs = e.nativeEvent.layout.y;
-          }}
-          style={[
-            styles.card,
-            { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                Official Documents ({mainAndBuyerDocs.length})
+          {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
+          <View
+            style={styles.sectionBlock}
+            onLayout={(e) => {
+              sectionYRef.current.docs = e.nativeEvent.layout.y;
+            }}
+          >
+            <View style={styles.sectionEyebrowRow}>
+              <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                OFFICIAL DOCUMENTS ({mainAndBuyerDocs.length})
               </Text>
-              <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]}>
-                {isScanningPdf
-                  ? 'Scanning RA & Original Bid PDFs for specs, drawings & ATC…'
-                  : buyerAttachmentDocs.length > 0
-                    ? `${buyerAttachmentDocs.length} buyer attachment${buyerAttachmentDocs.length === 1 ? '' : 's'} discovered`
-                    : 'Tap any document to read inside the app'}
-              </Text>
-            </View>
-            {isScanningPdf ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : buyerAttachmentDocs.length > 0 ? (
-              <View style={[styles.foundBadge, { backgroundColor: colors.successTint }]}>
-                <Text style={[styles.foundBadgeText, { color: colors.success }]}>
+              {isScanningPdf ? (
+                <View style={styles.eyebrowInlineStatus}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[styles.eyebrowAction, { color: colors.primary }]}>
+                    Scanning PDF…
+                  </Text>
+                </View>
+              ) : buyerAttachmentDocs.length > 0 ? (
+                <Text style={[styles.eyebrowAction, { color: colors.success }]}>
                   +{buyerAttachmentDocs.length} Linked
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {primaryTenderDocs.map((doc, idx) => renderDocRow(doc, idx === 0))}
-
-          {buyerAttachmentDocs.length > 0 ? (
-            <>
-              <View
-                style={[
-                  styles.docGroupHeader,
-                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                ]}
-              >
-                <Text style={[styles.docGroupHeaderText, { color: colors.primary }]}>
-                  BUYER ATTACHMENTS DISCOVERED IN PDF ({buyerAttachmentDocs.length})
-                </Text>
-              </View>
-              {buyerAttachmentDocs.map((doc, idx) => renderDocRow(doc, idx === 0))}
-            </>
-          ) : null}
-
-          {gtcDocs.length > 0 ? (
-            <Pressable
-              style={[styles.gtcRow, { borderTopColor: colors.borderSubtle }]}
-              onPress={() => openInlineDoc(gtcDocs[0].id)}
-            >
-              <Text style={[styles.gtcRowText, { color: colors.textSecondary }]} numberOfLines={1}>
-                GeM General Terms &amp; Conditions (GTC)
-              </Text>
-              <Text style={[styles.gtcRowLink, { color: colors.primary }]}>View PDF ›</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {/* 3. Scannable Key Tender Terms Table */}
-        <View
-          onLayout={(e) => {
-            sectionYRef.current.terms = e.nativeEvent.layout.y;
-          }}
-          style={[
-            styles.card,
-            { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Key Tender Terms</Text>
-              {scannedOk ? (
-                <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {baseBid.parentBidNumber
-                    ? `Exact figures from Original Bid PDF (${baseBid.parentBidNumber})`
-                    : 'Exact figures from RA PDF'}
                 </Text>
               ) : null}
             </View>
-            {isScanningPdf ? (
-              <View style={[styles.statusChip, { backgroundColor: colors.primaryTint }]}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.statusChipText, { color: colors.primary }]}>Scanning…</Text>
-              </View>
-            ) : scannedOk ? (
-              <Pressable
-                onPress={handleRetryScan}
-                hitSlop={6}
-                style={[styles.statusChip, { backgroundColor: colors.successTint }]}
-              >
-                <Text style={[styles.statusChipText, { color: colors.success }]}>✓ Parsed from PDF</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                style={[styles.statusChip, { backgroundColor: colors.primaryTint }]}
-                onPress={handleRetryScan}
-                hitSlop={6}
-              >
-                <Text style={[styles.statusChipText, { color: colors.primary }]}>Scan PDF ↻</Text>
-              </Pressable>
-            )}
-          </View>
 
-          {keyTermRows.map((row, idx) => (
             <View
-              key={row.label}
               style={[
-                styles.termRow,
-                idx > 0 && {
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                  borderTopColor: colors.borderSubtle,
-                },
+                styles.card,
+                { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
               ]}
             >
-              <View style={styles.termLabelWrap}>
-                <Text style={[styles.termLabel, { color: colors.textSecondary }]}>{row.label}</Text>
-                {row.glossaryKey ? (
-                  <Pressable
-                    onPress={() => setGlossaryTerm(row.glossaryKey!)}
-                    hitSlop={8}
-                    style={[
-                      styles.termHelpDot,
-                      { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                    ]}
-                    accessibilityLabel={`Explain ${row.label}`}
-                  >
-                    <Text style={[styles.termHelpDotText, { color: colors.primary }]}>?</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-              <Text
-                style={[styles.termValue, { color: row.accent || colors.textPrimary }]}
-                numberOfLines={2}
-              >
-                {row.value}
-              </Text>
-            </View>
-          ))}
+              {primaryTenderDocs.map((doc, idx) => renderDocRow(doc, idx === 0))}
 
-          {policyTags.length > 0 ? (
-            <View style={styles.policyTagsRow}>
-              {policyTags.map((tag) => (
-                <View key={tag.label} style={[styles.policyTag, { backgroundColor: tag.bg }]}>
-                  <Text style={[styles.policyTagText, { color: tag.fg }]}>{tag.label}</Text>
+              {buyerAttachmentDocs.length > 0 ? (
+                <>
+                  <View
+                    style={[
+                      styles.docSubgroupBar,
+                      {
+                        borderTopColor: colors.borderSubtle,
+                        backgroundColor: colors.surfaceSubtle,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.docSubgroupText, { color: colors.textMuted }]}>
+                      BUYER ATTACHMENTS IN PDF ({buyerAttachmentDocs.length})
+                    </Text>
+                  </View>
+                  {buyerAttachmentDocs.map((doc, idx) => renderDocRow(doc, idx === 0))}
+                </>
+              ) : null}
+
+              {gtcDocs.length > 0 ? (
+                <>
+                  <View
+                    style={[
+                      styles.insetDivider,
+                      { backgroundColor: colors.borderSubtle, marginLeft: 16 },
+                    ]}
+                  />
+                  <Pressable
+                    style={({ pressed }) => [styles.gtcRow, pressed && { opacity: 0.68 }]}
+                    onPress={() => openInlineDoc(gtcDocs[0].id)}
+                  >
+                    <Text style={[styles.gtcRowText, { color: colors.textSecondary }]} numberOfLines={1}>
+                      GeM General Terms &amp; Conditions (GTC)
+                    </Text>
+                    <Text style={[styles.gtcRowLink, { color: colors.primary }]}>Read ›</Text>
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          </View>
+
+          {/* 3. Scannable Key Tender Terms Table */}
+          <View
+            style={styles.sectionBlock}
+            onLayout={(e) => {
+              sectionYRef.current.terms = e.nativeEvent.layout.y;
+            }}
+          >
+            <View style={styles.sectionEyebrowRow}>
+              <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                KEY TENDER TERMS
+              </Text>
+              {isScanningPdf ? (
+                <View style={styles.eyebrowInlineStatus}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[styles.eyebrowAction, { color: colors.primary }]}>Scanning…</Text>
                 </View>
-              ))}
+              ) : scannedOk ? (
+                <Pressable
+                  onPress={handleRetryScan}
+                  hitSlop={10}
+                  style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                >
+                  <Text style={[styles.eyebrowAction, { color: colors.success }]}>
+                    ✓ Parsed from PDF
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={handleRetryScan}
+                  hitSlop={10}
+                  style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                >
+                  <Text style={[styles.eyebrowAction, { color: colors.primary }]}>
+                    Scan PDF ↻
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+              ]}
+            >
+              <View style={styles.termsTable}>
+                {keyTermRows.map((row, idx) => (
+                  <View
+                    key={row.label}
+                    style={[
+                      styles.termRow,
+                      idx > 0 && {
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.borderSubtle,
+                      },
+                    ]}
+                  >
+                    <View style={styles.termLabelWrap}>
+                      <Text style={[styles.termLabel, { color: colors.textSecondary }]}>
+                        {row.label}
+                      </Text>
+                      {row.glossaryKey ? (
+                        <Pressable
+                          onPress={() => setGlossaryTerm(row.glossaryKey!)}
+                          hitSlop={10}
+                          style={[
+                            styles.termHelpDot,
+                            { backgroundColor: colors.surfaceSubtle },
+                          ]}
+                          accessibilityLabel={`Explain ${row.label}`}
+                        >
+                          <Text style={[styles.termHelpDotText, { color: colors.primary }]}>?</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Text
+                      style={[styles.termValue, { color: row.accent || colors.textPrimary }]}
+                      numberOfLines={2}
+                    >
+                      {row.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              {policyTags.length > 0 ? (
+                <View
+                  style={[
+                    styles.policyTagsWrap,
+                    { borderTopColor: colors.borderSubtle },
+                  ]}
+                >
+                  {policyTags.map((tag) => (
+                    <View key={tag.label} style={[styles.policyTag, { backgroundColor: tag.bg }]}>
+                      <Text style={[styles.policyTagText, { color: tag.fg }]}>{tag.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* 4. Honest Eligibility & Key Watchouts */}
+          {ext ? (
+            <View
+              onLayout={(e) => {
+                sectionYRef.current.eligibility = e.nativeEvent.layout.y;
+              }}
+            >
+              <PreBidDisqualificationShield
+                tenderDetails={ext}
+                isServiceTender={effectiveBid.type === 'SERVICE'}
+                onPrepareDocuments={onPrepareDocuments ? () => onPrepareDocuments(effectiveBid) : undefined}
+              />
             </View>
           ) : null}
-        </View>
 
-        {/* 4. Honest Eligibility & Key Watchouts */}
-        {ext ? (
+          {/* 4b. ATC Trap Extractor & Instant PDF Keyword Finder */}
+          {ext || pdfScan?.searchableText ? (
+            <View
+              onLayout={(e) => {
+                sectionYRef.current.atc = e.nativeEvent.layout.y;
+              }}
+            >
+              <AtcTrapAndSearchCard
+                tenderDetails={ext}
+                searchableText={pdfScan?.searchableText}
+                isScanning={isScanningPdf}
+                onExplainAtc={() => setGlossaryTerm('ATC')}
+              />
+            </View>
+          ) : null}
+
+          {/* 5. Similar Concluded Bids & Awarded Contracts */}
           <View
             onLayout={(e) => {
-              sectionYRef.current.eligibility = e.nativeEvent.layout.y;
+              sectionYRef.current.similar = e.nativeEvent.layout.y;
             }}
           >
-            <PreBidDisqualificationShield
-              tenderDetails={ext}
-              onPrepareDocuments={onPrepareDocuments ? () => onPrepareDocuments(effectiveBid) : undefined}
-            />
+            <SimilarConcludedBidsCard bid={effectiveBid} />
           </View>
-        ) : null}
 
-        {/* 4b. ATC Trap Extractor & Instant PDF Keyword Finder */}
-        {ext || pdfScan?.searchableText ? (
+          {/* 6. Official GeM Portal Login Handoff */}
           <View
+            style={styles.sectionBlock}
             onLayout={(e) => {
-              sectionYRef.current.atc = e.nativeEvent.layout.y;
+              sectionYRef.current.portal = e.nativeEvent.layout.y;
             }}
           >
-            <AtcTrapAndSearchCard
-              tenderDetails={ext}
-              searchableText={pdfScan?.searchableText}
-              isScanning={isScanningPdf}
-              onExplainAtc={() => setGlossaryTerm('ATC')}
-            />
+            <View style={styles.sectionEyebrowRow}>
+              <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                OFFICIAL GEM PORTAL
+              </Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.portalRowCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.borderSubtle,
+                  opacity: pressed ? 0.72 : 1,
+                },
+              ]}
+              onPress={() => Linking.openURL('https://ui.gem.gov.in/login').catch(() => undefined)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.portalRowTitle, { color: colors.textPrimary }]}>
+                  Participate on Official GeM Portal
+                </Text>
+                <Text style={[styles.portalRowSub, { color: colors.textSecondary }]}>
+                  Live L1 pricing, seller rank &amp; auction bidding happen on bidplus.gem.gov.in
+                </Text>
+              </View>
+              <Text style={[styles.portalRowLink, { color: colors.primary }]}>Login ↗</Text>
+            </Pressable>
           </View>
-        ) : null}
 
-        {/* 5. Similar Concluded Bids & Awarded Contracts */}
-        <View
-          onLayout={(e) => {
-            sectionYRef.current.similar = e.nativeEvent.layout.y;
-          }}
-        >
-          <SimilarConcludedBidsCard bid={effectiveBid} />
-        </View>
-
-        {/* Official GeM Portal Login Handoff */}
-        <Pressable
-          onLayout={(e) => {
-            sectionYRef.current.portal = e.nativeEvent.layout.y;
-          }}
-          style={({ pressed }) => [
-            styles.portalRowCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.borderSubtle,
-              opacity: pressed ? 0.78 : 1,
-            },
-          ]}
-          onPress={() => Linking.openURL('https://ui.gem.gov.in/login').catch(() => undefined)}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.portalRowTitle, { color: colors.textPrimary }]}>
-              Participate on Official GeM Portal
-            </Text>
-            <Text style={[styles.portalRowSub, { color: colors.textSecondary }]}>
-              Live L1 pricing, seller rank &amp; auction bidding happen on bidplus.gem.gov.in
-            </Text>
-          </View>
-          <View style={[styles.docActionPill, { backgroundColor: colors.primaryTint, borderColor: 'transparent' }]}>
-            <Text style={[styles.portalRowLink, { color: colors.primary }]}>Login ↗</Text>
-          </View>
-        </Pressable>
-
-        <Text style={[styles.footerNote, { color: colors.textMuted }]}>
-          Direct public GeM feed + local on-device PDF extraction.
-        </Text>
+          <Text style={[styles.footerNote, { color: colors.textMuted }]}>
+            Direct public GeM feed with local on-device PDF extraction. Official auction
+            participation and L1 ranking remain on bidplus.gem.gov.in.
+          </Text>
         </View>
       </ScrollView>
 
-      {/* Clean Sticky Bottom Bar */}
+      {/* Streamlined Sticky Bottom Actions */}
       <View
         style={[
           styles.stickyFooter,
@@ -1104,10 +1216,10 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
           <TouchableOpacity
             style={[
               styles.secondaryFooterBtn,
-              { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
             ]}
             onPress={() => onPrepareDocuments(effectiveBid)}
-            activeOpacity={0.8}
+            activeOpacity={0.75}
           >
             <Text style={[styles.secondaryFooterText, { color: colors.textPrimary }]}>
               Prepare Docs
@@ -1117,7 +1229,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
         <TouchableOpacity
           style={[styles.primaryFooterBtn, { backgroundColor: colors.primary }]}
           onPress={() => openInlineDoc()}
-          activeOpacity={0.85}
+          activeOpacity={0.82}
         >
           <Text style={[styles.primaryFooterText, { color: colors.textInverse }]}>
             {mainAndBuyerDocs.length > 1
@@ -1173,7 +1285,7 @@ export const ReverseAuctionScreen: React.FC<ReverseAuctionScreenProps> = ({
 const styles = StyleSheet.create({
   screenRoot: { flex: 1 },
   fixedHeader: {
-    height: 48,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1181,54 +1293,66 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backArrow: { fontSize: 21, fontWeight: '600' },
+  headerCenter: { flex: 1, justifyContent: 'center' },
+  navTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navTitle: {
+    fontWeight: '600',
+    flexShrink: 1,
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'],
+  },
+  headerSubMeta: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  copyChip: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  copyChipText: { fontSize: 10.5, fontWeight: '600' },
+  watchChipBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backArrow: { fontSize: 20, fontWeight: '700' },
-  navTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  navTitle: { fontWeight: '800', flexShrink: 1, letterSpacing: -0.2 },
-  copyChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  copyChipText: { fontSize: 10, fontWeight: '700' },
-  watchChipBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   shareChip: {
-    paddingHorizontal: 11,
-    minHeight: 32,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    minHeight: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shareChipText: { fontSize: 11.5, fontWeight: '800' },
+  shareChipText: { fontSize: 12.5, fontWeight: '600' },
   jumpBar: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   jumpBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 18,
+    paddingHorizontal: 16,
+    gap: 20,
   },
   jumpTab: {
-    paddingVertical: 9,
-    borderBottomWidth: 2.5,
+    paddingVertical: 11,
+    borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  jumpTabText: { fontSize: 12.5 },
+  jumpTabText: { fontSize: 13 },
   corrigendumBanner: {
-    borderWidth: 1,
+    borderLeftWidth: 3.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+    gap: 8,
   },
   corrigendumBannerTop: {
     flexDirection: 'row',
@@ -1236,235 +1360,316 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   corrigendumDot: { width: 7, height: 7, borderRadius: 3.5 },
-  corrigendumTitle: { fontSize: 12, fontWeight: '800', flex: 1 },
+  corrigendumTitle: { fontSize: 13, fontWeight: '600', flex: 1 },
   corrigendumActionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 7,
+    gap: 8,
   },
   corrigendumActionBtn: {
-    minHeight: 32,
-    paddingHorizontal: 10,
-    borderRadius: 7,
-    borderWidth: 1,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  corrigendumActionText: { fontSize: 11.5, fontWeight: '800' },
+  corrigendumActionText: { fontSize: 12, fontWeight: '600' },
   container: { flex: 1 },
-  contentContainer: { paddingBottom: 24 },
+  contentContainer: { paddingBottom: 28 },
   overviewSheet: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionsContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingHorizontal: 16,
+  },
+  sectionBlock: {
+    marginTop: 20,
+  },
+  sectionEyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  sectionEyebrow: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+  },
+  eyebrowInlineStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  eyebrowAction: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    marginBottom: 5,
+    marginBottom: 8,
   },
   metaInlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     flex: 1,
     flexWrap: 'wrap',
   },
   typeDot: { width: 6, height: 6, borderRadius: 3 },
-  metaTypeText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 },
-  metaHighValue: { fontSize: 10.5, fontWeight: '800' },
-  card: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 13,
-    marginBottom: 10,
-  },
+  metaTypeText: { fontSize: 11.5, fontWeight: '600', letterSpacing: 0.5 },
+  metaHighValue: { fontSize: 11.5, fontWeight: '600' },
   countdownPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
-  countdownPillText: { fontSize: 10.5, fontWeight: '800' },
-  auctionTitle: { fontWeight: '800', marginBottom: 3, lineHeight: 21.5 },
-  deptText: { fontSize: 12, lineHeight: 16.5, marginBottom: 10 },
-  metricMatrix: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  metricRow: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  metricRowBottom: {
-    flexDirection: 'row',
-  },
-  metricCell: {
-    flex: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  metricCellLeft: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-  },
-  kpiLabel: { fontSize: 9.5, fontWeight: '700', letterSpacing: 0.4, marginBottom: 2 },
-  kpiValue: { fontSize: 13.5, fontWeight: '800' },
-  kpiSub: { fontSize: 10.5, marginTop: 1 },
-  quickActionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 9,
-  },
-  closesInlineText: { fontSize: 11.5, fontWeight: '600', flex: 1 },
-  calcInlineChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    minHeight: 32,
-    borderRadius: 16,
-  },
-  calcInlineText: { fontSize: 11.5, fontWeight: '800' },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 8,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '800' },
-  sectionSubcopy: { fontSize: 11.5, marginTop: 2 },
-  foundBadge: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4 },
-  foundBadgeText: { fontSize: 10.5, fontWeight: '800' },
-  docGroupHeader: {
-    marginTop: 8,
-    marginBottom: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  docGroupHeaderText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.6 },
-  docRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 11,
-    minHeight: 56,
-    gap: 10,
-  },
-  docBadge: {
-    minWidth: 48,
-    height: 34,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
-  docTitle: { fontSize: 13.5, fontWeight: '700', lineHeight: 18 },
-  docSub: { fontSize: 11, marginTop: 2 },
-  docActionPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  docActionCue: { fontSize: 11.5, fontWeight: '800' },
-  gtcRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 11,
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  gtcRowText: { flex: 1, fontSize: 12, fontWeight: '600' },
-  gtcRowLink: { fontSize: 12, fontWeight: '800' },
-  statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
   },
-  statusChipText: { fontSize: 10.5, fontWeight: '800' },
+  countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
+  countdownPillText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  auctionTitle: {
+    fontWeight: '700',
+    letterSpacing: -0.35,
+    marginBottom: 6,
+  },
+  deptText: {
+    fontSize: 13,
+    lineHeight: 18.5,
+    marginBottom: 14,
+  },
+  metricMatrix: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  spotlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  spotlightValue: {
+    fontSize: 21,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
+  closingCol: {
+    alignItems: 'flex-end',
+  },
+  closingDateVal: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    marginTop: 4,
+  },
+  trioRow: {
+    flexDirection: 'row',
+  },
+  trioCell: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  trioCellLast: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  kpiLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.45,
+    marginBottom: 3,
+  },
+  kpiSub: {
+    fontSize: 12,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  trioValue: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  trioSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  calcActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    minHeight: 54,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  calcIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calcRowTitle: { fontSize: 14, fontWeight: '600' },
+  calcRowSub: { fontSize: 12, marginTop: 1 },
+  calcRowCue: { fontSize: 13, fontWeight: '600' },
+  card: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  insetDivider: {
+    height: StyleSheet.hairlineWidth,
+  },
+  docSubgroupBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  docSubgroupText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.55,
+  },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    minHeight: 62,
+    gap: 12,
+  },
+  docBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docBadgeText: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
+  docTitle: { fontSize: 14.5, fontWeight: '600', lineHeight: 19 },
+  docSub: { fontSize: 12.5, marginTop: 2 },
+  docActionCue: { fontSize: 13, fontWeight: '600' },
+  gtcRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
+    gap: 8,
+  },
+  gtcRowText: { flex: 1, fontSize: 13.5, fontWeight: '500' },
+  gtcRowLink: { fontSize: 13, fontWeight: '600' },
+  termsTable: {
+    paddingHorizontal: 16,
+  },
   termRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 13,
+    minHeight: 48,
     gap: 12,
   },
   termLabelWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  termLabel: { fontSize: 12.5, fontWeight: '500', flexShrink: 1 },
+  termLabel: { fontSize: 14, fontWeight: '400', flexShrink: 1 },
   termHelpDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1,
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  termHelpDotText: { fontSize: 10.5, fontWeight: '900' },
-  termValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.15 },
-  policyTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  policyTag: { borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4 },
-  policyTagText: { fontSize: 10.5, fontWeight: '700' },
+  termHelpDotText: { fontSize: 11, fontWeight: '700' },
+  termValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1.15,
+    fontVariant: ['tabular-nums'],
+  },
+  policyTagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  policyTag: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  policyTagText: { fontSize: 12, fontWeight: '600' },
   portalRowCard: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 10,
-    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
-  portalRowTitle: { fontSize: 13.5, fontWeight: '800' },
-  portalRowSub: { fontSize: 11.5, lineHeight: 16, marginTop: 2 },
-  portalRowLink: { fontSize: 12, fontWeight: '800' },
-  footerNote: { fontSize: 10.5, textAlign: 'center', marginBottom: 8 },
+  portalRowTitle: { fontSize: 14.5, fontWeight: '600' },
+  portalRowSub: { fontSize: 12.5, lineHeight: 17.5, marginTop: 2 },
+  portalRowLink: { fontSize: 13, fontWeight: '600' },
+  footerNote: {
+    fontSize: 11.5,
+    lineHeight: 16.5,
+    textAlign: 'center',
+    paddingHorizontal: 12,
+    marginTop: 18,
+    marginBottom: 8,
+  },
   stickyFooter: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   secondaryFooterBtn: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 10,
-    borderWidth: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryFooterText: { fontSize: 13, fontWeight: '700' },
+  secondaryFooterText: { fontSize: 14.5, fontWeight: '600' },
   primaryFooterBtn: {
     flex: 1.45,
-    minHeight: 46,
-    borderRadius: 10,
+    minHeight: 48,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryFooterText: { fontSize: 13.5, fontWeight: '800' },
+  primaryFooterText: { fontSize: 14.5, fontWeight: '600' },
 });

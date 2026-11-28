@@ -7,25 +7,130 @@
  * stores a small extracted summary, and never uploads PDF bytes or text to any server.
  */
 
-import type { DeconstructedBidDoc, OfficialBidDocument } from '../types/index.ts';
+import type {
+  DeconstructedBidDoc,
+  OfficialBidDocument,
+  OfficialBidFileFormat,
+} from '../types/index.ts';
 import {
   GemPdfExtractor,
   type ExtractedGeMTenderDetails,
   type ExtractedLinkedDocument,
 } from './GemPdfExtractor.ts';
 import { PortalDocService } from './PortalDocService.ts';
+import { GeMLiveSyncService } from './GeMLiveSyncService.ts';
 
-const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v5';
+const SCAN_CACHE_KEY = '@gem-mobile-companion/local-pdf-scan-v7';
 const MAX_SEARCHABLE_TEXT_CHARS = 60000;
 const MAX_SCAN_BYTES = 12 * 1024 * 1024;
-const PDF_FETCH_TIMEOUT_MS = 15000;
+const PDF_FETCH_TIMEOUT_MS = 25000;
 const PDF_FETCH_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36';
 const PDF_FETCH_HEADERS: Record<string, string> = {
   'User-Agent': PDF_FETCH_USER_AGENT,
   Accept: 'application/pdf,*/*',
+  'Accept-Encoding': 'gzip, deflate',
   Referer: 'https://bidplus.gem.gov.in/',
 };
+
+export interface SharedPdfDownloadResult {
+  ok: boolean;
+  localUri?: string;
+  bytes?: Uint8Array;
+  detectedFormat?: OfficialBidFileFormat;
+  filename?: string;
+  tooLarge?: boolean;
+  statusCode?: number;
+  error?: string;
+}
+
+interface NativeBlobResponseInfo {
+  status?: number;
+  headers?: Record<string, string>;
+}
+
+interface NativeBlobResponse {
+  path(): string;
+  info(): NativeBlobResponseInfo;
+}
+
+interface NativeBlobUtilLike {
+  config(options: { path: string; timeout?: number; followRedirect?: boolean }): {
+    fetch(method: string, url: string, headers?: Record<string, string>): Promise<NativeBlobResponse>;
+  };
+  fs: {
+    exists(path: string): Promise<boolean>;
+    stat(path: string): Promise<{ size?: number }>;
+    readFile(path: string, encoding: 'base64' | 'utf8'): Promise<string>;
+    unlink(path: string): Promise<void>;
+    dirs: { CacheDir?: string; DocumentDir?: string };
+  };
+}
+
+const B64_LOOKUP = (() => {
+  const table = new Int8Array(128);
+  table.fill(-1);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < chars.length; i++) {
+    table[chars.charCodeAt(i)] = i;
+  }
+  return table;
+})();
+
+function normalizeUrlKey(url: string): string {
+  return url.trim().replace(/#.*$/, '');
+}
+
+function getHeaderCaseInsensitive(
+  headers: Record<string, string> | undefined,
+  key: string
+): string | null {
+  if (!headers) return null;
+  const target = key.toLowerCase();
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === target) return v;
+  }
+  return null;
+}
+
+/**
+ * Deterministic safe local cache filename for a verified official GeM PDF URL
+ * shared between LocalPdfScanner (on-device extraction) and BidDocumentViewer.
+ */
+export function getSharedPdfCacheFileName(url: string): string {
+  const norm = normalizeUrlKey(url);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b1;
+  for (let i = 0; i < norm.length; i++) {
+    const ch = norm.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 0x01000193);
+    h2 = Math.imul(h2 ^ ch, 0x85ebca6b);
+  }
+  const slug = `${(h1 >>> 0).toString(36)}-${(h2 >>> 0).toString(36)}`;
+  return `gem-pdf-v4-${slug}.pdf`;
+}
+
+/**
+ * Validates that downloaded bytes actually contain the PDF magic header (`%PDF-`)
+ * within the first 1,024 bytes (per PDF 1.7 spec) rather than an HTML error page
+ * or empty 0-byte response from bidplus.gem.gov.in.
+ */
+export function isValidPdfBytes(bytes: Uint8Array): boolean {
+  if (!bytes || bytes.byteLength < 8) return false;
+  const limit = Math.min(bytes.byteLength - 4, 1024);
+  for (let i = 0; i <= limit; i++) {
+    if (
+      bytes[i] === 0x25 && // %
+      bytes[i + 1] === 0x50 && // P
+      bytes[i + 2] === 0x44 && // D
+      bytes[i + 3] === 0x46 && // F
+      bytes[i + 4] === 0x2d // -
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -116,22 +221,25 @@ interface KeyValueStorage {
 }
 
 function decodeBase64ToUint8Array(b64: string): Uint8Array {
-  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, '');
-  const lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const outLen = Math.floor((clean.length * 3) / 4) - (clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0);
-  const out = new Uint8Array(Math.max(0, outLen));
-  let p = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const a = lookup.indexOf(clean[i]);
-    const b = lookup.indexOf(clean[i + 1]);
-    const c = lookup.indexOf(clean[i + 2]);
-    const d = lookup.indexOf(clean[i + 3]);
-    const triplet = (a << 18) | (b << 12) | ((c > 0 ? c : 0) << 6) | (d > 0 ? d : 0);
-    if (p < outLen) out[p++] = (triplet >> 16) & 0xff;
-    if (p < outLen && clean[i + 2] !== '=') out[p++] = (triplet >> 8) & 0xff;
-    if (p < outLen && clean[i + 3] !== '=') out[p++] = triplet & 0xff;
+  const len = b64.length;
+  // Pre-size upper bound and fill directly without allocating a regex-cleaned string
+  const out = new Uint8Array(Math.ceil((len * 3) / 4));
+  let outIdx = 0;
+  let buf = 0;
+  let bits = 0;
+  for (let i = 0; i < len; i++) {
+    const code = b64.charCodeAt(i);
+    if (code >= 128) continue;
+    const val = B64_LOOKUP[code];
+    if (val < 0) continue;
+    buf = (buf << 6) | val;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[outIdx++] = (buf >> bits) & 0xff;
+    }
   }
-  return out;
+  return outIdx === out.length ? out : out.subarray(0, outIdx);
 }
 
 /**
@@ -360,6 +468,351 @@ function scanSource(
 
 export class LocalPdfScanner {
   public static readonly maxScanBytes = MAX_SCAN_BYTES;
+  private static verifiedLocalPdfUris: Map<string, string> = new Map();
+  private static inFlightDownloads: Map<string, Promise<SharedPdfDownloadResult>> = new Map();
+
+  private static async buildDownloadHeaders(refreshSession = false): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { ...PDF_FETCH_HEADERS };
+    try {
+      let cookie = GeMLiveSyncService.getCachedCookieHeader();
+      if (refreshSession && !cookie) {
+        const session = await withTimeout(
+          GeMLiveSyncService.ensurePortalSession(true),
+          8000,
+          'GeM session refresh'
+        ).catch(() => null);
+        cookie = session?.cookieHeader || '';
+      }
+      if (cookie) {
+        headers.Cookie = cookie;
+      }
+    } catch {
+      // Public PDFs still work without explicit cookie header
+    }
+    return headers;
+  }
+
+  public static async getCachedLocalPdfUri(documentUrl: string): Promise<string | null> {
+    if (!documentUrl || !PortalDocService.isSafeGemUrl(documentUrl)) return null;
+    const norm = normalizeUrlKey(documentUrl);
+    const fileSystem = await this.getFileSystem();
+    const cacheDir = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
+
+    const memUri = this.verifiedLocalPdfUris.get(norm);
+    if (memUri && fileSystem) {
+      try {
+        const info = await fileSystem.getInfoAsync(memUri);
+        if (info.exists && (typeof info.size !== 'number' || info.size >= 100)) {
+          return memUri;
+        }
+      } catch {
+        // Fall through to disk check
+      }
+      this.verifiedLocalPdfUris.delete(norm);
+    }
+
+    if (!fileSystem || !cacheDir) return null;
+    const targetUri = `${cacheDir.replace(/\/?$/, '/')}${getSharedPdfCacheFileName(norm)}`;
+    try {
+      const info = await fileSystem.getInfoAsync(targetUri);
+      if (info.exists && typeof info.size === 'number' && info.size >= 100 && info.size <= MAX_SCAN_BYTES) {
+        this.verifiedLocalPdfUris.set(norm, targetUri);
+        return targetUri;
+      }
+    } catch {
+      // Ignore cache lookup failure
+    }
+    return null;
+  }
+
+  public static async invalidateLocalPdfCache(documentUrl: string): Promise<void> {
+    const norm = normalizeUrlKey(documentUrl);
+    this.verifiedLocalPdfUris.delete(norm);
+    const fileSystem = await this.getFileSystem();
+    const cacheDir = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
+    if (fileSystem && cacheDir) {
+      const targetUri = `${cacheDir.replace(/\/?$/, '/')}${getSharedPdfCacheFileName(norm)}`;
+      await fileSystem.deleteAsync(targetUri, { idempotent: true }).catch(() => undefined);
+    }
+  }
+
+  private static async readFileBytes(
+    uri: string,
+    fileSystem: LocalFileSystem | null,
+    blobUtil: NativeBlobUtilLike | null
+  ): Promise<Uint8Array | null> {
+    if (fileSystem) {
+      try {
+        const b64 = await fileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        if (b64) return decodeBase64ToUint8Array(b64);
+      } catch {
+        // Try blobUtil below
+      }
+    }
+    if (blobUtil) {
+      try {
+        const fsPath = uri.replace(/^file:\/\//i, '');
+        const b64 = await blobUtil.fs.readFile(fsPath, 'base64');
+        if (b64) return decodeBase64ToUint8Array(b64);
+      } catch {
+        // Fall through
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Downloads and verifies an official GeM PDF into a shared local cache file so
+   * LocalPdfScanner and BidDocumentViewer never double-download the same document.
+   * Validates `%PDF-` magic bytes, detects buyer-uploaded non-PDF formats (.docx/.xlsx/.zip),
+   * deduplicates concurrent requests, and retries once with a refreshed GeM session on failure.
+   */
+  public static async downloadPdfToSharedCache(
+    documentUrl: string,
+    options?: { forceRefresh?: boolean; readBytes?: boolean }
+  ): Promise<SharedPdfDownloadResult> {
+    if (!documentUrl || !PortalDocService.isSafeGemUrl(documentUrl)) {
+      return { ok: false, error: 'Document link is not from a verified official GeM domain.' };
+    }
+
+    const norm = normalizeUrlKey(documentUrl);
+    const forceRefresh = Boolean(options?.forceRefresh);
+    const needBytes = Boolean(options?.readBytes);
+
+    if (forceRefresh) {
+      await this.invalidateLocalPdfCache(norm);
+    }
+
+    if (!forceRefresh) {
+      const inflight = this.inFlightDownloads.get(norm);
+      if (inflight) {
+        const shared = await inflight;
+        if (shared.ok && needBytes && !shared.bytes && shared.localUri) {
+          const [fs, blob] = await Promise.all([this.getFileSystem(), this.getBlobUtil()]);
+          const bytes = await this.readFileBytes(shared.localUri, fs, blob);
+          if (bytes && isValidPdfBytes(bytes)) {
+            return { ...shared, bytes };
+          }
+        }
+        return shared;
+      }
+    }
+
+    const job = this.performVerifiedDownload(norm, forceRefresh, needBytes);
+    this.inFlightDownloads.set(norm, job);
+    try {
+      return await job;
+    } finally {
+      if (this.inFlightDownloads.get(norm) === job) {
+        this.inFlightDownloads.delete(norm);
+      }
+    }
+  }
+
+  private static async performVerifiedDownload(
+    documentUrl: string,
+    forceRefresh: boolean,
+    needBytes: boolean
+  ): Promise<SharedPdfDownloadResult> {
+    const [fileSystem, blobUtil] = await Promise.all([this.getFileSystem(), this.getBlobUtil()]);
+    const rawCacheDir =
+      fileSystem?.cacheDirectory ||
+      fileSystem?.documentDirectory ||
+      (blobUtil?.fs?.dirs?.CacheDir ? `file://${blobUtil.fs.dirs.CacheDir}` : null);
+    const cacheDir = rawCacheDir ? rawCacheDir.replace(/\/?$/, '/') : null;
+    const sharedFileName = getSharedPdfCacheFileName(documentUrl);
+    const sharedUri = cacheDir ? `${cacheDir}${sharedFileName}` : null;
+    const sharedFsPath = sharedUri ? sharedUri.replace(/^file:\/\//i, '') : null;
+
+    // 0. Instant hit on already-verified disk cache
+    if (!forceRefresh && sharedUri && fileSystem) {
+      try {
+        const info = await fileSystem.getInfoAsync(sharedUri);
+        if (info.exists && typeof info.size === 'number' && info.size >= 100 && info.size <= MAX_SCAN_BYTES) {
+          const bytes = await this.readFileBytes(sharedUri, fileSystem, blobUtil);
+          if (bytes && isValidPdfBytes(bytes)) {
+            this.verifiedLocalPdfUris.set(documentUrl, sharedUri);
+            return { ok: true, localUri: sharedUri, bytes: needBytes ? bytes : undefined };
+          }
+          // Cached file was corrupt/HTML — purge immediately
+          await fileSystem.deleteAsync(sharedUri, { idempotent: true }).catch(() => undefined);
+          this.verifiedLocalPdfUris.delete(documentUrl);
+        }
+      } catch {
+        // Proceed to fresh download
+      }
+    }
+
+    let lastStatusCode: number | undefined;
+    let lastError: string | undefined;
+
+    // 1. Primary native fast path: ReactNativeBlobUtil (fast OkHttp binary client used by react-native-pdf)
+    if (blobUtil && sharedUri && sharedFsPath) {
+      const headers = await this.buildDownloadHeaders(false);
+      try {
+        const resp = await withTimeout(
+          blobUtil
+            .config({
+              path: sharedFsPath,
+              timeout: PDF_FETCH_TIMEOUT_MS,
+              followRedirect: true,
+            })
+            .fetch('GET', documentUrl, headers),
+          PDF_FETCH_TIMEOUT_MS + 2000,
+          'PDF download'
+        );
+        const info = resp.info();
+        const status = typeof info?.status === 'number' ? info.status : 200;
+        lastStatusCode = status;
+        const ct = getHeaderCaseInsensitive(info?.headers, 'content-type');
+        const cd = getHeaderCaseInsensitive(info?.headers, 'content-disposition');
+        const detected = PortalDocService.detectFormatFromHeaders(ct, cd, documentUrl);
+
+        if (status >= 400) {
+          await blobUtil.fs.unlink(sharedFsPath).catch(() => undefined);
+          lastError = `GeM returned HTTP ${status} while downloading this document.`;
+        } else if (
+          detected.format !== 'PDF' &&
+          !PortalDocService.isOfficialPdfUrl(documentUrl)
+        ) {
+          await blobUtil.fs.unlink(sharedFsPath).catch(() => undefined);
+          return {
+            ok: false,
+            detectedFormat: detected.format,
+            filename: detected.filename,
+            statusCode: status,
+          };
+        } else {
+          const stat = await blobUtil.fs.stat(sharedFsPath).catch(() => ({ size: 0 }));
+          const fileSize = Number(stat?.size || 0);
+          if (fileSize > MAX_SCAN_BYTES) {
+            await blobUtil.fs.unlink(sharedFsPath).catch(() => undefined);
+            return {
+              ok: false,
+              tooLarge: true,
+              statusCode: status,
+              error: 'This PDF is larger than the 12 MB device limit.',
+            };
+          }
+          if (fileSize >= 100) {
+            const bytes = await this.readFileBytes(sharedUri, fileSystem, blobUtil);
+            if (bytes && isValidPdfBytes(bytes)) {
+              this.verifiedLocalPdfUris.set(documentUrl, sharedUri);
+              return { ok: true, localUri: sharedUri, bytes: needBytes ? bytes : undefined, statusCode: status };
+            }
+          }
+          // Non-PDF / empty response — delete bad file and retry via stage 2 with refreshed GeM session
+          await blobUtil.fs.unlink(sharedFsPath).catch(() => undefined);
+          lastError = 'GeM returned an incomplete or non-PDF response on the first try.';
+        }
+      } catch (err) {
+        await blobUtil.fs.unlink(sharedFsPath).catch(() => undefined);
+        lastError = err instanceof Error ? err.message : 'Unable to download PDF from GeM.';
+      }
+    }
+
+    // 2. Resilient native retry path: expo-file-system with refreshed GeM session cookie
+    if (fileSystem && sharedUri) {
+      const headers = await this.buildDownloadHeaders(true);
+      try {
+        const download = await withTimeout(
+          fileSystem.downloadAsync(documentUrl, sharedUri, { headers }),
+          PDF_FETCH_TIMEOUT_MS,
+          'PDF retry download'
+        );
+        const downloadedUri = download.uri || sharedUri;
+        if (typeof download.status === 'number') {
+          lastStatusCode = download.status;
+          if (download.status >= 400) {
+            await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
+            return {
+              ok: false,
+              statusCode: download.status,
+              error: `GeM returned HTTP ${download.status} while downloading this PDF.`,
+            };
+          }
+        }
+        const info = await fileSystem.getInfoAsync(downloadedUri);
+        if (info.exists) {
+          if (typeof info.size === 'number' && info.size > MAX_SCAN_BYTES) {
+            await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
+            return {
+              ok: false,
+              tooLarge: true,
+              error: 'This PDF is larger than the 12 MB device scan limit.',
+            };
+          }
+          if (typeof info.size !== 'number' || info.size >= 100) {
+            const bytes = await this.readFileBytes(downloadedUri, fileSystem, blobUtil);
+            if (bytes && isValidPdfBytes(bytes)) {
+              this.verifiedLocalPdfUris.set(documentUrl, downloadedUri);
+              return { ok: true, localUri: downloadedUri, bytes: needBytes ? bytes : undefined };
+            }
+          }
+        }
+        await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
+      } catch (err) {
+        await fileSystem.deleteAsync(sharedUri, { idempotent: true }).catch(() => undefined);
+        lastError = err instanceof Error ? err.message : lastError;
+      }
+    }
+
+    // 3. Direct binary fetch path (Node.js / Web / final fallback)
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const abortTimer = controller
+      ? setTimeout(() => controller.abort(), PDF_FETCH_TIMEOUT_MS)
+      : undefined;
+    try {
+      const headers = await this.buildDownloadHeaders(true);
+      const response = await withTimeout(
+        fetch(documentUrl, {
+          method: 'GET',
+          headers,
+          signal: controller?.signal,
+        }),
+        PDF_FETCH_TIMEOUT_MS,
+        'PDF fetch'
+      );
+      lastStatusCode = response.status;
+      if (response.ok && typeof response.arrayBuffer === 'function') {
+        const contentLen = Number(response.headers?.get?.('content-length') || 0);
+        if (contentLen > MAX_SCAN_BYTES) {
+          return {
+            ok: false,
+            tooLarge: true,
+            statusCode: response.status,
+            error: 'This PDF is larger than the 12 MB device scan limit.',
+          };
+        }
+        const bytes = new Uint8Array(
+          await withTimeout(response.arrayBuffer(), PDF_FETCH_TIMEOUT_MS, 'PDF buffer read')
+        );
+        if (bytes.byteLength > MAX_SCAN_BYTES) {
+          return {
+            ok: false,
+            tooLarge: true,
+            statusCode: response.status,
+            error: 'This PDF is larger than the 12 MB device scan limit.',
+          };
+        }
+        if (bytes.byteLength >= 100 && isValidPdfBytes(bytes)) {
+          return { ok: true, bytes, statusCode: response.status };
+        }
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : lastError;
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
+    }
+
+    return {
+      ok: false,
+      statusCode: lastStatusCode,
+      error:
+        lastError ||
+        'GeM took too long to return this PDF. Tap Retry or open the official document in your browser.',
+    };
+  }
 
   public static async getCachedScan(
     bidNumber: string,
@@ -390,7 +843,10 @@ export class LocalPdfScanner {
    * turnover, consignees, and ATC) and the RA PDF (which contains RA dates &
    * RA-specific MSE/Startup exemptions), merging them cleanly.
    */
-  public static async scanBidDocuments(bid: DeconstructedBidDoc): Promise<LocalPdfScanResult> {
+  public static async scanBidDocuments(
+    bid: DeconstructedBidDoc,
+    options?: { forceRefresh?: boolean }
+  ): Promise<LocalPdfScanResult> {
     const documents = PortalDocService.getOfficialDocuments(bid);
     const primaryDoc = documents[0];
     if (!primaryDoc || !PortalDocService.isSafeGemUrl(primaryDoc.url)) {
@@ -406,14 +862,22 @@ export class LocalPdfScanner {
     );
 
     if (!parentDoc || !PortalDocService.isSafeGemUrl(parentDoc.url)) {
-      return this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url);
+      return this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url, options);
     }
 
     const [parentScan, raScan] = await Promise.all([
-      this.scanOfficialBidPdf(bid.parentBidNumber || `${bid.bidNumber}-parent`, parentDoc.url).catch(
-        () => this.unavailableResult(bid.parentBidNumber || bid.bidNumber, parentDoc.url, 'Original Bid PDF timed out.')
+      this.scanOfficialBidPdf(
+        bid.parentBidNumber || `${bid.bidNumber}-parent`,
+        parentDoc.url,
+        options
+      ).catch(() =>
+        this.unavailableResult(
+          bid.parentBidNumber || bid.bidNumber,
+          parentDoc.url,
+          'Original Bid PDF timed out.'
+        )
       ),
-      this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url).catch(() =>
+      this.scanOfficialBidPdf(bid.bidNumber, primaryDoc.url, options).catch(() =>
         this.unavailableResult(bid.bidNumber, primaryDoc.url, 'RA PDF timed out.')
       ),
     ]);
@@ -503,133 +967,46 @@ export class LocalPdfScanner {
 
   public static async scanOfficialBidPdf(
     bidNumber: string,
-    documentUrl: string
+    documentUrl: string,
+    options?: { forceRefresh?: boolean }
   ): Promise<LocalPdfScanResult> {
-    const cached = await this.getCachedScan(bidNumber, documentUrl);
-    if (cached && cached.status === 'EXTRACTED') return cached;
-
-    // 1. Native fast path (Android/iOS): expo-file-system with browser User-Agent headers.
-    // bidplus.gem.gov.in stalls bare okhttp User-Agents, and RN's fetch().arrayBuffer() is
-    // unavailable on Hermes 0.74, so downloading once via expo-file-system with explicit headers
-    // avoids double-downloading and completes in ~1-3 seconds.
-    const fileSystem = await this.getFileSystem();
-    const temporaryDirectory = fileSystem?.cacheDirectory || fileSystem?.documentDirectory;
-    if (fileSystem && temporaryDirectory) {
-      const safeName = bidNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const temporaryUri = `${temporaryDirectory.replace(/\/?$/, '/')}gem-pdf-scan-${safeName}-${nonce}.pdf`;
-      let downloadedUri = temporaryUri;
-
-      try {
-        const download = await withTimeout(
-          fileSystem.downloadAsync(documentUrl, temporaryUri, {
-            headers: PDF_FETCH_HEADERS,
-          }),
-          PDF_FETCH_TIMEOUT_MS,
-          'PDF download'
-        );
-        downloadedUri = download.uri || temporaryUri;
-        if (typeof download.status === 'number' && download.status >= 400) {
-          return this.unavailableResult(
-            bidNumber,
-            documentUrl,
-            `GeM returned HTTP ${download.status} while downloading this PDF.`
-          );
-        }
-        const info = await fileSystem.getInfoAsync(downloadedUri);
-        if (info.exists) {
-          if (typeof info.size === 'number' && info.size > MAX_SCAN_BYTES) {
-            return {
-              bidNumber,
-              documentUrl,
-              sourceUri: documentUrl,
-              status: 'TOO_LARGE',
-              details: {},
-              textLength: 0,
-              scannedAtUtc: new Date().toISOString(),
-              note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
-            };
-          }
-          if (typeof info.size !== 'number' || info.size > 0) {
-            let source: string | Uint8Array;
-            try {
-              const b64 = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'base64' });
-              source = decodeBase64ToUint8Array(b64);
-            } catch {
-              source = await fileSystem.readAsStringAsync(downloadedUri, { encoding: 'utf8' });
-            }
-            const result = scanSource(source, bidNumber, documentUrl, documentUrl);
-            await this.saveScan(result);
-            return result;
-          }
-        }
-      } catch {
-        // Fall through to bounded fetch fallback below
-      } finally {
-        await fileSystem.deleteAsync(downloadedUri, { idempotent: true }).catch(() => undefined);
-      }
+    const forceRefresh = Boolean(options?.forceRefresh);
+    if (!forceRefresh) {
+      const cached = await this.getCachedScan(bidNumber, documentUrl);
+      if (cached && cached.status === 'EXTRACTED') return cached;
     }
 
-    // 2. Direct binary fetch path (Node.js / Web / fallback when native download fails)
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const abortTimer = controller
-      ? setTimeout(() => controller.abort(), PDF_FETCH_TIMEOUT_MS)
-      : undefined;
-    try {
-      const response = await withTimeout(
-        fetch(documentUrl, {
-          method: 'GET',
-          headers: PDF_FETCH_HEADERS,
-          signal: controller?.signal,
-        }),
-        PDF_FETCH_TIMEOUT_MS,
-        'PDF fetch'
-      );
-      if (response.ok && typeof response.arrayBuffer === 'function') {
-        const contentLen = Number(response.headers?.get?.('content-length') || 0);
-        if (contentLen > MAX_SCAN_BYTES) {
-          return {
-            bidNumber,
-            documentUrl,
-            sourceUri: documentUrl,
-            status: 'TOO_LARGE',
-            details: {},
-            textLength: 0,
-            scannedAtUtc: new Date().toISOString(),
-            note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
-          };
-        }
-        const bytes = new Uint8Array(
-          await withTimeout(response.arrayBuffer(), PDF_FETCH_TIMEOUT_MS, 'PDF buffer read')
-        );
-        if (bytes.byteLength > MAX_SCAN_BYTES) {
-          return {
-            bidNumber,
-            documentUrl,
-            sourceUri: documentUrl,
-            status: 'TOO_LARGE',
-            details: {},
-            textLength: 0,
-            scannedAtUtc: new Date().toISOString(),
-            note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
-          };
-        }
-        if (bytes.byteLength > 0) {
-          const result = scanSource(bytes, bidNumber, documentUrl, documentUrl);
-          await this.saveScan(result);
-          return result;
-        }
+    const download = await this.downloadPdfToSharedCache(documentUrl, {
+      forceRefresh,
+      readBytes: true,
+    });
+
+    if (download.tooLarge) {
+      return {
+        bidNumber,
+        documentUrl,
+        sourceUri: documentUrl,
+        status: 'TOO_LARGE',
+        details: {},
+        textLength: 0,
+        scannedAtUtc: new Date().toISOString(),
+        note: 'This PDF is larger than the 12 MB device scan limit. Open it on GeM instead of using battery and storage for a large local scan.',
+      };
+    }
+
+    if (download.ok && download.bytes) {
+      const result = scanSource(download.bytes, bidNumber, documentUrl, download.localUri || documentUrl);
+      if (result.status === 'EXTRACTED') {
+        await this.saveScan(result);
       }
-    } catch {
-      // Bounded failure — return clean unavailable result so UI never hangs
-    } finally {
-      if (abortTimer) clearTimeout(abortTimer);
+      return result;
     }
 
     return this.unavailableResult(
       bidNumber,
       documentUrl,
-      'GeM took too long to return this PDF. Tap Scan PDF to retry or open the document inline.'
+      download.error ||
+        'GeM took too long to return this PDF. Tap Scan PDF to retry or open the document inline.'
     );
   }
 
@@ -713,6 +1090,20 @@ export class LocalPdfScanner {
     try {
       const module = await import('expo-file-system');
       return module as unknown as LocalFileSystem;
+    } catch {
+      return null;
+    }
+  }
+
+  private static async getBlobUtil(): Promise<NativeBlobUtilLike | null> {
+    if (typeof require !== 'function') return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const rn = require('react-native') as { NativeModules?: Record<string, unknown> };
+      if (!rn?.NativeModules?.ReactNativeBlobUtil) return null;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require('react-native-blob-util') as { default?: unknown };
+      return ((mod && mod.default) || mod) as NativeBlobUtilLike;
     } catch {
       return null;
     }

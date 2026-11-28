@@ -5,11 +5,15 @@ import type {
   WorkspaceDocumentPersistence,
 } from '../types/index.ts';
 import { WorkspaceService } from './WorkspaceService.ts';
+import { CompanyDocExtractor } from './CompanyDocExtractor.ts';
 
 const DOCUMENTS_KEY = '@gem-mobile-companion/workspace-documents-v1';
 const PORTFOLIO_KEY = '@gem-mobile-companion/workspace-portfolio-v1';
 const HANDOFFS_KEY = '@gem-mobile-companion/official-handoffs-v1';
+const CHECKLIST_TICKS_KEY = '@gem-mobile-companion/bid-checklist-ticks-v1';
 const WORKSPACE_DIRECTORY = 'gem-workspace/';
+
+type WorkspaceDocsListener = (documents: WorkspaceDocument[]) => void;
 
 interface KeyValueStorage {
   getItem(key: string): Promise<string | null>;
@@ -48,6 +52,56 @@ export class WorkspaceStorage {
   public static readonly documentsKey = DOCUMENTS_KEY;
   public static readonly portfolioKey = PORTFOLIO_KEY;
   public static readonly handoffsKey = HANDOFFS_KEY;
+  private static docListeners = new Set<WorkspaceDocsListener>();
+
+  public static subscribeDocuments(listener: WorkspaceDocsListener): () => void {
+    this.docListeners.add(listener);
+    return () => {
+      this.docListeners.delete(listener);
+    };
+  }
+
+  private static emitDocuments(documents: WorkspaceDocument[]): void {
+    const snap = [...documents];
+    for (const listener of this.docListeners) {
+      try {
+        listener(snap);
+      } catch {
+        // Isolate subscriber errors
+      }
+    }
+  }
+
+  public static async loadChecklistTicks(bidNumber: string): Promise<Record<string, boolean>> {
+    const storage = await this.getKeyValueStorage();
+    if (!storage || !bidNumber) return {};
+    try {
+      const raw = await storage.getItem(CHECKLIST_TICKS_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, Record<string, boolean>>;
+      const entry = parsed?.[bidNumber];
+      return entry && typeof entry === 'object' ? { ...entry } : {};
+    } catch {
+      return {};
+    }
+  }
+
+  public static async saveChecklistTicks(
+    bidNumber: string,
+    ticks: Record<string, boolean>
+  ): Promise<void> {
+    const storage = await this.getKeyValueStorage();
+    if (!storage || !bidNumber) return;
+    try {
+      const raw = await storage.getItem(CHECKLIST_TICKS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, Record<string, boolean>>) : {};
+      const next = parsed && typeof parsed === 'object' ? { ...parsed } : {};
+      next[bidNumber] = ticks;
+      await storage.setItem(CHECKLIST_TICKS_KEY, JSON.stringify(next));
+    } catch {
+      // Non-fatal persistence miss
+    }
+  }
 
   public static sanitizeFileName(fileName: string): string {
     const sanitized = fileName
@@ -229,6 +283,23 @@ export class WorkspaceStorage {
         }
       }
 
+      const extracted = await CompanyDocExtractor.extractFromLocalFile(
+        uri,
+        asset.mimeType,
+        asset.name
+      ).catch(() => undefined);
+
+      const inferredKind =
+        extracted?.detectedTags?.some((t) =>
+          t === 'MII_DECLARATION' || t === 'GST_STATUTORY' || t === 'PAN_STATUTORY' || t === 'UDYAM_MSME' || t === 'CA_UDIN_TURNOVER'
+        )
+          ? 'COMPLIANCE'
+          : extracted?.detectedTags?.some((t) => t === 'OEM_MAF' || t === 'CRAC_EXPERIENCE' || t === 'ISO_QUALITY')
+            ? 'TECHNICAL'
+            : extracted?.detectedTags?.some((t) => t === 'EMD_PROOF' || t === 'BANK_MANDATE')
+              ? 'FINANCIAL'
+              : WorkspaceService.inferDocumentKind(asset.name);
+
       newDocuments.push({
         id,
         name: asset.name,
@@ -236,10 +307,13 @@ export class WorkspaceStorage {
         mimeType: asset.mimeType,
         sizeBytes: asset.size,
         addedAtUtc: pickedAt,
-        kind: WorkspaceService.inferDocumentKind(asset.name),
+        kind: inferredKind,
         linkedBidNumber,
         source: 'DEVICE_PICKER',
         persistence,
+        ...(extracted?.detectedTags?.length ? { extractedTags: extracted.detectedTags } : {}),
+        ...(extracted?.highlights?.length ? { extractedHighlights: extracted.highlights } : {}),
+        ...(extracted?.hasUdin ? { hasVerifiedUdin: true } : {}),
       });
     }
 
@@ -260,9 +334,11 @@ export class WorkspaceStorage {
       }
     }
 
+    const finalDocs = [...newDocuments, ...existingDocuments];
+    this.emitDocuments(finalDocs);
     const persistedCount = newDocuments.filter((document) => this.isPersisted(document)).length;
     return {
-      documents: [...newDocuments, ...existingDocuments],
+      documents: finalDocs,
       persistedCount,
       sessionOnlyCount: newDocuments.length - persistedCount,
     };
@@ -285,7 +361,42 @@ export class WorkspaceStorage {
     if (storage) {
       const remaining = (await this.loadDocuments()).filter((item) => item.id !== document.id);
       await this.saveDocuments(remaining, storage);
+      this.emitDocuments(remaining);
     }
+  }
+
+  /**
+   * Clears ONLY files attached to a specific bid number without deleting
+   * preparation files belonging to other tenders.
+   */
+  public static async clearDocumentsForBid(
+    bidNumber: string,
+    allDocuments: WorkspaceDocument[]
+  ): Promise<WorkspaceDocument[]> {
+    const toRemove = allDocuments.filter((d) => d.linkedBidNumber === bidNumber);
+    const remaining = allDocuments.filter((d) => d.linkedBidNumber !== bidNumber);
+    const storage = await this.getKeyValueStorage();
+    const fileSystem = await this.getFileSystem();
+    const documentDirectory = fileSystem?.documentDirectory?.replace(/\/?$/, '/');
+
+    if (fileSystem && documentDirectory) {
+      await Promise.all(
+        toRemove
+          .filter(
+            (doc) =>
+              this.isPersisted(doc) &&
+              doc.uri.startsWith(documentDirectory + WORKSPACE_DIRECTORY)
+          )
+          .map((doc) => fileSystem.deleteAsync(doc.uri, { idempotent: true }).catch(() => undefined))
+      );
+    }
+
+    if (storage) {
+      const persistedRemaining = remaining.filter((doc) => this.isPersisted(doc));
+      await this.saveDocuments(persistedRemaining, storage);
+    }
+    this.emitDocuments(remaining);
+    return remaining;
   }
 
   public static async clearDocuments(documents: WorkspaceDocument[]): Promise<void> {
@@ -308,6 +419,7 @@ export class WorkspaceStorage {
     if (storage) {
       await storage.removeItem(DOCUMENTS_KEY).catch(() => undefined);
     }
+    this.emitDocuments([]);
   }
 
   private static async saveDocuments(

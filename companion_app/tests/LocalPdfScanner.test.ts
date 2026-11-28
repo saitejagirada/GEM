@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { extractPdfDetails, extractPdfText, LocalPdfScanner } from '../services/LocalPdfScanner.ts';
+import {
+  extractPdfDetails,
+  extractPdfText,
+  getSharedPdfCacheFileName,
+  isValidPdfBytes,
+  LocalPdfScanner,
+} from '../services/LocalPdfScanner.ts';
 
 describe('LocalPdfScanner', () => {
   it('extracts readable PDF text operators without a server round trip', () => {
@@ -37,5 +43,27 @@ describe('LocalPdfScanner', () => {
 
   it('keeps the device scan bounded to protect storage and battery', () => {
     assert.equal(LocalPdfScanner.maxScanBytes, 12 * 1024 * 1024);
+  });
+
+  it('validates %PDF- magic header bytes and rejects HTML/empty GeM responses', () => {
+    const validPdf = new TextEncoder().encode('%PDF-1.4\n1 0 obj\n<< /Title () >>');
+    const offsetPdf = new TextEncoder().encode('\n\n%PDF-1.7\n4 0 obj');
+    const htmlErr = new TextEncoder().encode('<!DOCTYPE html><html><title>404</title></html>');
+    const empty = new Uint8Array(0);
+
+    assert.equal(isValidPdfBytes(validPdf), true);
+    assert.equal(isValidPdfBytes(offsetPdf), true);
+    assert.equal(isValidPdfBytes(htmlErr), false);
+    assert.equal(isValidPdfBytes(empty), false);
+  });
+
+  it('builds deterministic shared cache filenames for Railway and Bid PDFs', () => {
+    const a = getSharedPdfCacheFileName('https://bidplus.gem.gov.in/showbidDocument/10097702');
+    const aDup = getSharedPdfCacheFileName('https://bidplus.gem.gov.in/showbidDocument/10097702#page=1');
+    const b = getSharedPdfCacheFileName('https://bidplus.gem.gov.in/showbidDocument/10226469');
+
+    assert.equal(a, aDup);
+    assert.notEqual(a, b);
+    assert.ok(a.startsWith('gem-pdf-v4-') && a.endsWith('.pdf'));
   });
 });

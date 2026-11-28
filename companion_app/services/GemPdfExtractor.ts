@@ -1200,23 +1200,31 @@ export class GemPdfExtractor {
 
   public static extractRequiredDocumentsList(text: string): string[] {
     const docs: string[] = [];
-    const sectionMatch = text.match(
+    // Normalize PDF line-wraps inside parenthetical qualifiers like
+    // "Certificate (Requested in\nATC)" before splitting items.
+    const unwrapped = text.replace(/\(([^()\n]{1,48})\r?\n\s*([^()\n]{1,48})\)/g, '($1 $2)');
+    const sectionMatch = unwrapped.match(
       /Document\s+required(?:\s+from\s+seller)?\s*[:\-]?([\s\S]*?)(?:\*In\s+case|Past\s+Performance|Bid\s+to\s+RA|$)/i
     );
     if (sectionMatch) {
       const lines = sectionMatch[1]
         .split(/\n|,|•/)
-        .map((l) => l.replace(/^[:\-\s]+/, '').trim())
-        .filter(
-          (l) =>
-            l.length > 3 &&
-            l.length < 95 &&
-            !/^\d+$/.test(l) &&
-            !/^\d+\s*\/\s*\d+$/.test(l) &&
-            !/^\([^)]*\)$/.test(l) &&
-            !/^from\s+seller\b/i.test(l) &&
-            !/eligibility\s+for\s+exemption|uploaded\s+for\s+evaluation|supporting\s+documents\s+to\s+prove/i.test(l)
-        );
+        .map((l) => l.replace(/^[:\-\s]+/, '').replace(/\s+/g, ' ').trim())
+        .filter((l) => {
+          if (l.length <= 3 || l.length >= 95) return false;
+          if (/^\d+$/.test(l) || /^\d+\s*\/\s*\d+$/.test(l) || /^\([^)]*\)$/.test(l)) return false;
+          // Drop unbalanced parenthetical wrap fragments like "ATC)" or "Additional Doc 2 (Requested in"
+          const openCount = (l.match(/\(/g) || []).length;
+          const closeCount = (l.match(/\)/g) || []).length;
+          if (openCount !== closeCount) return false;
+          // Drop lowercase line-wrap continuations like "supporting document"
+          if (/^[a-z]/.test(l)) return false;
+          if (/^from\s+seller\b/i.test(l)) return false;
+          if (/eligibility\s+for\s+exemption|uploaded\s+for\s+evaluation|supporting\s+documents\s+to\s+prove/i.test(l)) {
+            return false;
+          }
+          return true;
+        });
 
       for (const line of lines) {
         if (!docs.includes(line)) {
@@ -1239,8 +1247,9 @@ export class GemPdfExtractor {
       'Past Performance',
     ];
 
+    const collapsedText = unwrapped.replace(/\s+/g, ' ');
     for (const std of standardDocChecks) {
-      if (text.includes(std) && !docs.includes(std)) {
+      if (collapsedText.includes(std) && !docs.includes(std)) {
         docs.push(std);
       }
     }

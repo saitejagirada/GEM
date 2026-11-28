@@ -40,6 +40,7 @@ import { BusinessProfileModal } from './BusinessProfileModal';
 
 interface PreBidDisqualificationShieldProps {
   tenderDetails: ExtractedGeMTenderDetails;
+  isServiceTender?: boolean;
   profile?: UserAgentProfile;
   attachedDocs?: WorkspaceDocument[];
   onPrepareDocuments?: () => void;
@@ -55,6 +56,7 @@ interface RequirementBullet {
 
 export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShieldProps> = ({
   tenderDetails,
+  isServiceTender,
   profile,
   attachedDocs,
   onPrepareDocuments,
@@ -86,18 +88,21 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
   useEffect(() => {
     if (attachedDocs !== undefined) return;
     let cancelled = false;
+    const filterForBid = (docs: WorkspaceDocument[]) => {
+      const bidNo = tenderDetails.bidNumber;
+      return bidNo ? docs.filter((d) => !d.linkedBidNumber || d.linkedBidNumber === bidNo) : docs;
+    };
     WorkspaceStorage.loadDocuments()
       .then((docs) => {
-        if (cancelled) return;
-        const bidNo = tenderDetails.bidNumber;
-        const matched = bidNo
-          ? docs.filter((d) => !d.linkedBidNumber || d.linkedBidNumber === bidNo)
-          : docs;
-        setWorkspaceDocs(matched);
+        if (!cancelled) setWorkspaceDocs(filterForBid(docs));
       })
       .catch(() => undefined);
+    const unsubDocs = WorkspaceStorage.subscribeDocuments((docs) => {
+      if (!cancelled) setWorkspaceDocs(filterForBid(docs));
+    });
     return () => {
       cancelled = true;
+      unsubDocs();
     };
   }, [attachedDocs, tenderDetails.bidNumber]);
 
@@ -110,8 +115,10 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
   // Run profile-matched compliance engine ONLY when a real user profile is provided/configured
   const profileReport: DisqualificationShieldReport | null = useMemo(() => {
     if (!activeProfile) return null;
-    return DisqualificationShieldEngine.evaluateShield(tenderDetails, activeProfile, activeDocs);
-  }, [tenderDetails, activeProfile, activeDocs]);
+    return DisqualificationShieldEngine.evaluateShield(tenderDetails, activeProfile, activeDocs, {
+      isServiceTender,
+    });
+  }, [tenderDetails, activeProfile, activeDocs, isServiceTender]);
 
   // Generate clean ready-to-share compliance letters without fabricating seller stats
   const draftTemplates = useMemo(() => {
@@ -311,12 +318,9 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
             ]}
           >
             <View style={styles.verdictTopRow}>
-              <View style={styles.verdictBadgeWrap}>
-                <View style={[styles.verdictDot, { backgroundColor: verdictMeta.fg }]} />
-                <Text style={[styles.verdictBadgeText, { color: verdictMeta.fg }]}>
-                  {verdictMeta.label}
-                </Text>
-              </View>
+              <Text style={[styles.verdictBadgeText, { color: verdictMeta.fg }]}>
+                {verdictMeta.label}
+              </Text>
               <Text style={[styles.verdictCounts, { color: verdictMeta.fg }]}>
                 {profileReport.passedCount} OK · {profileReport.warningCount} Check ·{' '}
                 {profileReport.criticalDisqualificationCount} Blocker
@@ -387,7 +391,6 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                     ]}
                   >
                     <View style={styles.checkTitleLine}>
-                      <View style={[styles.statusDot, { backgroundColor: tagFg }]} />
                       <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
                         {item.title}
                       </Text>
@@ -409,9 +412,16 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
             </Text>
           )
         ) : (
-          /* Mode 2: Full-width structured checks (no squished left column) */
-          <View style={styles.listWrap}>
-            {profileReport.checks.map((check, idx) => {
+          /* Mode 2: Separated Company Eligibility vs. Bid Paperwork Checks */
+          (() => {
+            const eligibilityChecks = profileReport.checks.filter(
+              (c) => (c.checkKind ?? 'ELIGIBILITY') === 'ELIGIBILITY'
+            );
+            const documentChecks = profileReport.checks.filter((c) => c.checkKind === 'DOCUMENT');
+            const renderCheckRow = (
+              check: DisqualificationShieldReport['checks'][number],
+              idx: number
+            ) => {
               const isCritical = check.severity === 'CRITICAL';
               const isWarning = check.severity === 'WARNING';
               const tagBg = isCritical
@@ -419,7 +429,11 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                 : isWarning
                   ? colors.warningTint
                   : colors.successTint;
-              const tagFg = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
+              const tagFg = isCritical
+                ? colors.danger
+                : isWarning
+                  ? colors.warning
+                  : colors.success;
               const tagText = isCritical ? 'Blocker' : isWarning ? 'Check' : 'Pass';
 
               return (
@@ -434,7 +448,6 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                   ]}
                 >
                   <View style={styles.checkTitleLine}>
-                    <View style={[styles.statusDot, { backgroundColor: tagFg }]} />
                     <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
                       {check.title}
                     </Text>
@@ -445,23 +458,39 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                   <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
                     {check.reason}
                   </Text>
-                  {check.remediation ? (
-                    <View
-                      style={[
-                        styles.remediationBox,
-                        { backgroundColor: colors.surfaceSubtle, borderLeftColor: colors.primary },
-                      ]}
-                    >
-                      <Text style={[styles.remediationLine, { color: colors.textPrimary }]}>
-                        <Text style={{ color: colors.primary, fontWeight: '600' }}>Next step: </Text>
-                        {check.remediation}
-                      </Text>
-                    </View>
-                  ) : null}
                 </View>
               );
-            })}
-          </View>
+            };
+
+            return (
+              <View>
+                {eligibilityChecks.length > 0 ? (
+                  <View style={styles.listWrap}>
+                    <Text style={[styles.groupEyebrow, { color: colors.textMuted }]}>
+                      COMPANY ELIGIBILITY
+                    </Text>
+                    {eligibilityChecks.map(renderCheckRow)}
+                  </View>
+                ) : null}
+                {documentChecks.length > 0 ? (
+                  <View
+                    style={[
+                      styles.listWrap,
+                      eligibilityChecks.length > 0 && {
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.borderSubtle,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.groupEyebrow, { color: colors.textMuted }]}>
+                      REQUIRED PAPERWORK
+                    </Text>
+                    {documentChecks.map(renderCheckRow)}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })()
         )}
 
         {/* Delivery State Split (if present in PDF) */}
@@ -645,16 +674,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 5,
   },
-  verdictBadgeWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  verdictDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
   verdictBadgeText: {
     fontSize: 12.5,
     fontWeight: '700',
@@ -711,6 +730,13 @@ const styles = StyleSheet.create({
   listWrap: {
     paddingHorizontal: 16,
   },
+  groupEyebrow: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.55,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
   watchoutRow: {
     paddingVertical: 14,
   },
@@ -718,12 +744,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 5,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    marginBottom: 4,
   },
   rowTitle: {
     fontSize: 14.5,
@@ -743,19 +764,6 @@ const styles = StyleSheet.create({
   rowDetail: {
     fontSize: 13,
     lineHeight: 19,
-    paddingLeft: 16,
-  },
-  remediationBox: {
-    marginLeft: 16,
-    marginTop: 8,
-    borderLeftWidth: 2.5,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  remediationLine: {
-    fontSize: 12.5,
-    lineHeight: 18,
   },
   subSection: {
     marginHorizontal: 16,

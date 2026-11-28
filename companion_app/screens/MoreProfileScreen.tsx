@@ -132,9 +132,12 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       title: t('companyDocLocker'),
       subtitle:
         lockerDocs.length > 0
-          ? `${lockerDocs.length} of ${COMPANY_LOCKER_SLOTS.length} master docs saved · Auto-matches bids`
+          ? `${CompanyDocLockerService.getFilledSlotCount(lockerDocs)} of ${COMPANY_LOCKER_SLOTS.length} vault slots ready · Auto-extracts PDF details`
           : 'Save GST, PAN, Udyam, Turnover & CRAC PDFs once on device',
-      badge: lockerDocs.length > 0 ? `${lockerDocs.length}/${COMPANY_LOCKER_SLOTS.length} READY` : undefined,
+      badge:
+        lockerDocs.length > 0
+          ? `${CompanyDocLockerService.getFilledSlotCount(lockerDocs)}/${COMPANY_LOCKER_SLOTS.length} READY`
+          : undefined,
       onPress: openLocker,
     },
     {

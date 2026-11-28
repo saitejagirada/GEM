@@ -17,11 +17,16 @@ export type ShieldRiskSeverity = 'CRITICAL' | 'WARNING' | 'PASS';
 export interface ShieldCheckItem {
   id: string;
   category: 'EMD' | 'TURNOVER' | 'EXPERIENCE' | 'MII' | 'OEM_MAF' | 'LOGISTICS' | 'STATUTORY';
+  checkKind?: 'ELIGIBILITY' | 'DOCUMENT';
   title: string;
   severity: ShieldRiskSeverity;
   reason: string;
   remediation?: string;
   templateAction?: 'MII_DECLARATION' | 'CA_UDIN_REQUEST' | 'OEM_MAF_REQUEST' | 'LINK_CRAC';
+}
+
+export interface ShieldEvaluateOptions {
+  isServiceTender?: boolean;
 }
 
 export interface DisqualificationShieldReport {
@@ -47,20 +52,35 @@ export class DisqualificationShieldEngine {
   public static evaluateShield(
     tender: ExtractedGeMTenderDetails,
     profile: UserAgentProfile,
-    attachedDocs: WorkspaceDocument[] = []
+    attachedDocs: WorkspaceDocument[] = [],
+    options?: ShieldEvaluateOptions
   ): DisqualificationShieldReport {
     const checks: ShieldCheckItem[] = [];
-    const attachedNames = (attachedDocs || []).map((d) => (d.name || '').toLowerCase());
+    const docs = attachedDocs || [];
     const bidNo = tender.bidNumber || 'GEM/2026/BID';
 
+    const hasDocMatch = (namePattern: RegExp, contentTags: string[]): boolean =>
+      docs.some((doc) => {
+        if (doc.extractedTags?.some((tag) => contentTags.includes(tag))) return true;
+        return namePattern.test((doc.name || '').toLowerCase());
+      });
+
+    const isServiceTender =
+      options?.isServiceTender ??
+      /\b(service|services|manpower|hiring|housekeeping|facility\s+management|catering|security\s+manpower|amc)\b/i.test(
+        `${tender.itemCategory || ''} ${tender.title || ''}`
+      );
+
     // -----------------------------------------------------------------------
-    // 1. EMD & MSE Trader vs Manufacturer Verification
+    // 1. EMD & MSE Goods (OEM-only) vs Services (MSE Service Provider) Check
     // -----------------------------------------------------------------------
     const hasEmd = (tender.emdAmountInr || 0) > 0;
+    const hasEmdReceipt = hasDocMatch(/(emd|bank|guarantee|dd|challan|receipt|fdr)/i, ['EMD_PROOF']);
     if (!hasEmd) {
       checks.push({
         id: 'emd-check',
         category: 'EMD',
+        checkKind: 'ELIGIBILITY',
         title: 'EMD Guarantee Requirement',
         severity: 'PASS',
         reason: 'Zero EMD tender. No Earnest Money Deposit required.',
@@ -70,30 +90,53 @@ export class DisqualificationShieldEngine {
       const tenderAllowsMseExemption = tender.isEmdExemptForMse || tender.mseExemptionForExpAndTurnover;
 
       if (tenderAllowsMseExemption && isMse) {
-        // Critical GeM Rule: In goods tenders, traders are strictly NOT exempt from EMD!
-        if (!profile.isOem) {
+        if (profile.isOem) {
           checks.push({
             id: 'emd-check',
             category: 'EMD',
+            checkKind: 'ELIGIBILITY',
+            title: 'MSE 100% EMD Waiver Validated',
+            severity: 'PASS',
+            reason: `Full ₹${tender.emdAmountInr?.toLocaleString('en-IN')} waiver applicable under MSE Manufacturer policy.`,
+          });
+        } else if (isServiceTender) {
+          checks.push({
+            id: 'emd-check',
+            category: 'EMD',
+            checkKind: 'ELIGIBILITY',
+            title: 'MSE Service Provider EMD Exemption',
+            severity: 'PASS',
+            reason: `MSE exemption applies to registered Service Providers for ₹${tender.emdAmountInr?.toLocaleString('en-IN')} EMD. Attach valid Udyam certificate.`,
+          });
+        } else {
+          // Critical GeM Rule: In goods tenders, traders are strictly NOT exempt from EMD!
+          checks.push({
+            id: 'emd-check',
+            category: 'EMD',
+            checkKind: 'ELIGIBILITY',
             title: 'EMD Exemption for Non-OEM (Trader Risk)',
             severity: 'CRITICAL',
             reason: `Tender requires ₹${tender.emdAmountInr?.toLocaleString('en-IN')} EMD. GeM rules allow MSE exemption only to MANUFACTURERS of goods. Since you are registered as a reseller/trader, claiming exemption without OEM status will cause instant rejection.`,
             remediation: 'Either pay the EMD guarantee via GeM advisory bank or provide an OEM Manufacturer endorsement.',
           });
-        } else {
-          checks.push({
-            id: 'emd-check',
-            category: 'EMD',
-            title: 'MSE 100% EMD Waiver Validated',
-            severity: 'PASS',
-            reason: `Full ₹${tender.emdAmountInr?.toLocaleString('en-IN')} waiver applicable under MSE Manufacturer policy.`,
-          });
         }
-      } else if (!isMse) {
-        const hasEmdReceipt = attachedNames.some((n) => /(emd|bank|guarantee|dd|challan|receipt|fdr)/i.test(n));
+      } else if (isMse && !tenderAllowsMseExemption) {
         checks.push({
           id: 'emd-check',
           category: 'EMD',
+          checkKind: hasEmdReceipt ? 'ELIGIBILITY' : 'DOCUMENT',
+          title: 'EMD Deposit Required (No MSE Waiver)',
+          severity: hasEmdReceipt ? 'PASS' : 'WARNING',
+          reason: hasEmdReceipt
+            ? `EMD proof attached for ₹${tender.emdAmountInr?.toLocaleString('en-IN')} requirement.`
+            : `Buyer did not enable MSE EMD exemption on this tender. Mandatory ₹${tender.emdAmountInr?.toLocaleString('en-IN')} EMD instrument (e-BG / DD / FDR) is required.`,
+          remediation: hasEmdReceipt ? undefined : 'Arrange EMD Bank Guarantee or Advisory Bank deposit before quoting.',
+        });
+      } else {
+        checks.push({
+          id: 'emd-check',
+          category: 'EMD',
+          checkKind: 'DOCUMENT',
           title: 'EMD Bank Deposit Verification',
           severity: hasEmdReceipt ? 'PASS' : 'CRITICAL',
           reason: hasEmdReceipt
@@ -110,17 +153,23 @@ export class DisqualificationShieldEngine {
     const minTurnover = tender.minAnnualTurnoverInr || 0;
     if (minTurnover > 0) {
       const meetsTurnover = profile.annualTurnoverInr >= minTurnover;
-      const isTurnoverExempt = tender.mseExemptionForExpAndTurnover && profile.hasUdyamCertificate && profile.isOem;
-      const hasCaDoc = attachedNames.some((n) => /(turnover|ca|udin|balance|auditor)/i.test(n));
+      const isTurnoverExempt =
+        tender.mseExemptionForExpAndTurnover &&
+        profile.hasUdyamCertificate &&
+        (profile.isOem || isServiceTender);
+      const hasCaDoc = hasDocMatch(/(turnover|ca|udin|balance|auditor)/i, ['CA_UDIN_TURNOVER']);
+      const udinVerified =
+        Boolean(profile.hasVerifiedUdin) || docs.some((d) => Boolean(d.hasVerifiedUdin));
 
       if (meetsTurnover) {
         checks.push({
           id: 'turnover-check',
           category: 'TURNOVER',
+          checkKind: hasCaDoc ? 'ELIGIBILITY' : 'DOCUMENT',
           title: 'Annual Turnover Eligibility',
           severity: hasCaDoc ? 'PASS' : 'WARNING',
           reason: hasCaDoc
-            ? `Your ₹${(profile.annualTurnoverInr / 100000).toFixed(1)}L turnover meets the required ₹${(minTurnover / 100000).toFixed(1)}L threshold, with CA certificate attached.`
+            ? `Your ₹${(profile.annualTurnoverInr / 100000).toFixed(1)}L turnover meets the required ₹${(minTurnover / 100000).toFixed(1)}L threshold${udinVerified ? ' (CA UDIN verified in PDF)' : ', with CA certificate attached'}.`
             : `Turnover meets ₹${(minTurnover / 100000).toFixed(1)}L, but missing CA Turnover Certificate with mandatory 18-digit UDIN.`,
           remediation: hasCaDoc ? undefined : 'Upload a CA-certified turnover certificate citing an authentic UDIN.',
           templateAction: hasCaDoc ? undefined : 'CA_UDIN_REQUEST',
@@ -129,6 +178,7 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'turnover-check',
           category: 'TURNOVER',
+          checkKind: 'ELIGIBILITY',
           title: 'Turnover Waiver Claimed (MSE)',
           severity: 'PASS',
           reason: `MSE turnover waiver applies. You are exempt from ₹${(minTurnover / 100000).toFixed(1)}L criteria.`,
@@ -137,6 +187,7 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'turnover-check',
           category: 'TURNOVER',
+          checkKind: 'ELIGIBILITY',
           title: 'Turnover Disqualification Barrier',
           severity: 'CRITICAL',
           reason: `Disqualification: Profile turnover (₹${(profile.annualTurnoverInr / 100000).toFixed(1)}L) falls below mandatory threshold of ₹${(minTurnover / 100000).toFixed(1)}L.`,
@@ -147,6 +198,7 @@ export class DisqualificationShieldEngine {
       checks.push({
         id: 'turnover-check',
         category: 'TURNOVER',
+        checkKind: 'ELIGIBILITY',
         title: 'Turnover Requirement',
         severity: 'PASS',
         reason: 'No minimum turnover barrier published for this tender.',
@@ -157,13 +209,14 @@ export class DisqualificationShieldEngine {
     // 3. Past Experience & Execution Criteria
     // -----------------------------------------------------------------------
     const reqExp = tender.yearsExperienceRequired || 0;
-    const hasExpDoc = attachedNames.some((n) => /(experience|past|crac|contract|completion|order)/i.test(n));
+    const hasExpDoc = hasDocMatch(/(experience|past|crac|contract|completion|order)/i, ['CRAC_EXPERIENCE']);
 
     if (reqExp > 0) {
       if (profile.yearsExperience >= reqExp) {
         checks.push({
           id: 'exp-check',
           category: 'EXPERIENCE',
+          checkKind: hasExpDoc ? 'ELIGIBILITY' : 'DOCUMENT',
           title: 'Past Experience Criteria',
           severity: hasExpDoc ? 'PASS' : 'WARNING',
           reason: hasExpDoc
@@ -172,10 +225,15 @@ export class DisqualificationShieldEngine {
           remediation: hasExpDoc ? undefined : 'Attach copies of past executed GeM contracts with CRAC.',
           templateAction: hasExpDoc ? undefined : 'LINK_CRAC',
         });
-      } else if (tender.mseExemptionForExpAndTurnover && profile.hasUdyamCertificate && profile.isOem) {
+      } else if (
+        tender.mseExemptionForExpAndTurnover &&
+        profile.hasUdyamCertificate &&
+        (profile.isOem || isServiceTender)
+      ) {
         checks.push({
           id: 'exp-check',
           category: 'EXPERIENCE',
+          checkKind: 'ELIGIBILITY',
           title: 'Experience Exemption (MSE)',
           severity: 'PASS',
           reason: `MSE experience exemption applies. You are exempt from ${reqExp} years requirement.`,
@@ -184,10 +242,11 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'exp-check',
           category: 'EXPERIENCE',
+          checkKind: 'ELIGIBILITY',
           title: 'Past Experience Deficiency',
           severity: 'CRITICAL',
           reason: `Requires ${reqExp} years past public procurement experience; profile records ${profile.yearsExperience} years.`,
-          remediation: 'Provide past commercial contracts or participate under MSE waiver if manufacturing offered product.',
+          remediation: 'Provide past commercial contracts or participate under MSE waiver if eligible.',
         });
       }
     }
@@ -195,13 +254,15 @@ export class DisqualificationShieldEngine {
     // -----------------------------------------------------------------------
     // 4. Make in India (MII) Local Content Declaration
     // -----------------------------------------------------------------------
-    const hasMiiDeclaration = attachedNames.some((n) => /(mii|local|make\s*in\s*india|content|declaration)/i.test(n));
+    const hasMiiDeclaration = hasDocMatch(/(mii|local|make\s*in\s*india|content|declaration)/i, ['MII_DECLARATION']);
     if (tender.miiPurchasePreference || tender.miiLocalContentPercentage) {
       const requiredContent = tender.miiLocalContentPercentage || 50;
+      const miiIsMandatory = Boolean(tender.requiresMiiDeclaration || tender.miiLocalContentPercentage);
       if (hasMiiDeclaration) {
         checks.push({
           id: 'mii-check',
           category: 'MII',
+          checkKind: 'DOCUMENT',
           title: 'Make in India (MII) Compliance',
           severity: 'PASS',
           reason: `MII declaration uploaded, satisfying Class-${tender.miiClass === 'CLASS_1' ? 'I' : 'II'} (${requiredContent}%) requirement.`,
@@ -210,9 +271,12 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'mii-check',
           category: 'MII',
+          checkKind: 'DOCUMENT',
           title: 'Missing MII Local Content Declaration',
-          severity: 'CRITICAL',
-          reason: `Mandatory Make in India requirement: Class-${tender.miiClass === 'CLASS_1' ? 'I' : 'II'} requires minimum ${requiredContent}% local content. Failure to upload signed OEM MII self-declaration forfeits preference and risks immediate disqualification.`,
+          severity: miiIsMandatory ? 'CRITICAL' : 'WARNING',
+          reason: miiIsMandatory
+            ? `Mandatory Make in India requirement: Class-${tender.miiClass === 'CLASS_1' ? 'I' : 'II'} requires minimum ${requiredContent}% local content. Draft and attach a signed MII self-declaration in Prepare Docs before bidding.`
+            : `MII Purchase Preference enabled (${requiredContent}% local content). Attach a signed MII self-declaration to claim Class-${tender.miiClass === 'CLASS_1' ? 'I' : 'II'} preference.`,
           remediation: 'Generate and upload MII local content declaration on company letterhead.',
           templateAction: 'MII_DECLARATION',
         });
@@ -222,12 +286,13 @@ export class DisqualificationShieldEngine {
     // -----------------------------------------------------------------------
     // 5. OEM Authorization Form (MAF) Check
     // -----------------------------------------------------------------------
-    const hasMafAttached = attachedNames.some((n) => /(maf|oem|authorization|manufacturer)/i.test(n));
+    const hasMafAttached = hasDocMatch(/(maf|oem|authorization|manufacturer)/i, ['OEM_MAF']);
     if (tender.requiresOemAuthorization && !profile.isOem) {
       if (hasMafAttached) {
         checks.push({
           id: 'oem-check',
           category: 'OEM_MAF',
+          checkKind: 'DOCUMENT',
           title: 'OEM Authorization Form (MAF)',
           severity: 'PASS',
           reason: 'Bid-specific Manufacturer Authorization Form (MAF) attached.',
@@ -236,6 +301,7 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'oem-check',
           category: 'OEM_MAF',
+          checkKind: 'DOCUMENT',
           title: 'Missing Mandatory OEM Authorization (MAF)',
           severity: 'CRITICAL',
           reason: `Tender ATC strictly requires OEM Authorization Certificate for authorized resellers. You are bidding as a non-OEM without an attached MAF.`,
@@ -265,6 +331,7 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'logistics-check',
           category: 'LOGISTICS',
+          checkKind: 'ELIGIBILITY',
           title: 'Multi-State Logistics Exposure',
           severity: 'WARNING',
           reason: `Tender specifies delivery in ${uniqueUnsupported.join(', ')}, which fall outside your primary target states (${profile.targetStates?.join(', ')}).`,
@@ -274,6 +341,7 @@ export class DisqualificationShieldEngine {
         checks.push({
           id: 'logistics-check',
           category: 'LOGISTICS',
+          checkKind: 'ELIGIBILITY',
           title: 'Consignee Delivery Coverage',
           severity: 'PASS',
           reason: isPanIndia
@@ -286,23 +354,29 @@ export class DisqualificationShieldEngine {
     // -----------------------------------------------------------------------
     // 7. Statutory Tax & Business Identity Check (GST / PAN / Udyam)
     // -----------------------------------------------------------------------
-    const hasGstDoc = attachedNames.some((n) => /(gst|pan|udyam|registration|certificate)/i.test(n));
+    const hasGstDoc = hasDocMatch(/(gst|pan|udyam|registration|certificate)/i, [
+      'GST_STATUTORY',
+      'PAN_STATUTORY',
+      'UDYAM_MSME',
+    ]);
     if (!hasGstDoc) {
       checks.push({
         id: 'statutory-check',
         category: 'STATUTORY',
+        checkKind: 'DOCUMENT',
         title: 'Statutory Business Registration Files',
         severity: 'WARNING',
-        reason: 'No GST / PAN / Udyam registration certificates identified in attached response documents.',
-        remediation: 'Attach GST Registration Certificate and Udyam MSME Registration.',
+        reason: 'No GST / PAN / Udyam registration certificates identified in Company Vault or attached response files.',
+        remediation: 'Add GST Registration Certificate and Udyam MSME Registration to Company Vault.',
       });
     } else {
       checks.push({
         id: 'statutory-check',
         category: 'STATUTORY',
-        title: 'Statutory Certificates Attached',
+        checkKind: 'DOCUMENT',
+        title: 'Statutory Certificates Ready',
         severity: 'PASS',
-        reason: 'Statutory compliance documents verified in response workspace.',
+        reason: 'Statutory compliance documents verified in Company Vault / bid workspace.',
       });
     }
 
@@ -359,6 +433,10 @@ export class DisqualificationShieldEngine {
     const bidNo = tender.bidNumber || 'GEM/2026/B/XXXXXX';
     const org = profile.organizationName || 'Our Enterprise';
 
+    const addressLine =
+      profile.registeredAddress ||
+      `[Enter Factory / Works Address], ${profile.targetStates?.[0] || 'India'}`;
+
     return `SELF-DECLARATION UNDER MAKE IN INDIA (MII) POLICY
 (To be printed on Bidder's Official Company Letterhead)
 
@@ -375,7 +453,7 @@ We, M/s ${org}, hereby declare that:
 1. We are offering products that comply with the Public Procurement (Preference to Make in India) Order 2017 (P-45021/2/2017-PP (BE-II) dated 16.09.2020) issued by DPIIT.
 2. The local content in the offered products is ${localContent}%, qualifying our firm as a 'Class-${localContent >= 50 ? 'I' : 'II'} Local Supplier'.
 3. The location(s) at which local value addition is carried out:
-   Factory / Works: Industrial Area, Phase-II, ${profile.targetStates?.[0] || 'Delhi'}, India.
+   Factory / Works: ${addressLine}.
 4. We understand that false declarations violate the Integrity Pact and GeM General Terms and Conditions (GTC), inviting debarment under Rule 151(iii) of GFR 2017.
 
 Authorized Signatory

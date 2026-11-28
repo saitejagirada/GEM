@@ -7,6 +7,7 @@
  */
 
 import type { MsmeCategory, UserAgentProfile } from '../types/index.ts';
+import type { CompanyProfilePatch } from './CompanyDocExtractor.ts';
 
 const PROFILE_STORAGE_KEY = '@gem-mobile-companion/business-profile-v1';
 
@@ -22,9 +23,16 @@ export interface BusinessProfileInput {
   annualTurnoverLakhs: number;
   yearsExperience: number;
   isOem: boolean;
+  isServiceProvider?: boolean;
   hasUdyamCertificate: boolean;
   targetStates: string[];
   productCategories?: string[];
+  gstin?: string;
+  panNumber?: string;
+  udyamNumber?: string;
+  registeredAddress?: string;
+  maxSingleOrderValueInr?: number;
+  hasVerifiedUdin?: boolean;
 }
 
 export const INDIAN_STATES_AND_UTS: readonly string[] = [
@@ -107,6 +115,7 @@ function sanitizeProfile(raw: Partial<UserAgentProfile> | null | undefined): Use
   const safeExp = Number.isFinite(exp) && exp >= 0 ? Math.min(60, Math.round(exp)) : 0;
 
   const isOem = Boolean(raw.isOem);
+  const isServiceProvider = raw.isServiceProvider !== undefined ? Boolean(raw.isServiceProvider) : undefined;
   const hasUdyamCertificate = msmeCategory === 'LARGE' ? false : Boolean(raw.hasUdyamCertificate);
   const organizationName = String(raw.organizationName || '').trim().slice(0, 90);
   const targetStates = normalizeStates(raw.targetStates);
@@ -116,6 +125,16 @@ function sanitizeProfile(raw: Partial<UserAgentProfile> | null | undefined): Use
         .filter(Boolean)
         .slice(0, 10)
     : [];
+  const gstin = raw.gstin ? String(raw.gstin).trim().toUpperCase().slice(0, 15) : undefined;
+  const panNumber = raw.panNumber ? String(raw.panNumber).trim().toUpperCase().slice(0, 10) : undefined;
+  const udyamNumber = raw.udyamNumber ? String(raw.udyamNumber).trim().toUpperCase().slice(0, 22) : undefined;
+  const registeredAddress = raw.registeredAddress
+    ? String(raw.registeredAddress).trim().slice(0, 140)
+    : undefined;
+  const maxOrderRaw = Number(raw.maxSingleOrderValueInr);
+  const maxSingleOrderValueInr =
+    Number.isFinite(maxOrderRaw) && maxOrderRaw > 0 ? Math.round(maxOrderRaw) : undefined;
+  const hasVerifiedUdin = raw.hasVerifiedUdin ? true : undefined;
 
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : 'local-business-profile',
@@ -126,7 +145,14 @@ function sanitizeProfile(raw: Partial<UserAgentProfile> | null | undefined): Use
     productCategories,
     targetStates,
     isOem,
+    ...(isServiceProvider !== undefined ? { isServiceProvider } : {}),
     hasUdyamCertificate,
+    ...(gstin ? { gstin } : {}),
+    ...(panNumber ? { panNumber } : {}),
+    ...(udyamNumber ? { udyamNumber } : {}),
+    ...(registeredAddress ? { registeredAddress } : {}),
+    ...(maxSingleOrderValueInr ? { maxSingleOrderValueInr } : {}),
+    ...(hasVerifiedUdin ? { hasVerifiedUdin } : {}),
   };
 }
 
@@ -210,16 +236,33 @@ export class BusinessProfileService {
       annualTurnoverInr: Math.round(safeLakhs * 100000),
       yearsExperience: input.yearsExperience,
       isOem: input.isOem,
+      isServiceProvider: input.isServiceProvider,
       hasUdyamCertificate: input.hasUdyamCertificate,
       targetStates: input.targetStates,
       productCategories: input.productCategories || [],
+      gstin: input.gstin,
+      panNumber: input.panNumber,
+      udyamNumber: input.udyamNumber,
+      registeredAddress: input.registeredAddress,
+      maxSingleOrderValueInr: input.maxSingleOrderValueInr,
+      hasVerifiedUdin: input.hasVerifiedUdin,
     });
 
     return sanitized!;
   }
 
   public static async saveProfile(input: BusinessProfileInput): Promise<UserAgentProfile> {
-    const next = this.buildProfileFromInput(input);
+    const existing = this.profile;
+    const next = this.buildProfileFromInput({
+      ...input,
+      gstin: input.gstin ?? existing?.gstin,
+      panNumber: input.panNumber ?? existing?.panNumber,
+      udyamNumber: input.udyamNumber ?? existing?.udyamNumber,
+      registeredAddress: input.registeredAddress ?? existing?.registeredAddress,
+      maxSingleOrderValueInr: input.maxSingleOrderValueInr ?? existing?.maxSingleOrderValueInr,
+      hasVerifiedUdin: input.hasVerifiedUdin ?? existing?.hasVerifiedUdin,
+      isServiceProvider: input.isServiceProvider ?? existing?.isServiceProvider,
+    });
     this.profile = next;
     this.hydrated = true;
 
@@ -234,6 +277,67 @@ export class BusinessProfileService {
 
     this.emit();
     return { ...next };
+  }
+
+  /**
+   * Merges user-confirmed fields extracted locally from an uploaded company PDF
+   * (Udyam, GST REG-06, CA Turnover, or CRAC) into the saved Business Profile.
+   */
+  public static async applyExtractedPatch(patch: CompanyProfilePatch): Promise<UserAgentProfile> {
+    const base = (await this.hydrate()) || {
+      id: 'local-business-profile',
+      organizationName: '',
+      msmeCategory: 'MICRO' as MsmeCategory,
+      annualTurnoverInr: 0,
+      yearsExperience: 0,
+      productCategories: [],
+      targetStates: ['Pan-India'],
+      isOem: false,
+      hasUdyamCertificate: false,
+    };
+
+    const merged = sanitizeProfile({
+      ...base,
+      ...(patch.organizationName !== undefined ? { organizationName: patch.organizationName } : {}),
+      ...(patch.msmeCategory !== undefined ? { msmeCategory: patch.msmeCategory } : {}),
+      ...(patch.hasUdyamCertificate !== undefined
+        ? { hasUdyamCertificate: patch.hasUdyamCertificate }
+        : {}),
+      ...(patch.isOem !== undefined ? { isOem: patch.isOem } : {}),
+      ...(patch.isServiceProvider !== undefined
+        ? { isServiceProvider: patch.isServiceProvider }
+        : {}),
+      ...(patch.annualTurnoverInr !== undefined
+        ? { annualTurnoverInr: patch.annualTurnoverInr }
+        : {}),
+      ...(patch.yearsExperience !== undefined ? { yearsExperience: patch.yearsExperience } : {}),
+      ...(patch.targetStates !== undefined ? { targetStates: patch.targetStates } : {}),
+      ...(patch.gstin !== undefined ? { gstin: patch.gstin } : {}),
+      ...(patch.panNumber !== undefined ? { panNumber: patch.panNumber } : {}),
+      ...(patch.udyamNumber !== undefined ? { udyamNumber: patch.udyamNumber } : {}),
+      ...(patch.registeredAddress !== undefined
+        ? { registeredAddress: patch.registeredAddress }
+        : {}),
+      ...(patch.maxSingleOrderValueInr !== undefined
+        ? { maxSingleOrderValueInr: patch.maxSingleOrderValueInr }
+        : {}),
+      ...(patch.hasVerifiedUdin !== undefined ? { hasVerifiedUdin: patch.hasVerifiedUdin } : {}),
+    })!;
+
+    this.profile = merged;
+    this.hydrated = true;
+
+    const storage = await this.getStorage();
+    if (storage) {
+      try {
+        await storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(merged));
+      } catch {
+        // Keep in-memory state active even if disk write fails
+      }
+    }
+
+    this.emit();
+    return { ...merged };
   }
 
   public static async clearProfile(): Promise<void> {

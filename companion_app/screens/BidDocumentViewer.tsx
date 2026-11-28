@@ -32,6 +32,7 @@ import type {
   OfficialBidFileFormat,
 } from '../types/index';
 import { BidDocService } from '../services/BidDocService';
+import { LocalPdfScanner } from '../services/LocalPdfScanner';
 import { PortalDocService } from '../services/PortalDocService';
 import { useTheme } from '../theme/ThemeContext';
 import { formatDateSafe, formatInr } from '../utils/formatters';
@@ -130,6 +131,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   const [resolvedFormat, setResolvedFormat] = useState<OfficialBidFileFormat | null>(null);
   const [resolvedFilename, setResolvedFilename] = useState<string | null>(null);
   const [isProbingFormat, setIsProbingFormat] = useState(false);
+  const [localPdfUri, setLocalPdfUri] = useState<string | null>(null);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
+  const [showSlowOpenHint, setShowSlowOpenHint] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [showTermsPeek, setShowTermsPeek] = useState(false);
@@ -143,6 +147,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setResolvedFormat(null);
     setResolvedFilename(null);
     setIsProbingFormat(false);
+    setLocalPdfUri(null);
+    setIsPreparingPdf(false);
+    setShowSlowOpenHint(false);
     setRetryNonce(0);
     setFocusMode(false);
     setShowTermsPeek(false);
@@ -150,6 +157,70 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
 
   const selectedDocument: OfficialBidDocument | undefined =
     documents.find((document) => document.id === selectedDocumentId) || documents[0];
+
+  const NativePdf = getNativePdfComponent();
+  const activeUrl = selectedDocument?.url || '';
+  const initialFormat: OfficialBidFileFormat =
+    selectedDocument?.fileFormat || (activeUrl ? PortalDocService.inferFileFormat(activeUrl) : 'WEB');
+
+  // Resolve verified local cached PDF (instant when LocalPdfScanner already fetched it,
+  // or downloads once with %PDF- validation + GeM session cookie + automatic retry).
+  useEffect(() => {
+    if (!visible || !activeUrl || !NativePdf || initialFormat !== 'PDF') {
+      setLocalPdfUri(null);
+      setIsPreparingPdf(false);
+      setShowSlowOpenHint(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLocalPdfUri(null);
+    setLoadError(null);
+    setResolvedFormat(null);
+    setResolvedFilename(null);
+    setIsPreparingPdf(true);
+    setShowSlowOpenHint(false);
+
+    const slowTimer = setTimeout(() => {
+      if (!cancelled) setShowSlowOpenHint(true);
+    }, 4500);
+
+    LocalPdfScanner.downloadPdfToSharedCache(activeUrl, {
+      forceRefresh: retryNonce > 0,
+      readBytes: false,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.localUri) {
+          setLocalPdfUri(res.localUri);
+          setLoadError(null);
+        } else if (res.detectedFormat && res.detectedFormat !== 'PDF') {
+          setResolvedFormat(res.detectedFormat);
+          if (res.filename) setResolvedFilename(res.filename);
+          setLoadError(null);
+        } else {
+          setLoadError(
+            res.error || 'GeM did not return a valid PDF right now. Tap Retry or open in browser.'
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('Unable to reach GeM for this PDF right now. Retry or open in browser.');
+        }
+      })
+      .finally(() => {
+        clearTimeout(slowTimer);
+        if (!cancelled) {
+          setIsPreparingPdf(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(slowTimer);
+    };
+  }, [visible, activeUrl, initialFormat, retryNonce, NativePdf]);
 
   const quickTermsRows = useMemo(() => {
     if (!bid) return [];
@@ -196,9 +267,6 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   const format: OfficialBidFileFormat =
     resolvedFormat || selectedDocument.fileFormat || PortalDocService.inferFileFormat(selectedDocument.url);
   const isPdfDocument = format === 'PDF';
-  const safeId = (bid.b_id || bid.bidNumber).replace(/[^a-zA-Z0-9_-]/g, '-');
-  const urlHash = Array.from(selectedDocument.url).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) | 0), 7);
-  const cacheFileName = `gem-v3-${safeId}-${selectedDocument.id}-${Math.abs(urlHash)}.pdf`;
 
   const selectDocument = (document: OfficialBidDocument) => {
     setSelectedDocumentId(document.id);
@@ -208,6 +276,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setResolvedFormat(null);
     setResolvedFilename(null);
     setIsProbingFormat(false);
+    setLocalPdfUri(null);
+    setShowSlowOpenHint(false);
+    setRetryNonce(0);
   };
 
   const handleRetry = () => {
@@ -215,6 +286,8 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setResolvedFormat(null);
     setResolvedFilename(null);
     setIsProbingFormat(false);
+    setLocalPdfUri(null);
+    setShowSlowOpenHint(false);
     setPage(1);
     setPageCount(0);
     setRetryNonce((n) => n + 1);
@@ -289,8 +362,6 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     }
     Linking.openURL(clean).catch(() => undefined);
   };
-
-  const NativePdf = getNativePdfComponent();
 
   const openInSystemViewer = () => {
     Linking.openURL(selectedDocument.url).catch(() => undefined);
@@ -478,17 +549,38 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                 </Pressable>
               </View>
             </View>
-          ) : isProbingFormat ? (
+          ) : isProbingFormat || (NativePdf && isPreparingPdf && !localPdfUri && !loadError) ? (
             <View style={[styles.loadingState, { backgroundColor: colors.background }]}>
               <ActivityIndicator size="large" color={colors.primary} />
               <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>
-                Checking official file format…
+                {isProbingFormat
+                  ? 'Checking official file format…'
+                  : `Loading ${selectedDocument.label}…`}
               </Text>
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Verifying attachment headers from {sourceHost}
+                {isProbingFormat
+                  ? `Verifying attachment headers from ${sourceHost}`
+                  : `Fetching verified PDF directly from ${sourceHost}`}
               </Text>
+              {showSlowOpenHint && !isProbingFormat ? (
+                <Pressable
+                  onPress={openInSystemViewer}
+                  style={({ pressed }) => [
+                    styles.slowOpenBtn,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.slowOpenBtnText, { color: colors.primary }]}>
+                    Taking long? Open Official PDF ↗
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
-          ) : !NativePdf || loadError ? (
+          ) : !NativePdf || loadError || !localPdfUri ? (
             <View style={[styles.errorState, { backgroundColor: colors.background }]}>
               <View style={[styles.errorBadge, { backgroundColor: colors.dangerTint }]}>
                 <Text style={[styles.errorIcon, { color: colors.danger }]}>{NativePdf ? '!' : 'PDF'}</Text>
@@ -535,16 +627,10 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
           ) : (
             <NativePdf
               ref={pdfRef}
-              key={`${selectedDocument.id}-${retryNonce}`}
+              key={`${selectedDocument.id}-${localPdfUri}-${retryNonce}`}
               source={{
-                uri: selectedDocument.url,
-                cache: retryNonce === 0,
-                cacheFileName,
-                headers: {
-                  'User-Agent': PDF_USER_AGENT,
-                  Accept: 'application/pdf,*/*',
-                  Referer: 'https://bidplus.gem.gov.in/',
-                },
+                uri: localPdfUri,
+                cache: false,
               }}
               trustAllCerts={false}
               fitPolicy={0}
@@ -567,8 +653,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                     ? err.message
                     : typeof err === 'string'
                       ? err
-                      : `Unable to fetch the PDF from ${sourceHost}.`;
+                      : `Unable to render the PDF from ${sourceHost}.`;
                 const trimmedMsg = msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
+                void LocalPdfScanner.invalidateLocalPdfCache(selectedDocument.url);
                 if (/not in pdf format|corrupted|cannot create document|invalid pdf/i.test(msg)) {
                   void probeActualDocumentFormat(selectedDocument.url, trimmedMsg);
                 } else {
@@ -576,16 +663,11 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                 }
               }}
               style={styles.pdf}
-              renderActivityIndicator={(progress) => (
+              renderActivityIndicator={() => (
                 <View style={[styles.loadingState, { backgroundColor: colors.background }]}>
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>
-                    Loading {selectedDocument.label}…
-                  </Text>
-                  <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                    {progress > 0
-                      ? `${Math.round(progress * 100)}% downloaded directly from ${sourceHost}`
-                      : `Connecting directly to ${sourceHost}`}
+                    Rendering {selectedDocument.label}…
                   </Text>
                 </View>
               )}
@@ -873,6 +955,16 @@ const styles = StyleSheet.create({
   },
   loadingTitle: { fontSize: 15, fontWeight: '700', marginTop: 12, textAlign: 'center' },
   loadingText: { fontSize: 12, marginTop: 4, textAlign: 'center' },
+  slowOpenBtn: {
+    marginTop: 18,
+    paddingHorizontal: 16,
+    minHeight: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slowOpenBtnText: { fontSize: 13, fontWeight: '600' },
   errorState: {
     flex: 1,
     alignItems: 'center',

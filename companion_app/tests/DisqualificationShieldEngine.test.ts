@@ -167,5 +167,68 @@ describe('DisqualificationShieldEngine - Pre-Bid Disqualification Protection', (
 
     assert.ok(report.generatedTemplates.oemMafRequest);
     assert.ok(report.generatedTemplates.oemMafRequest.includes('MANUFACTURER AUTHORIZATION FORM'));
+    assert.ok(!report.generatedTemplates.miiSelfDeclaration.includes('Industrial Area, Phase-II'));
+  });
+
+  it('flags non-exempt EMD for MSE sellers instead of silently hiding the EMD check', () => {
+    const railwayServiceTender: ExtractedGeMTenderDetails = {
+      ...sampleTender,
+      bidNumber: 'GEM/2026/B/8214903',
+      title: 'Facility Management Service - Outcome Based',
+      emdAmountInr: 191390,
+      isEmdExemptForMse: false,
+      mseExemptionForExpAndTurnover: false,
+      miiPurchasePreference: false,
+      miiLocalContentPercentage: undefined,
+      requiresMiiDeclaration: false,
+      requiresOemAuthorization: false,
+    };
+
+    const report = DisqualificationShieldEngine.evaluateShield(
+      railwayServiceTender,
+      baseProfile,
+      [],
+      { isServiceTender: true }
+    );
+    const emdCheck = report.checks.find((c) => c.category === 'EMD');
+    assert.ok(emdCheck, 'EMD check must still be reported for MSE when buyer disabled MSE exemption');
+    assert.equal(emdCheck.severity, 'WARNING');
+    assert.ok(emdCheck.reason.includes('1,91,390'));
+  });
+
+  it('allows MSE Service Provider EMD exemption on service tenders and matches generic scan filenames via extractedTags', () => {
+    const exemptServiceTender: ExtractedGeMTenderDetails = {
+      ...sampleTender,
+      title: 'Monthly Basis Cab & Taxi Hiring Services',
+      emdAmountInr: 26600,
+      isEmdExemptForMse: true,
+      requiresOemAuthorization: false,
+    };
+
+    const genericScanDocs: WorkspaceDocument[] = [
+      {
+        id: 'scan-1',
+        name: 'IMG_20261128_001.pdf',
+        uri: 'file:///data/scan1.pdf',
+        addedAtUtc: new Date().toISOString(),
+        kind: 'COMPLIANCE',
+        source: 'DEVICE_PICKER',
+        persistence: 'PERSISTED',
+        extractedTags: ['MII_DECLARATION', 'CA_UDIN_TURNOVER', 'CRAC_EXPERIENCE', 'GST_STATUTORY'],
+        hasVerifiedUdin: true,
+      },
+    ];
+
+    const report = DisqualificationShieldEngine.evaluateShield(
+      exemptServiceTender,
+      baseProfile, // non-OEM MSE
+      genericScanDocs,
+      { isServiceTender: true }
+    );
+    const emdCheck = report.checks.find((c) => c.category === 'EMD');
+    assert.ok(emdCheck);
+    assert.equal(emdCheck.severity, 'PASS');
+    assert.ok(emdCheck.title.includes('Service Provider'));
+    assert.equal(report.overallStatus, 'BATTLE_READY');
   });
 });

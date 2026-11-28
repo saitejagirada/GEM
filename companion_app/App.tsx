@@ -101,8 +101,9 @@ const MainAppContent: React.FC = () => {
   const [lookupInput, setLookupInput] = useState<string>('');
   const [isLookingUp, setIsLookingUp] = useState<boolean>(false);
   const [selectedBid, setSelectedBid] = useState<DeconstructedBidDoc | null>(null);
-  const [preparationBidNumber, setPreparationBidNumber] = useState<string>('');
-  const [workInitialSection, setWorkInitialSection] = useState<PreparationSection>('LIVE');
+  const [preparationBid, setPreparationBid] = useState<DeconstructedBidDoc | null>(null);
+  const [preparedBids, setPreparedBids] = useState<DeconstructedBidDoc[]>([]);
+  const [workInitialSection, setWorkInitialSection] = useState<PreparationSection>('DOCUMENTS');
 
   // Dismiss branded GeM splash smoothly after brief launch reveal
   useEffect(() => {
@@ -249,10 +250,25 @@ const MainAppContent: React.FC = () => {
 
   const openPreparation = useCallback((bid: DeconstructedBidDoc) => {
     setSelectedBid(null);
-    setPreparationBidNumber(bid.bidNumber);
+    setPreparationBid(bid);
+    setPreparedBids((prev) => [
+      bid,
+      ...prev.filter((item) => item.bidNumber !== bid.bidNumber),
+    ].slice(0, 15));
     setWorkInitialSection('DOCUMENTS');
     setSubScreen('PORTFOLIO');
   }, []);
+
+  const mergedPreparationBids = React.useMemo(() => {
+    const seen = new Set<string>();
+    const combined: DeconstructedBidDoc[] = [];
+    for (const item of [...preparedBids, ...bids]) {
+      if (!item?.bidNumber || seen.has(item.bidNumber)) continue;
+      seen.add(item.bidNumber);
+      combined.push(item);
+    }
+    return combined;
+  }, [preparedBids, bids]);
 
   const handleHomeNavigate = (target: string, params?: HomeNavigateParams) => {
     if (target === 'MARKET') {
@@ -447,8 +463,9 @@ const MainAppContent: React.FC = () => {
               </Text>
             </View>
             <MyWorkScreen
-              availableBids={bids}
-              initialBidNumber={preparationBidNumber}
+              availableBids={mergedPreparationBids}
+              initialBid={preparationBid}
+              initialBidNumber={preparationBid?.bidNumber}
               initialSection={workInitialSection}
               onOpenOfficialPortal={() => setSubScreen('PORTAL')}
             />
@@ -502,7 +519,7 @@ const MainAppContent: React.FC = () => {
               <MoreProfileScreen
                 onNavigateTab={handleHomeNavigate}
                 onOpenPortfolio={() => {
-                  setWorkInitialSection('LIVE');
+                  setWorkInitialSection('DOCUMENTS');
                   setSubScreen('PORTFOLIO');
                 }}
                 onOpenCompanyLocker={() => {

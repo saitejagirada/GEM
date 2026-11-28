@@ -8,9 +8,15 @@
  */
 
 import type { WorkspaceDocument } from '../types/index.ts';
+import {
+  CompanyDocExtractor,
+  type CompanyDocContentTag,
+  type ExtractedCompanyDocInfo,
+} from './CompanyDocExtractor.ts';
 
 const LOCKER_STORAGE_KEY = '@gem-mobile-companion/company-doc-locker-v1';
 const LOCKER_DIR = 'gem-company-locker/';
+const MAX_MULTI_SLOT_DOCS = 8;
 
 export type CompanyDocSlotId =
   | 'GST'
@@ -28,6 +34,7 @@ export interface CompanyDocSlotMeta {
   hint: string;
   matchKeywords: RegExp;
   syntheticFilenameToken: string;
+  allowMultiple?: boolean;
 }
 
 export interface CompanyLockerDocument {
@@ -40,6 +47,8 @@ export interface CompanyLockerDocument {
   addedAtUtc: string;
   expiresAtIso?: string; // Optional YYYY-MM-DD expiry reminder
   persistence: 'PERSISTED' | 'SESSION_ONLY';
+  /** Structured facts extracted locally on-device from this PDF (zero upload). */
+  extracted?: ExtractedCompanyDocInfo;
 }
 
 export type ExpiryStatus = 'NONE' | 'VALID' | 'EXPIRING_SOON' | 'EXPIRED';
@@ -77,7 +86,7 @@ export const COMPANY_LOCKER_SLOTS: readonly CompanyDocSlotMeta[] = [
     id: 'GST',
     title: 'GST Registration Certificate',
     shortTag: 'GST',
-    hint: 'REG-06 certificate required across almost all GeM bids',
+    hint: 'REG-06 PDF — auto-reads Firm Name, GSTIN & State',
     matchKeywords: /\b(gst|gstin|tax\s*registration|statutory)\b/i,
     syntheticFilenameToken: 'GST_Registration_Certificate',
   },
@@ -85,7 +94,7 @@ export const COMPANY_LOCKER_SLOTS: readonly CompanyDocSlotMeta[] = [
     id: 'PAN',
     title: 'Company / Proprietor PAN',
     shortTag: 'PAN',
-    hint: 'Permanent Account Number copy for statutory compliance',
+    hint: 'Permanent Account Number copy for statutory verification',
     matchKeywords: /\b(pan\b|income\s*tax|statutory)\b/i,
     syntheticFilenameToken: 'PAN_Card_Registration',
   },
@@ -93,15 +102,15 @@ export const COMPANY_LOCKER_SLOTS: readonly CompanyDocSlotMeta[] = [
     id: 'UDYAM',
     title: 'Udyam MSME / Startup Certificate',
     shortTag: 'UDYAM',
-    hint: 'Unlocks MSE purchase preference & OEM EMD exemption checks',
-    matchKeywords: /\b(udyam|msme|mse|startup|dpiit|exemption|registration)\b/i,
+    hint: 'Auto-reads Micro/Small/Medium tier & Manufacturer/Service activity',
+    matchKeywords: /\b(udyam|msme|mse\b|startup|dpiit|mse\s+exemption)\b/i,
     syntheticFilenameToken: 'Udyam_MSME_Registration_Certificate',
   },
   {
     id: 'TURNOVER',
     title: '3-Yr Audited Turnover / CA UDIN',
     shortTag: 'CA UDIN',
-    hint: 'Audited balance sheets or CA Average Annual Turnover certificate',
+    hint: 'Auto-reads Average Annual Turnover (₹) & verifies 18-char UDIN',
     matchKeywords: /\b(turnover|auditor|audited|balance\s*sheet|ca\s*cert|udin|financial|itr)\b/i,
     syntheticFilenameToken: 'CA_Turnover_Certificate_UDIN',
   },
@@ -109,27 +118,42 @@ export const COMPANY_LOCKER_SLOTS: readonly CompanyDocSlotMeta[] = [
     id: 'EXPERIENCE',
     title: 'Past GeM Contracts & CRACs',
     shortTag: 'CRAC',
-    hint: 'Executed government/PSU orders & CRAC completion proofs',
+    hint: 'Store multiple executed GeM/PSU contracts & CRAC completion proofs',
     matchKeywords: /\b(experience|past\s*performance|crac|contract|completion|work\s*order|supply\s*order)\b/i,
     syntheticFilenameToken: 'Past_Orders_CRAC_Experience',
+    allowMultiple: true,
   },
   {
     id: 'ISO_QUALITY',
     title: 'ISO / BIS / Quality Certificates',
     shortTag: 'ISO / BIS',
-    hint: 'ISO 9001, BIS/ISI license, NABL test report, or FSSAI',
-    matchKeywords: /\b(iso|bis|isi|nabl|quality|certificate\s*\(requested|atc|test\s*report|fssai)\b/i,
+    hint: 'Store multiple ISO, BIS/ISI, NABL, or FSSAI certificates with expiry alerts',
+    matchKeywords: /\b(iso\s*\d*|bis\b|isi\s*mark|nabl|quality\s*cert|test\s*report|fssai|ce\s*cert|rohs)\b/i,
     syntheticFilenameToken: 'ISO_BIS_Quality_Certificate',
+    allowMultiple: true,
   },
   {
     id: 'BANK_MANDATE',
     title: 'Cancelled Cheque / Bank Mandate',
     shortTag: 'BANK',
     hint: 'Bank account & IFSC verification for PFMS disbursements',
-    matchKeywords: /\b(bank|cheque|mandate|neft|rtgs|pfms|emd)\b/i,
+    matchKeywords: /\b(bank\s*(?:mandate|detail|account)|cancelled\s*cheque|mandate|neft|rtgs|pfms)\b/i,
     syntheticFilenameToken: 'Bank_Mandate_Cancelled_Cheque',
   },
 ];
+
+const CONTENT_TAG_TO_REQ_REGEX: Record<CompanyDocContentTag, RegExp> = {
+  GST_STATUTORY: /\b(gst|gstin|tax\s*registration|statutory)\b/i,
+  PAN_STATUTORY: /\b(pan\b|income\s*tax|statutory)\b/i,
+  UDYAM_MSME: /\b(udyam|msme|mse\b|startup|dpiit)\b/i,
+  CA_UDIN_TURNOVER: /\b(turnover|auditor|audited|balance\s*sheet|ca\s*cert|udin|financial|itr)\b/i,
+  CRAC_EXPERIENCE: /\b(experience|past\s*performance|crac|contract|completion|work\s*order|supply\s*order)\b/i,
+  ISO_QUALITY: /\b(iso\s*\d*|bis\b|isi\s*mark|nabl|quality\s*cert|test\s*report|fssai)\b/i,
+  BANK_MANDATE: /\b(bank\s*(?:mandate|detail|account)|cancelled\s*cheque|neft|rtgs|pfms)\b/i,
+  MII_DECLARATION: /\b(mii|make\s*in\s*india|local\s*content|class[\s\-]*[12i]+)\b/i,
+  OEM_MAF: /\b(oem|maf\b|manufacturer\s*authorization|authorized\s*dealer)\b/i,
+  EMD_PROOF: /\b(emd|earnest\s*money|bank\s*guarantee|e-?bg|challan|fdr)\b/i,
+};
 
 type LockerListener = (docs: CompanyLockerDocument[]) => void;
 
@@ -188,6 +212,14 @@ export class CompanyDocLockerService {
     return this.docs.find((d) => d.slotId === slotId);
   }
 
+  public static getDocumentsForSlot(slotId: CompanyDocSlotId): CompanyLockerDocument[] {
+    return this.docs.filter((d) => d.slotId === slotId);
+  }
+
+  public static getFilledSlotCount(docs: CompanyLockerDocument[] = this.docs): number {
+    return new Set(docs.map((d) => d.slotId)).size;
+  }
+
   public static getExpiryStatus(expiresAtIso?: string, now = new Date()): ExpiryStatus {
     if (!expiresAtIso || !/^\d{4}-\d{2}-\d{2}$/.test(expiresAtIso.trim())) return 'NONE';
     const expiry = new Date(`${expiresAtIso.trim()}T23:59:59Z`);
@@ -229,13 +261,16 @@ export class CompanyDocLockerService {
   public static async saveSlotDocument(
     slotId: CompanyDocSlotId,
     asset: PickedLockerAsset,
-    expiresAtIso?: string
+    expiresAtIso?: string,
+    preExtracted?: ExtractedCompanyDocInfo
   ): Promise<CompanyLockerDocument> {
     const storage = await this.getStorage();
     const fs = await this.getFileSystem();
     const docDir = fs?.documentDirectory?.replace(/\/?$/, '/');
+    const slotMeta = COMPANY_LOCKER_SLOTS.find((s) => s.id === slotId);
+    const isMultiSlot = Boolean(slotMeta?.allowMultiple);
 
-    const id = `locker-${slotId.toLowerCase()}-${Date.now()}`;
+    const id = `locker-${slotId.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
     let uri = asset.uri;
     let persistence: 'PERSISTED' | 'SESSION_ONLY' = 'SESSION_ONLY';
 
@@ -251,11 +286,22 @@ export class CompanyDocLockerService {
       }
     }
 
-    // Remove previous copy in the same slot if present
-    const previous = this.docs.find((d) => d.slotId === slotId);
-    if (previous && fs && docDir && previous.uri.startsWith(docDir + LOCKER_DIR)) {
-      await fs.deleteAsync(previous.uri, { idempotent: true }).catch(() => undefined);
+    // Run local on-device PDF extraction unless caller already supplied extracted metadata
+    const extracted =
+      preExtracted ??
+      (await CompanyDocExtractor.extractFromLocalFile(uri, asset.mimeType, asset.name, slotId).catch(
+        () => undefined
+      ));
+
+    // Remove previous copy ONLY for single-file slots (multi-file slots append up to MAX_MULTI_SLOT_DOCS)
+    if (!isMultiSlot) {
+      const previous = this.docs.find((d) => d.slotId === slotId);
+      if (previous && fs && docDir && previous.uri.startsWith(docDir + LOCKER_DIR)) {
+        await fs.deleteAsync(previous.uri, { idempotent: true }).catch(() => undefined);
+      }
     }
+
+    const effectiveExpiry = expiresAtIso?.trim() || extracted?.validUntilIso || undefined;
 
     const record: CompanyLockerDocument = {
       id,
@@ -265,11 +311,23 @@ export class CompanyDocLockerService {
       mimeType: asset.mimeType,
       sizeBytes: asset.size,
       addedAtUtc: new Date().toISOString(),
-      expiresAtIso: expiresAtIso?.trim() || undefined,
+      expiresAtIso: effectiveExpiry,
       persistence,
+      ...(extracted && (extracted.hasReadableText || extracted.highlights.length > 0)
+        ? { extracted }
+        : {}),
     };
 
-    this.docs = [record, ...this.docs.filter((d) => d.slotId !== slotId)];
+    if (isMultiSlot) {
+      const sameSlot = [record, ...this.docs.filter((d) => d.slotId === slotId)].slice(
+        0,
+        MAX_MULTI_SLOT_DOCS
+      );
+      const otherSlots = this.docs.filter((d) => d.slotId !== slotId);
+      this.docs = [...sameSlot, ...otherSlots];
+    } else {
+      this.docs = [record, ...this.docs.filter((d) => d.slotId !== slotId)];
+    }
     this.hydrated = true;
 
     if (storage) {
@@ -280,10 +338,16 @@ export class CompanyDocLockerService {
     return record;
   }
 
-  public static async updateExpiry(slotId: CompanyDocSlotId, expiresAtIso?: string): Promise<void> {
+  public static async updateExpiry(
+    slotIdOrDocId: CompanyDocSlotId | string,
+    expiresAtIso?: string
+  ): Promise<void> {
     const clean = expiresAtIso?.trim() || undefined;
+    const matchById = this.docs.some((d) => d.id === slotIdOrDocId);
     this.docs = this.docs.map((d) =>
-      d.slotId === slotId ? { ...d, expiresAtIso: clean } : d
+      (matchById ? d.id === slotIdOrDocId : d.slotId === slotIdOrDocId)
+        ? { ...d, expiresAtIso: clean }
+        : d
     );
     const storage = await this.getStorage();
     if (storage) {
@@ -292,12 +356,32 @@ export class CompanyDocLockerService {
     this.emit();
   }
 
-  public static async removeSlotDocument(slotId: CompanyDocSlotId): Promise<void> {
-    const existing = this.docs.find((d) => d.slotId === slotId);
+  public static async removeDocumentById(docId: string): Promise<void> {
+    const existing = this.docs.find((d) => d.id === docId);
     const fs = await this.getFileSystem();
     const docDir = fs?.documentDirectory?.replace(/\/?$/, '/');
     if (existing && fs && docDir && existing.uri.startsWith(docDir + LOCKER_DIR)) {
       await fs.deleteAsync(existing.uri, { idempotent: true }).catch(() => undefined);
+    }
+
+    this.docs = this.docs.filter((d) => d.id !== docId);
+    const storage = await this.getStorage();
+    if (storage) {
+      await storage.setItem(LOCKER_STORAGE_KEY, JSON.stringify(this.docs)).catch(() => undefined);
+    }
+    this.emit();
+  }
+
+  public static async removeSlotDocument(slotId: CompanyDocSlotId): Promise<void> {
+    const matching = this.docs.filter((d) => d.slotId === slotId);
+    const fs = await this.getFileSystem();
+    const docDir = fs?.documentDirectory?.replace(/\/?$/, '/');
+    if (fs && docDir) {
+      await Promise.all(
+        matching
+          .filter((doc) => doc.uri.startsWith(docDir + LOCKER_DIR))
+          .map((doc) => fs.deleteAsync(doc.uri, { idempotent: true }).catch(() => undefined))
+      );
     }
 
     this.docs = this.docs.filter((d) => d.slotId !== slotId);
@@ -309,8 +393,9 @@ export class CompanyDocLockerService {
   }
 
   /**
-   * Projects active non-expired Company Locker files as synthetic WorkspaceDocuments
-   * so DisqualificationShieldEngine automatically credits reusable GST/Udyam/Turnover/CRAC proofs.
+   * Projects active non-expired Company Locker files as WorkspaceDocuments
+   * (with extracted on-device PDF tags & UDIN flags) so DisqualificationShieldEngine
+   * validates real compliance proofs rather than relying blindly on filenames.
    */
   public static toWorkspaceDocuments(
     lockerDocs: CompanyLockerDocument[] = this.docs,
@@ -321,6 +406,26 @@ export class CompanyDocLockerService {
       .map((doc) => {
         const slot = COMPANY_LOCKER_SLOTS.find((s) => s.id === doc.slotId);
         const token = slot?.syntheticFilenameToken || doc.slotId;
+        const slotDefaultTag: CompanyDocContentTag | undefined =
+          doc.slotId === 'GST'
+            ? 'GST_STATUTORY'
+            : doc.slotId === 'PAN'
+              ? 'PAN_STATUTORY'
+              : doc.slotId === 'UDYAM'
+                ? 'UDYAM_MSME'
+                : doc.slotId === 'TURNOVER'
+                  ? 'CA_UDIN_TURNOVER'
+                  : doc.slotId === 'EXPERIENCE'
+                    ? 'CRAC_EXPERIENCE'
+                    : doc.slotId === 'ISO_QUALITY'
+                      ? 'ISO_QUALITY'
+                      : 'BANK_MANDATE';
+        const mergedTags = Array.from(
+          new Set([
+            ...(slotDefaultTag ? [slotDefaultTag] : []),
+            ...(doc.extracted?.detectedTags || []),
+          ])
+        );
         return {
           id: doc.id,
           name: `${token}_${doc.name}`,
@@ -331,13 +436,17 @@ export class CompanyDocLockerService {
           kind: doc.slotId === 'EXPERIENCE' ? 'TECHNICAL' : 'COMPLIANCE',
           source: 'DEVICE_PICKER',
           persistence: doc.persistence,
+          extractedTags: mergedTags,
+          extractedHighlights: doc.extracted?.highlights,
+          hasVerifiedUdin: doc.extracted?.hasUdin,
         };
       });
   }
 
   /**
    * Auto-matches tender required document names against BOTH Company Locker slots
-   * and bid-specific uploaded files so sellers instantly see how many docs are already ready.
+   * (including PDF-extracted content tags) and bid-specific uploaded files so sellers
+   * instantly see what is already covered vs. what still needs to be prepared.
    */
   public static matchBidChecklistWithLocker(
     requiredDocuments: string[] = [],
@@ -352,27 +461,38 @@ export class CompanyDocLockerService {
     const matchedFromBidFiles: Array<{ requirement: string; fileName: string }> = [];
     const missingRequirements: string[] = [];
 
+    const matchesByContentTag = (tags: string[] | undefined, req: string): boolean => {
+      if (!tags || tags.length === 0) return false;
+      return tags.some((tag) => {
+        const rx = CONTENT_TAG_TO_REQ_REGEX[tag as CompanyDocContentTag];
+        return Boolean(rx && rx.test(req));
+      });
+    };
+
     for (const req of requiredDocuments) {
       const reqLower = req.toLowerCase();
+      const tokens = reqLower
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 4 && !/^(requested|certificate|document|additional|criteria|from|seller|with)$/.test(t));
 
-      // 1. Check bid-specific files first
+      // 1. Check bid-specific files first (both PDF-extracted tags and filename tokens)
       const bidFile = bidSpecificDocs.find((d) => {
+        if (matchesByContentTag(d.extractedTags, req)) return true;
         const n = (d.name || '').toLowerCase();
-        const tokens = reqLower.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-        return tokens.some((tok) => n.includes(tok));
+        return tokens.length > 0 && tokens.some((tok) => n.includes(tok));
       });
       if (bidFile) {
         matchedFromBidFiles.push({ requirement: req, fileName: bidFile.name });
         continue;
       }
 
-      // 2. Auto-match against reusable Company Locker slots
+      // 2. Auto-match against reusable Company Locker slots (keywords + extracted PDF tags)
       const lockerMatch = activeLocker.find((doc) => {
         const slot = COMPANY_LOCKER_SLOTS.find((s) => s.id === doc.slotId);
         if (slot && slot.matchKeywords.test(req)) return true;
+        if (matchesByContentTag(doc.extracted?.detectedTags, req)) return true;
         const n = doc.name.toLowerCase();
-        const tokens = reqLower.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-        return tokens.some((tok) => n.includes(tok));
+        return tokens.length > 0 && tokens.some((tok) => n.includes(tok));
       });
 
       if (lockerMatch) {
