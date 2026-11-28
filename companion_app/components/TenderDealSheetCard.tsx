@@ -462,7 +462,7 @@ export const TenderDealSheetCard: React.FC<TenderDealSheetCardProps> = ({
               style={[styles.shareBtn, { backgroundColor: colors.success }]}
               onPress={handleShare}
             >
-              <Text style={[styles.shareBtnText, { color: '#FFFFFF' }]}>
+              <Text style={[styles.shareBtnText, { color: colors.textInverse }]}>
                 Share {audience === 'PARTNER' ? 'Brief' : audience === 'OEM' ? 'to OEM' : 'to CA'} ↗
               </Text>
             </Pressable>

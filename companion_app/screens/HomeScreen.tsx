@@ -62,11 +62,18 @@ export interface HomeScreenProps {
 
 const SEARCH_FILTER_PILLS = ['All', 'Products', 'Services', 'Bids', 'Contracts'];
 
-const POPULAR_CATEGORIES = [
-  { id: 'cat-it', name: 'Computers & IT', marketCategory: 'IT Products', desc: 'Laptops, servers & peripherals', code: 'IT', color: '#0B4F71', tint: '#EAF2F6' },
-  { id: 'cat-med', name: 'Medical & Healthcare', marketCategory: 'Medical Products', desc: 'Hospital equipment & consumables', code: 'MED', color: '#0B7A3B', tint: '#E8F4EC' },
-  { id: 'cat-off', name: 'Office & Furniture', marketCategory: 'Furniture', desc: 'Desks, chairs & stationery', code: 'OFF', color: '#9A5B00', tint: '#FFF4DF' },
-  { id: 'cat-veh', name: 'Vehicles & Fleet', marketCategory: 'Automobiles', desc: 'Vehicles and transport equipment', code: 'VEH', color: '#49627A', tint: '#EDF1F4' },
+const POPULAR_CATEGORIES: {
+  id: string;
+  name: string;
+  marketCategory: string;
+  desc: string;
+  code: string;
+  tone: 'primary' | 'success' | 'warning' | 'violet';
+}[] = [
+  { id: 'cat-it', name: 'Computers & IT', marketCategory: 'IT Products', desc: 'Laptops, servers & peripherals', code: 'IT', tone: 'primary' },
+  { id: 'cat-med', name: 'Medical & Healthcare', marketCategory: 'Medical Products', desc: 'Hospital equipment & consumables', code: 'MED', tone: 'success' },
+  { id: 'cat-off', name: 'Office & Furniture', marketCategory: 'Furniture', desc: 'Desks, chairs & stationery', code: 'OFF', tone: 'warning' },
+  { id: 'cat-veh', name: 'Vehicles & Fleet', marketCategory: 'Automobiles', desc: 'Vehicles and transport equipment', code: 'VEH', tone: 'violet' },
 ];
 
 function getShortCountdown(closingTimeUtc: string): { label: string; urgent: boolean; closed: boolean } {
@@ -967,30 +974,48 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           onAction={() => onNavigateTab('CATEGORIES')}
         />
         <View style={styles.categoryList}>
-          {POPULAR_CATEGORIES.map((cat) => (
-            <Pressable
-              key={cat.id}
-              unstable_pressDelay={0}
-              hitSlop={6}
-              style={[
-                styles.categoryRowItem,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-              onPress={() => onNavigateTab('MARKET', { category: cat.marketCategory, typeTab: 'Products' })}
-            >
-              <View style={[styles.categoryIconSquare, { backgroundColor: cat.tint }]}>
-                <Text style={[styles.categoryCode, { color: cat.color }]}>{cat.code}</Text>
-              </View>
-              <View style={styles.categoryInfo}>
-                <Text style={[styles.categoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
-                <Text style={[styles.categoryDesc, { color: colors.textSecondary }]}>{cat.desc}</Text>
-              </View>
-              <View style={styles.categoryEndCol}>
-                <Text style={[styles.categoryCount, { color: colors.textMuted }]}>Browse</Text>
-                <Text style={[styles.chevronText, { color: colors.textMuted }]}>›</Text>
-              </View>
-            </Pressable>
-          ))}
+          {POPULAR_CATEGORIES.map((cat) => {
+            const catTint =
+              cat.tone === 'success'
+                ? colors.successTint
+                : cat.tone === 'warning'
+                  ? colors.warningTint
+                  : cat.tone === 'violet'
+                    ? colors.violetTint
+                    : colors.primaryTint;
+            const catColor =
+              cat.tone === 'success'
+                ? colors.success
+                : cat.tone === 'warning'
+                  ? colors.warning
+                  : cat.tone === 'violet'
+                    ? colors.violet
+                    : colors.primary;
+            return (
+              <Pressable
+                key={cat.id}
+                unstable_pressDelay={0}
+                hitSlop={6}
+                style={[
+                  styles.categoryRowItem,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                onPress={() => onNavigateTab('MARKET', { category: cat.marketCategory, typeTab: 'Products' })}
+              >
+                <View style={[styles.categoryIconSquare, { backgroundColor: catTint }]}>
+                  <Text style={[styles.categoryCode, { color: catColor }]}>{cat.code}</Text>
+                </View>
+                <View style={styles.categoryInfo}>
+                  <Text style={[styles.categoryName, { color: colors.textPrimary }]}>{cat.name}</Text>
+                  <Text style={[styles.categoryDesc, { color: colors.textSecondary }]}>{cat.desc}</Text>
+                </View>
+                <View style={styles.categoryEndCol}>
+                  <Text style={[styles.categoryCount, { color: colors.textMuted }]}>Browse</Text>
+                  <Text style={[styles.chevronText, { color: colors.textMuted }]}>›</Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 

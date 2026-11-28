@@ -92,6 +92,7 @@ const MainAppContent: React.FC = () => {
   const [marketNavTypeTab, setMarketNavTypeTab] = useState<'Products' | 'Services' | undefined>();
   const [marketNavTrigger, setMarketNavTrigger] = useState<number>(0);
   const [bidsNavSearch, setBidsNavSearch] = useState<string | undefined>();
+  const [bidsNavRailwaysOnly, setBidsNavRailwaysOnly] = useState<boolean>(false);
   const [bidsNavTrigger, setBidsNavTrigger] = useState<number>(0);
   const [contractsNavSearch, setContractsNavSearch] = useState<string | undefined>();
 
@@ -261,9 +262,19 @@ const MainAppContent: React.FC = () => {
       setMarketNavTrigger((n) => n + 1);
       setActiveTab('SEARCH');
       setSubScreen('NONE');
+    } else if (target === 'RAILWAYS') {
+      setBidsNavSearch('');
+      setBidsNavRailwaysOnly(true);
+      setBidsNavTrigger((n) => n + 1);
+      setActiveTab('BIDS');
+      setSubScreen('NONE');
     } else if (target === 'BIDS') {
+      setBidsNavRailwaysOnly(false);
       if (params?.search !== undefined) {
         setBidsNavSearch(params.search);
+        setBidsNavTrigger((n) => n + 1);
+      } else {
+        setBidsNavSearch('');
         setBidsNavTrigger((n) => n + 1);
       }
       setActiveTab('BIDS');
@@ -476,6 +487,7 @@ const MainAppContent: React.FC = () => {
               <BidsHubScreen
                 bids={bids}
                 initialSearch={bidsNavSearch}
+                initialRailwaysOnly={bidsNavRailwaysOnly}
                 navTrigger={bidsNavTrigger}
                 onSyncLive={loadData}
                 isSyncing={isSyncing}

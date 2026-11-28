@@ -102,6 +102,11 @@ interface SessionScopeSnapshot {
   catalogSource: MarketplaceStreamSource;
 }
 
+// Module-level session caches so switching tabs away from Search & returning renders in 0ms
+const MODULE_SESSION_CACHE = new Map<string, SessionScopeSnapshot>();
+const MODULE_SEEN_ITEMS_BY_ID = new Map<string, MarketplaceItem>();
+let MODULE_SERVICES_DIR_CACHE: { services: LiveGeMServiceSummary[]; total: number } | null = null;
+
 /**
  * Live-verified real GeM service images (`assets-mkpbg.gem.gov.in`) for the
  * horizontal visual Services category strip.
@@ -369,13 +374,13 @@ const ProductGridCard = React.memo<ProductGridCardProps>(
           </View>
 
           <Pressable
-            style={styles.saveCornerBtn}
+            style={[styles.saveCornerBtn, { backgroundColor: colors.surface }]}
             unstable_pressDelay={0}
             hitSlop={8}
             onPress={() => onToggleSave(item.id)}
             accessibilityLabel={isSaved ? 'Remove bookmark' : 'Bookmark product'}
           >
-            <Text style={[styles.saveCornerText, { color: isSaved ? colors.primary : '#64748B' }]}>
+            <Text style={[styles.saveCornerText, { color: isSaved ? colors.primary : colors.textSecondary }]}>
               {isSaved ? '★' : '☆'}
             </Text>
           </Pressable>
@@ -501,6 +506,7 @@ interface ServiceCategoryTileProps {
 const ServiceCategoryTile = React.memo<ServiceCategoryTileProps>(
   ({ config, selected, colors, onSelect }) => {
     const [imgFailed, setImgFailed] = useState(false);
+    const [imgLoaded, setImgLoaded] = useState(false);
     return (
       <Pressable
         onPress={() => onSelect(config.id)}
@@ -514,24 +520,28 @@ const ServiceCategoryTile = React.memo<ServiceCategoryTileProps>(
           style={[
             styles.srvCatPhotoFrame,
             {
-              backgroundColor: imgFailed ? colors.surfaceSubtle : '#FFFFFF',
+              backgroundColor: imgFailed || !imgLoaded ? colors.surfaceSubtle : '#FFFFFF',
               borderColor: selected ? colors.primary : colors.borderSubtle,
               borderWidth: selected ? 2 : 1,
             },
           ]}
         >
+          {(!imgLoaded || imgFailed) && (
+            <View style={styles.srvPlaceholderOverlay}>
+              <Text style={[styles.catFallbackText, { color: colors.primary }]}>
+                {config.label.slice(0, 3).toUpperCase()}
+              </Text>
+            </View>
+          )}
           {!imgFailed ? (
             <Image
               source={{ uri: config.imageUrl }}
-              style={styles.srvCatPhotoImg}
+              style={[styles.srvCatPhotoImg, !imgLoaded && { opacity: 0 }]}
               resizeMode="contain"
+              onLoad={() => setImgLoaded(true)}
               onError={() => setImgFailed(true)}
             />
-          ) : (
-            <Text style={[styles.catFallbackText, { color: colors.primary }]}>
-              {config.label.slice(0, 3).toUpperCase()}
-            </Text>
-          )}
+          ) : null}
         </View>
         <Text
           style={[
@@ -574,6 +584,7 @@ interface ServiceGridCardProps {
 const ServiceGridCard = React.memo<ServiceGridCardProps>(
   ({ item, colors, fontMultiplier, onOpen }) => {
     const [imgFailed, setImgFailed] = useState(false);
+    const [imgLoaded, setImgLoaded] = useState(false);
 
     return (
       <Pressable
@@ -588,19 +599,33 @@ const ServiceGridCard = React.memo<ServiceGridCardProps>(
         unstable_pressDelay={0}
         onPress={() => onOpen(item)}
       >
-        <View style={[styles.srvImageBox, { backgroundColor: '#FFFFFF', borderBottomColor: colors.borderSubtle }]}>
+        <View
+          style={[
+            styles.srvImageBox,
+            {
+              backgroundColor: imgLoaded && !imgFailed ? '#FFFFFF' : colors.surfaceSubtle,
+              borderBottomColor: colors.borderSubtle,
+            },
+          ]}
+        >
+          {(!imgLoaded || imgFailed || !item.imageUrl) && (
+            <View style={styles.srvPlaceholderOverlay}>
+              <View style={[styles.srvPlaceholderBadge, { backgroundColor: colors.primaryTint }]}>
+                <Text style={[styles.srvPlaceholderBadgeText, { color: colors.primary }]}>
+                  {item.categoryTag.slice(0, 3).toUpperCase()}
+                </Text>
+              </View>
+            </View>
+          )}
           {item.imageUrl && !imgFailed ? (
             <Image
               source={{ uri: item.imageUrl }}
-              style={styles.srvCardImg}
+              style={[styles.srvCardImg, !imgLoaded && { opacity: 0 }]}
               resizeMode="contain"
+              onLoad={() => setImgLoaded(true)}
               onError={() => setImgFailed(true)}
             />
-          ) : (
-            <View style={styles.gridThumbFallback}>
-              <Text style={[styles.gridThumbLabel, { color: colors.primary }]}>GeM</Text>
-            </View>
-          )}
+          ) : null}
           <View style={[styles.srvTagOverlay, { backgroundColor: 'rgba(15, 23, 42, 0.72)' }]}>
             <Text style={styles.srvTagOverlayText} numberOfLines={1}>
               {item.categoryTag}
@@ -644,7 +669,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   navTrigger,
   onPrepareDocuments,
 }) => {
-  const { colors, fontMultiplier } = useTheme();
+  const { colors, fontMultiplier, t } = useTheme();
 
   // Top-level tab: Products (default visual storefront) vs Services (380+ live directory)
   const [activeTypeTab, setActiveTypeTab] = useState<'Products' | 'Services'>('Products');
@@ -664,8 +689,12 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
 
   // Services explorer state (loads all 380+ live GeM services with real photos)
   const [serviceFilter, setServiceFilter] = useState<ServiceFilterChip>('Popular');
-  const [liveDirectoryServices, setLiveDirectoryServices] = useState<LiveGeMServiceSummary[]>([]);
-  const [liveDirectoryTotal, setLiveDirectoryTotal] = useState<number>(0);
+  const [liveDirectoryServices, setLiveDirectoryServices] = useState<LiveGeMServiceSummary[]>(
+    () => MODULE_SERVICES_DIR_CACHE?.services || []
+  );
+  const [liveDirectoryTotal, setLiveDirectoryTotal] = useState<number>(
+    () => MODULE_SERVICES_DIR_CACHE?.total || 0
+  );
   const [visibleServicesLimit, setVisibleServicesLimit] = useState<number>(24);
   const [isLoadingServicesDir, setIsLoadingServicesDir] = useState<boolean>(false);
   const [isRefreshingServices, setIsRefreshingServices] = useState<boolean>(false);
@@ -683,24 +712,31 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
   const [filterBrand, setFilterBrand] = useState<string>('ALL');
   const [sortOption, setSortOption] = useState<SortOption>('DEFAULT');
 
+  // Seed initial state immediately from module session cache when returning to Search tab
+  const initialDefaultSnap = MODULE_SESSION_CACHE.get(`slug:${DEFAULT_SUBCATEGORY.slug}`);
+
   // Live product stream state
-  const [itemsList, setItemsList] = useState<MarketplaceItem[]>([]);
+  const [itemsList, setItemsList] = useState<MarketplaceItem[]>(() => initialDefaultSnap?.items || []);
   const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !(initialDefaultSnap && initialDefaultSnap.items.length > 0));
   const [isOffline, setIsOffline] = useState<boolean>(false);
-  const [catalogSource, setCatalogSource] = useState<MarketplaceStreamSource>('EMPTY');
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalPortalResults, setTotalPortalResults] = useState<number>(0);
-  const [hasMorePages, setHasMorePages] = useState<boolean>(false);
+  const [catalogSource, setCatalogSource] = useState<MarketplaceStreamSource>(
+    () => initialDefaultSnap?.catalogSource || 'EMPTY'
+  );
+  const [currentPage, setCurrentPage] = useState<number>(() => initialDefaultSnap?.currentPage || 1);
+  const [totalPortalResults, setTotalPortalResults] = useState<number>(
+    () => initialDefaultSnap?.totalPortalResults || 0
+  );
+  const [hasMorePages, setHasMorePages] = useState<boolean>(() => initialDefaultSnap?.hasMorePages || false);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
-  // Refs for race-free React 18 batching, pagination lock & instant per-category session cache
-  const itemsListRef = useRef<MarketplaceItem[]>([]);
+  // Refs backed by module-level caches for instant 0ms tab switching
+  const itemsListRef = useRef<MarketplaceItem[]>(initialDefaultSnap?.items || []);
   const requestSequence = useRef(0);
   const loadMoreLockRef = useRef(false);
-  const sessionCacheRef = useRef<Map<string, SessionScopeSnapshot>>(new Map());
-  const seenItemsByIdRef = useRef<Map<string, MarketplaceItem>>(new Map());
+  const sessionCacheRef = useRef<Map<string, SessionScopeSnapshot>>(MODULE_SESSION_CACHE);
+  const seenItemsByIdRef = useRef<Map<string, MarketplaceItem>>(MODULE_SEEN_ITEMS_BY_ID);
 
   const currentScopeKey = useMemo(
     () =>
@@ -798,6 +834,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
     else setIsLoadingServicesDir(true);
     try {
       const res = await GeMServicesClient.fetchAllLiveServices(forceRefresh);
+      MODULE_SERVICES_DIR_CACHE = { services: res.services, total: res.total };
       setLiveDirectoryTotal(res.total);
       setLiveDirectoryServices(res.services);
     } finally {
@@ -1971,9 +2008,11 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({
                     active && styles.underlineTabTextActive,
                   ]}
                 >
-                  {tab === 'Services' && liveDirectoryTotal > 0
-                    ? `Services (${liveDirectoryTotal})`
-                    : tab}
+                  {tab === 'Services'
+                    ? liveDirectoryTotal > 0
+                      ? `${t('servicesTab')} (${liveDirectoryTotal})`
+                      : t('servicesTab')
+                    : t('productsTab')}
                 </Text>
               </Pressable>
             );
@@ -2846,6 +2885,23 @@ const styles = StyleSheet.create({
   srvCardImg: {
     width: '100%',
     height: '100%',
+  },
+  srvPlaceholderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  srvPlaceholderBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  srvPlaceholderBadgeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   srvTagOverlay: {
     position: 'absolute',

@@ -34,7 +34,16 @@ const GEM_MARK_IMG = require('../assets/gem-mark.png');
 
 export interface MoreProfileScreenProps {
   onNavigateTab: (
-    tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'HELP' | 'REG_BUYER' | 'REG_SELLER'
+    tab:
+      | 'MARKET'
+      | 'BIDS'
+      | 'RAILWAYS'
+      | 'AUCTIONS'
+      | 'ORDERS'
+      | 'PORTAL'
+      | 'HELP'
+      | 'REG_BUYER'
+      | 'REG_SELLER'
   ) => void;
   onOpenPortfolio?: () => void;
   onOpenCompanyLocker?: () => void;
@@ -133,7 +142,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'document',
       iconBg: colors.primaryTint,
       iconColor: colors.primary,
-      title: 'Document Preparation',
+      title: t('docPreparation'),
       subtitle: 'Organize bid-specific checklists, compliance drafts & files',
       onPress: openWorkspace,
     },
@@ -142,7 +151,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'contract',
       iconBg: colors.successTint,
       iconColor: colors.success,
-      title: 'Concluded Bids & Contracts',
+      title: t('concludedBidsContracts'),
       subtitle: 'Public contract awards, orders & CRAC records',
       onPress: () => onNavigateTab('ORDERS'),
     },
@@ -151,9 +160,19 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'bell',
       iconBg: colors.warningTint,
       iconColor: colors.warning,
-      title: 'Live Bids & Corrigenda',
+      title: t('liveBidsCorrigenda'),
       subtitle: 'Browse active bidplus.gem.gov.in updates & amendments',
       onPress: () => onNavigateTab('BIDS'),
+    },
+    {
+      id: 'railways-bids',
+      icon: 'rail',
+      iconBg: colors.primaryTint,
+      iconColor: colors.primary,
+      title: t('railwaysBids'),
+      subtitle: 'Live Ministry of Railways tenders & official GeM BidNext handoff',
+      badge: 'LIVE',
+      onPress: () => onNavigateTab('RAILWAYS'),
     },
   ];
 
@@ -163,7 +182,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'buyer',
       iconBg: colors.primaryTint,
       iconColor: colors.primary,
-      title: 'Buyer Registration',
+      title: t('buyerRegistration'),
       subtitle: 'Onboard a government office or organization on GeM',
       onPress: () => onNavigateTab('REG_BUYER'),
     },
@@ -172,7 +191,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'seller',
       iconBg: colors.successTint,
       iconColor: colors.success,
-      title: 'Seller & MSE Registration',
+      title: t('sellerRegistration'),
       subtitle: 'Verify Udyam MSME & check EMD exemption eligibility',
       onPress: () => onNavigateTab('REG_SELLER'),
     },
@@ -190,7 +209,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       icon: 'help',
       iconBg: colors.violetTint,
       iconColor: colors.violet,
-      title: 'Help & Official Support',
+      title: t('helpSupport'),
       subtitle: 'GeM toll-free helpdesk, training LMS & official manuals',
       onPress: () => onNavigateTab('HELP'),
     },
@@ -237,14 +256,21 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
                       styles.menuBadge,
                       {
                         backgroundColor:
-                          row.badge === 'ACTIVE' ? colors.successTint : colors.primaryTint,
+                          row.badge === 'ACTIVE' || row.badge === 'LIVE'
+                            ? colors.successTint
+                            : colors.primaryTint,
                       },
                     ]}
                   >
                     <Text
                       style={[
                         styles.menuBadgeText,
-                        { color: row.badge === 'ACTIVE' ? colors.success : colors.primary },
+                        {
+                          color:
+                            row.badge === 'ACTIVE' || row.badge === 'LIVE'
+                              ? colors.success
+                              : colors.primary,
+                        },
                       ]}
                     >
                       {row.badge}
@@ -275,7 +301,12 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
         ]}
       >
         <View style={styles.heroTopRow}>
-          <View style={[styles.gemLogoFrame, { borderColor: colors.borderSubtle }]}>
+          <View
+            style={[
+              styles.gemLogoFrame,
+              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+            ]}
+          >
             <Image source={GEM_MARK_IMG} style={styles.gemLogoImg} resizeMode="contain" />
           </View>
           <View style={{ flex: 1 }}>
@@ -303,7 +334,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
         >
           <AppIcon name="portal" color={colors.textInverse} size={16} />
           <Text style={[styles.portalCtaText, { color: colors.textInverse }]}>
-            Open Official GeM Portal &amp; Login ↗
+            {t('openOfficialPortalCta')}
           </Text>
         </Pressable>
       </View>
@@ -397,10 +428,10 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
                   { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier },
                 ]}
               >
-                Appearance
+                {t('appearanceLabel')}
               </Text>
               <Text style={[styles.menuSub, { color: colors.textSecondary }]}>
-                Light or dark theme
+                {t('appearanceSub')}
               </Text>
             </View>
             <View
@@ -456,10 +487,10 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
                   { color: colors.textPrimary, fontSize: 13.5 * fontMultiplier },
                 ]}
               >
-                Text Size
+                {t('textSizeLabel')}
               </Text>
               <Text style={[styles.menuSub, { color: colors.textSecondary }]}>
-                Adjust readability across screens
+                {t('textSizeSub')}
               </Text>
             </View>
             <View
@@ -542,7 +573,6 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     padding: 7,
     alignItems: 'center',

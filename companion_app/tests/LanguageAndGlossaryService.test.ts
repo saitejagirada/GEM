@@ -29,6 +29,11 @@ describe('LanguageAndGlossaryService - Bilingual EN/HI & GeM Glossary', () => {
 
     await LanguageAndGlossaryService.saveLanguage('hi');
     assert.strictEqual(await LanguageAndGlossaryService.loadLanguage(), 'hi');
+
+    assert.strictEqual(LanguageAndGlossaryService.translate('en', 'viewBidDetails'), 'View Bid Details');
+    assert.strictEqual(LanguageAndGlossaryService.translate('hi', 'viewBidDetails'), 'टेंडर विवरण देखें');
+    assert.strictEqual(LanguageAndGlossaryService.translate('hi', 'inspectAuction'), 'नीलामी विवरण देखें');
+    assert.strictEqual(LanguageAndGlossaryService.translate('hi', 'prepareDocs'), 'दस्तावेज़ तैयार करें');
   });
 
   it('provides complete English and Hindi explainers for all 14 core GeM terms', () => {

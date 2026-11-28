@@ -183,11 +183,33 @@ export type UiTextKey =
   | 'languageSub'
   | 'businessProfile'
   | 'companyDocLocker'
+  | 'docPreparation'
+  | 'concludedBidsContracts'
+  | 'liveBidsCorrigenda'
+  | 'railwaysBids'
+  | 'buyerRegistration'
+  | 'sellerRegistration'
   | 'jargonGuide'
+  | 'helpSupport'
+  | 'appearanceLabel'
+  | 'appearanceSub'
+  | 'textSizeLabel'
+  | 'textSizeSub'
+  | 'openOfficialPortalCta'
+  | 'bidsSearchPlaceholder'
+  | 'auctionsSearchPlaceholder'
+  | 'viewPdf'
+  | 'viewBidDetails'
+  | 'inspectAuction'
+  | 'prepareDocs'
+  | 'readDocuments'
+  | 'readTenderPdf'
   | 'keyTenderTerms'
   | 'officialDocuments'
   | 'atcAndSearch'
-  | 'similarConcludedBids';
+  | 'similarConcludedBids'
+  | 'productsTab'
+  | 'servicesTab';
 
 const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
   en: {
@@ -211,11 +233,33 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     languageSub: 'English or हिन्दी (Hindi) interface',
     businessProfile: 'My Business Profile',
     companyDocLocker: 'Company Doc Locker',
+    docPreparation: 'Document Preparation',
+    concludedBidsContracts: 'Concluded Bids & Contracts',
+    liveBidsCorrigenda: 'Live Bids & Corrigenda',
+    railwaysBids: 'Indian Railways Bids',
+    buyerRegistration: 'Buyer Registration',
+    sellerRegistration: 'Seller & MSE Registration',
     jargonGuide: 'GeM Jargon Guide (?)',
+    helpSupport: 'Help & Official Support',
+    appearanceLabel: 'Appearance',
+    appearanceSub: 'Light or dark theme',
+    textSizeLabel: 'Text Size',
+    textSizeSub: 'Adjust readability across screens',
+    openOfficialPortalCta: 'Open Official GeM Portal & Login ↗',
+    bidsSearchPlaceholder: 'Search all GeM tenders (e.g. Laptop, Solar, GEM/2026/...)',
+    auctionsSearchPlaceholder: 'Live search all GeM reverse auctions (ID, item, dept)',
+    viewPdf: 'View PDF',
+    viewBidDetails: 'View Bid Details',
+    inspectAuction: 'Inspect Auction',
+    prepareDocs: 'Prepare Docs',
+    readDocuments: 'Read Documents',
+    readTenderPdf: 'Read Tender PDF',
     keyTenderTerms: 'Key Tender Terms',
     officialDocuments: 'Official Documents',
     atcAndSearch: 'ATC Traps & PDF Search',
     similarConcludedBids: 'Similar Concluded Bids',
+    productsTab: 'Products',
+    servicesTab: 'Services',
   },
   hi: {
     tabHome: 'होम',
@@ -238,11 +282,33 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     languageSub: 'English या हिन्दी चुनें',
     businessProfile: 'मेरा बिज़नेस प्रोफ़ाइल',
     companyDocLocker: 'कंपनी डॉक लॉकर',
+    docPreparation: 'दस्तावेज़ तैयारी',
+    concludedBidsContracts: 'समाप्त निविदाएं और अनुबंध',
+    liveBidsCorrigenda: 'लाइव निविदाएं और संशोधन',
+    railwaysBids: 'भारतीय रेलवे निविदाएं (Railways)',
+    buyerRegistration: 'खरीदार पंजीकरण (Buyer)',
+    sellerRegistration: 'विक्रेता एवं MSE पंजीकरण',
     jargonGuide: 'GeM शब्दावली गाइड (?)',
+    helpSupport: 'सहायता एवं आधिकारिक हेल्पडेस्क',
+    appearanceLabel: 'थीम (Appearance)',
+    appearanceSub: 'लाइट या डार्क मोड चुनें',
+    textSizeLabel: 'फ़ॉन्ट आकार',
+    textSizeSub: 'पढ़ने के अनुसार टेक्स्ट बड़ा या छोटा करें',
+    openOfficialPortalCta: 'आधिकारिक GeM पोर्टल एवं लॉगिन खोलें ↗',
+    bidsSearchPlaceholder: 'सभी GeM टेंडर खोजें (जैसे Laptop, Solar, GEM/2026/...)',
+    auctionsSearchPlaceholder: 'लाइव GeM रिवर्स ऑक्शन खोजें (ID, वस्तु, विभाग)',
+    viewPdf: 'PDF देखें',
+    viewBidDetails: 'टेंडर विवरण देखें',
+    inspectAuction: 'नीलामी विवरण देखें',
+    prepareDocs: 'दस्तावेज़ तैयार करें',
+    readDocuments: 'दस्तावेज़ पढ़ें',
+    readTenderPdf: 'टेंडर PDF पढ़ें',
     keyTenderTerms: 'प्रमुख टेंडर शर्तें',
     officialDocuments: 'आधिकारिक दस्तावेज़',
     atcAndSearch: 'ATC शर्तें और PDF खोज',
     similarConcludedBids: 'समान समाप्त निविदाएं',
+    productsTab: 'उत्पाद (Products)',
+    servicesTab: 'सेवाएं (Services)',
   },
 };
 

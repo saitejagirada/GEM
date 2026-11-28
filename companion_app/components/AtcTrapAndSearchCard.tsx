@@ -65,338 +65,330 @@ export const AtcTrapAndSearchCard: React.FC<AtcTrapAndSearchCardProps> = ({
   const visibleTraps = expandedAllTraps ? report.traps : report.traps.slice(0, 4);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-      <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>{t('atcAndSearch')}</Text>
-            {onExplainAtc ? (
-              <Pressable
-                onPress={onExplainAtc}
-                hitSlop={8}
-                style={[styles.helpChip, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
-                accessibilityLabel="What is ATC?"
-              >
-                <Text style={[styles.helpChipText, { color: colors.primary }]}>?</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {report.traps.length > 0
-              ? `${report.traps.length} hidden clause pattern${report.traps.length === 1 ? '' : 's'} detected in PDF`
-              : 'Search any keyword inside the locally extracted tender PDF'}
+    <View style={styles.sectionBlock}>
+      {/* Apple Inset-Grouped External Section Header */}
+      <View style={styles.sectionEyebrowRow}>
+        <View style={styles.eyebrowLeft}>
+          <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+            {t('atcAndSearch').toUpperCase()}
           </Text>
+          {onExplainAtc ? (
+            <Pressable
+              onPress={onExplainAtc}
+              hitSlop={10}
+              style={[styles.helpChip, { backgroundColor: colors.surfaceSubtle }]}
+              accessibilityLabel="What is ATC?"
+            >
+              <Text style={[styles.helpChipText, { color: colors.primary }]}>?</Text>
+            </Pressable>
+          ) : null}
         </View>
         {report.traps.length > 0 ? (
-          <View
+          <Text
             style={[
-              styles.countBadge,
+              styles.eyebrowCount,
               {
-                backgroundColor: report.traps.some((x) => x.severity === 'HIGH')
-                  ? colors.warningTint
-                  : colors.primaryTint,
+                color: report.traps.some((x) => x.severity === 'HIGH')
+                  ? colors.warning
+                  : colors.primary,
               },
             ]}
           >
-            <Text
-              style={[
-                styles.countBadgeText,
-                {
-                  color: report.traps.some((x) => x.severity === 'HIGH')
-                    ? colors.warning
-                    : colors.primary,
-                },
-              ]}
-            >
-              {report.traps.length} Flag{report.traps.length === 1 ? '' : 's'}
-            </Text>
-          </View>
+            {report.traps.length} Flag{report.traps.length === 1 ? '' : 's'}
+          </Text>
         ) : null}
       </View>
 
-      {/* 1. Categorized ATC Risk Buckets */}
-      {visibleTraps.length > 0 ? (
-        <View style={styles.trapsList}>
-          {visibleTraps.map((trap, idx) => {
-            const bg =
-              trap.severity === 'HIGH'
-                ? colors.dangerTint
-                : trap.severity === 'MEDIUM'
-                  ? colors.warningTint
-                  : colors.primaryTint;
-            const fg =
-              trap.severity === 'HIGH'
-                ? colors.danger
-                : trap.severity === 'MEDIUM'
-                  ? colors.warning
-                  : colors.primary;
+      <View
+        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+      >
+        {/* 1. Categorized ATC Risk Buckets — full-width titles, zero mid-word truncation */}
+        {visibleTraps.length > 0 ? (
+          <View style={styles.trapsList}>
+            {visibleTraps.map((trap, idx) => {
+              const bg =
+                trap.severity === 'HIGH'
+                  ? colors.dangerTint
+                  : trap.severity === 'MEDIUM'
+                    ? colors.warningTint
+                    : colors.primaryTint;
+              const fg =
+                trap.severity === 'HIGH'
+                  ? colors.danger
+                  : trap.severity === 'MEDIUM'
+                    ? colors.warning
+                    : colors.primary;
 
-            return (
-              <View
-                key={trap.id}
-                style={[
-                  styles.trapRow,
-                  idx > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.borderSubtle,
-                  },
-                ]}
-              >
-                <View style={styles.trapTopRow}>
-                  <View style={[styles.trapPill, { backgroundColor: bg }]}>
-                    <Text style={[styles.trapPillText, { color: fg }]}>{trap.badge}</Text>
+              return (
+                <View
+                  key={trap.id}
+                  style={[
+                    styles.trapRow,
+                    idx > 0 && {
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      borderTopColor: colors.borderSubtle,
+                    },
+                  ]}
+                >
+                  <View style={styles.trapEyebrowRow}>
+                    <View style={[styles.trapPill, { backgroundColor: bg }]}>
+                      <Text style={[styles.trapPillText, { color: fg }]}>{trap.badge}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.trapTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                  <Text style={[styles.trapTitle, { color: colors.textPrimary }]} numberOfLines={2}>
                     {trap.title}
                   </Text>
-                </View>
-                <Text style={[styles.trapExcerpt, { color: colors.textSecondary }]} numberOfLines={3}>
-                  {trap.excerpt}
-                </Text>
-              </View>
-            );
-          })}
-
-          {report.traps.length > 4 ? (
-            <Pressable
-              onPress={() => setExpandedAllTraps((prev) => !prev)}
-              style={[styles.toggleMoreBtn, { borderTopColor: colors.borderSubtle }]}
-            >
-              <Text style={[styles.toggleMoreText, { color: colors.primary }]}>
-                {expandedAllTraps
-                  ? 'Show fewer ATC flags'
-                  : `Show all ${report.traps.length} ATC flags ▾`}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* 2. Instant PDF Keyword Finder */}
-      <View
-        style={[
-          styles.searchSection,
-          report.traps.length > 0 && {
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.borderSubtle,
-            paddingTop: 12,
-            marginTop: 6,
-          },
-        ]}
-      >
-        <Text style={[styles.searchLabel, { color: colors.textMuted }]}>
-          INSTANT PDF KEYWORD FINDER
-        </Text>
-        <View style={styles.searchInputRow}>
-          <TextInput
-            style={[
-              styles.searchInput,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.borderSubtle,
-                color: colors.textPrimary,
-              },
-            ]}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Find inside PDF (e.g. warranty, penalty, NABL)"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="search"
-          />
-          {query.trim().length > 0 ? (
-            <Pressable
-              onPress={() => setQuery('')}
-              style={[styles.clearBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
-              hitSlop={6}
-            >
-              <Text style={[styles.clearBtnText, { color: colors.textSecondary }]}>✕</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickChipsRow}
-        >
-          {PDF_QUICK_SEARCH_CHIPS.map((chip) => {
-            const active = query.trim().toLowerCase() === chip.toLowerCase();
-            return (
-              <Pressable
-                key={chip}
-                onPress={() => setQuery(active ? '' : chip)}
-                style={[
-                  styles.quickChip,
-                  {
-                    backgroundColor: active ? colors.primary : colors.surfaceSubtle,
-                    borderColor: active ? colors.primary : colors.borderSubtle,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.quickChipText,
-                    { color: active ? colors.textInverse : colors.textPrimary },
-                  ]}
-                >
-                  {chip}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {query.trim().length >= 2 ? (
-          keywordMatches.length > 0 ? (
-            <View style={styles.matchesWrap}>
-              <Text style={[styles.matchCountText, { color: colors.primary }]}>
-                {keywordMatches.length} excerpt{keywordMatches.length === 1 ? '' : 's'} matching &quot;{query.trim()}&quot;
-              </Text>
-              {keywordMatches.map((m) => (
-                <View
-                  key={m.id}
-                  style={[
-                    styles.excerptBox,
-                    { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                  ]}
-                >
-                  <Text style={[styles.excerptText, { color: colors.textSecondary }]}>
-                    {m.before}
-                    <Text
-                      style={[
-                        styles.excerptHighlight,
-                        { backgroundColor: colors.warningTint, color: colors.textPrimary },
-                      ]}
-                    >
-                      {m.match}
-                    </Text>
-                    {m.after}
+                  <Text style={[styles.trapExcerpt, { color: colors.textSecondary }]} numberOfLines={3}>
+                    {trap.excerpt}
                   </Text>
                 </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={[styles.noMatchText, { color: colors.textMuted }]}>
-              No mention of &quot;{query.trim()}&quot; found in the extracted PDF text. Check linked
-              buyer attachments for extra annexures.
-            </Text>
-          )
+              );
+            })}
+
+            {report.traps.length > 4 ? (
+              <Pressable
+                onPress={() => setExpandedAllTraps((prev) => !prev)}
+                style={[styles.toggleMoreBtn, { borderTopColor: colors.borderSubtle }]}
+              >
+                <Text style={[styles.toggleMoreText, { color: colors.primary }]}>
+                  {expandedAllTraps
+                    ? 'Show fewer ATC flags'
+                    : `Show all ${report.traps.length} ATC flags ▾`}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
+
+        {/* 2. Instant PDF Keyword Finder — Clean iOS Search Field */}
+        <View
+          style={[
+            styles.searchSection,
+            report.traps.length > 0 && {
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: colors.borderSubtle,
+            },
+          ]}
+        >
+          <Text style={[styles.searchLabel, { color: colors.textMuted }]}>
+            INSTANT PDF KEYWORD FINDER
+          </Text>
+          <View
+            style={[
+              styles.searchInputRow,
+              { backgroundColor: colors.surfaceSubtle },
+            ]}
+          >
+            <Text style={[styles.searchIcon, { color: colors.textMuted }]}>⌕</Text>
+            <TextInput
+              style={[styles.searchInput, { color: colors.textPrimary }]}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Find inside PDF (warranty, penalty, NABL…)"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="search"
+            />
+            {query.trim().length > 0 ? (
+              <Pressable
+                onPress={() => setQuery('')}
+                style={styles.clearBtn}
+                hitSlop={8}
+                accessibilityLabel="Clear PDF search"
+              >
+                <Text style={[styles.clearBtnText, { color: colors.textMuted }]}>✕</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickChipsRow}
+          >
+            {PDF_QUICK_SEARCH_CHIPS.map((chip) => {
+              const active = query.trim().toLowerCase() === chip.toLowerCase();
+              return (
+                <Pressable
+                  key={chip}
+                  onPress={() => setQuery(active ? '' : chip)}
+                  style={[
+                    styles.quickChip,
+                    {
+                      backgroundColor: active ? colors.primary : colors.surfaceSubtle,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.quickChipText,
+                      { color: active ? colors.textInverse : colors.textPrimary },
+                    ]}
+                  >
+                    {chip}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {query.trim().length >= 2 ? (
+            keywordMatches.length > 0 ? (
+              <View style={styles.matchesWrap}>
+                <Text style={[styles.matchCountText, { color: colors.primary }]}>
+                  {keywordMatches.length} excerpt{keywordMatches.length === 1 ? '' : 's'} matching &quot;{query.trim()}&quot;
+                </Text>
+                {keywordMatches.map((m) => (
+                  <View
+                    key={m.id}
+                    style={[
+                      styles.excerptBox,
+                      { backgroundColor: colors.surfaceSubtle, borderLeftColor: colors.primary },
+                    ]}
+                  >
+                    <Text style={[styles.excerptText, { color: colors.textSecondary }]}>
+                      {m.before}
+                      <Text
+                        style={[
+                          styles.excerptHighlight,
+                          { backgroundColor: colors.warningTint, color: colors.textPrimary },
+                        ]}
+                      >
+                        {m.match}
+                      </Text>
+                      {m.after}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={[styles.noMatchText, { color: colors.textMuted }]}>
+                No mention of &quot;{query.trim()}&quot; found in the extracted PDF text. Check linked
+                buyer attachments for extra annexures.
+              </Text>
+            )
+          ) : null}
+        </View>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
+  sectionBlock: {
+    marginTop: 20,
   },
-  headerRow: {
+  sectionEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    paddingHorizontal: 4,
     marginBottom: 8,
+    gap: 8,
   },
-  titleRow: {
+  eyebrowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  title: { fontSize: 15, fontWeight: '800' },
+  sectionEyebrow: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+  },
+  eyebrowCount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   helpChip: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  helpChipText: { fontSize: 11.5, fontWeight: '900' },
-  subtitle: { fontSize: 11.5, marginTop: 2 },
-  countBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+  helpChipText: { fontSize: 11, fontWeight: '700' },
+  card: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
-  countBadgeText: { fontSize: 10.5, fontWeight: '800' },
-  trapsList: { marginTop: 2 },
-  trapRow: { paddingVertical: 9 },
-  trapTopRow: {
+  trapsList: {
+    paddingHorizontal: 16,
+  },
+  trapRow: {
+    paddingVertical: 14,
+  },
+  trapEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    marginBottom: 5,
   },
   trapPill: {
-    borderRadius: 5,
-    paddingHorizontal: 7,
+    borderRadius: 6,
+    paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  trapPillText: { fontSize: 9.5, fontWeight: '900', letterSpacing: 0.3 },
-  trapTitle: { fontSize: 12.5, fontWeight: '800', flex: 1 },
-  trapExcerpt: { fontSize: 11.5, lineHeight: 16.5 },
+  trapPillText: { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.3 },
+  trapTitle: { fontSize: 14.5, fontWeight: '600', lineHeight: 20, marginBottom: 4 },
+  trapExcerpt: { fontSize: 13, lineHeight: 19 },
   toggleMoreBtn: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 9,
-    marginTop: 2,
+    paddingVertical: 13,
     alignItems: 'center',
   },
-  toggleMoreText: { fontSize: 12, fontWeight: '800' },
-  searchSection: {},
+  toggleMoreText: { fontSize: 13, fontWeight: '600' },
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   searchLabel: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 7,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 9,
   },
   searchInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    minHeight: 42,
     gap: 8,
   },
+  searchIcon: { fontSize: 16 },
   searchInput: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 9,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    minHeight: 42,
-    fontSize: 13,
+    paddingVertical: 9,
+    fontSize: 14,
   },
   clearBtn: {
-    width: 38,
-    height: 42,
-    borderRadius: 9,
-    borderWidth: 1,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clearBtnText: { fontSize: 14, fontWeight: '800' },
+  clearBtnText: { fontSize: 14, fontWeight: '600' },
   quickChipsRow: {
     flexDirection: 'row',
-    gap: 7,
-    paddingTop: 8,
-    paddingBottom: 4,
+    gap: 8,
+    paddingTop: 10,
+    paddingBottom: 2,
   },
   quickChip: {
-    borderRadius: 15,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  quickChipText: { fontSize: 11.5, fontWeight: '700' },
-  matchesWrap: { marginTop: 8, gap: 7 },
-  matchCountText: { fontSize: 11.5, fontWeight: '800' },
+  quickChipText: { fontSize: 12.5, fontWeight: '600' },
+  matchesWrap: { marginTop: 12, gap: 8 },
+  matchCountText: { fontSize: 12.5, fontWeight: '600' },
   excerptBox: {
     borderRadius: 8,
-    borderWidth: 1,
-    padding: 9,
+    borderLeftWidth: 2.5,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
   },
-  excerptText: { fontSize: 11.5, lineHeight: 17 },
-  excerptHighlight: { fontWeight: '900' },
-  noMatchText: { fontSize: 11.5, lineHeight: 16.5, marginTop: 8 },
+  excerptText: { fontSize: 12.5, lineHeight: 18.5 },
+  excerptHighlight: { fontWeight: '700' },
+  noMatchText: { fontSize: 12.5, lineHeight: 18, marginTop: 10 },
 });

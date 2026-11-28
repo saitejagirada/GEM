@@ -228,7 +228,7 @@ export type OfficialBidDocumentKind =
   | 'GTC'
   | 'OTHER';
 
-export type OfficialBidFileFormat = 'PDF' | 'XLSX' | 'CSV' | 'IMAGE' | 'WEB';
+export type OfficialBidFileFormat = 'PDF' | 'DOC' | 'XLSX' | 'CSV' | 'ZIP' | 'IMAGE' | 'WEB';
 
 export interface OfficialBidDocument {
   id: string;

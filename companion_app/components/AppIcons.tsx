@@ -27,7 +27,12 @@ export type AppIconName =
   | 'bookmarkFilled'
   | 'calendar'
   | 'profile'
-  | 'calculator';
+  | 'calculator'
+  | 'phone'
+  | 'book'
+  | 'video'
+  | 'alert'
+  | 'rail';
 
 interface AppIconProps {
   name: AppIconName;
@@ -626,6 +631,185 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
                 </View>
               ))}
             </View>
+          </View>
+        </View>
+      );
+
+    case 'phone':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.56,
+              height: s * 0.84,
+              borderRadius: s * 0.14,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: s * 0.1,
+            }}
+          >
+            <View
+              style={{
+                width: s * 0.2,
+                height: stroke * 0.8,
+                borderRadius: 1,
+                backgroundColor: color,
+              }}
+            />
+            <View
+              style={{
+                width: stroke * 1.15,
+                height: stroke * 1.15,
+                borderRadius: stroke,
+                backgroundColor: color,
+              }}
+            />
+          </View>
+        </View>
+      );
+
+    case 'book':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.78,
+              height: s * 0.72,
+              borderRadius: 2.5,
+              borderWidth: stroke,
+              borderColor: color,
+              flexDirection: 'row',
+              alignItems: 'stretch',
+            }}
+          >
+            <View
+              style={{
+                flex: 1,
+                borderRightWidth: stroke * 0.85,
+                borderRightColor: color,
+                padding: s * 0.08,
+                justifyContent: 'center',
+                gap: s * 0.09,
+              }}
+            >
+              <View style={{ height: stroke * 0.75, backgroundColor: color, borderRadius: 1 }} />
+              <View style={{ height: stroke * 0.75, backgroundColor: color, borderRadius: 1 }} />
+            </View>
+            <View
+              style={{
+                flex: 1,
+                padding: s * 0.08,
+                justifyContent: 'center',
+                gap: s * 0.09,
+              }}
+            >
+              <View style={{ height: stroke * 0.75, backgroundColor: color, borderRadius: 1 }} />
+              <View style={{ height: stroke * 0.75, width: '75%', backgroundColor: color, borderRadius: 1 }} />
+            </View>
+          </View>
+        </View>
+      );
+
+    case 'video':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.84,
+              height: s * 0.68,
+              borderRadius: 3,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <View
+              style={{
+                width: 0,
+                height: 0,
+                marginLeft: s * 0.07,
+                borderTopWidth: s * 0.16,
+                borderBottomWidth: s * 0.16,
+                borderLeftWidth: s * 0.26,
+                borderTopColor: 'transparent',
+                borderBottomColor: 'transparent',
+                borderLeftColor: color,
+              }}
+            />
+          </View>
+        </View>
+      );
+
+    case 'alert':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.82,
+              height: s * 0.82,
+              borderRadius: s * 0.41,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: s * 0.08,
+            }}
+          >
+            <View
+              style={{
+                width: stroke,
+                height: s * 0.28,
+                borderRadius: stroke,
+                backgroundColor: color,
+              }}
+            />
+            <View
+              style={{
+                width: stroke * 1.15,
+                height: stroke * 1.15,
+                borderRadius: stroke,
+                backgroundColor: color,
+              }}
+            />
+          </View>
+        </View>
+      );
+
+    case 'rail':
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View
+            style={{
+              width: s * 0.66,
+              height: s * 0.64,
+              borderRadius: 3.5,
+              borderWidth: stroke,
+              borderColor: color,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: s * 0.08,
+            }}
+          >
+            <View
+              style={{
+                width: s * 0.42,
+                height: s * 0.18,
+                borderRadius: 1.5,
+                borderWidth: stroke * 0.85,
+                borderColor: color,
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: s * 0.16 }}>
+              <View style={{ width: stroke * 1.1, height: stroke * 1.1, borderRadius: stroke, backgroundColor: color }} />
+              <View style={{ width: stroke * 1.1, height: stroke * 1.1, borderRadius: stroke, backgroundColor: color }} />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: s * 0.28, marginTop: 1.5 }}>
+            <View style={{ width: stroke, height: s * 0.18, backgroundColor: color, transform: [{ rotate: '22deg' }] }} />
+            <View style={{ width: stroke, height: s * 0.18, backgroundColor: color, transform: [{ rotate: '-22deg' }] }} />
           </View>
         </View>
       );

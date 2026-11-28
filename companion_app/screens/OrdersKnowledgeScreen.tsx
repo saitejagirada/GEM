@@ -323,7 +323,9 @@ export const OrdersKnowledgeScreen: React.FC<OrdersKnowledgeScreenProps> = ({
             </View>
           ) : isOffline ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>!</Text>
+              <View style={[styles.emptyBadge, { backgroundColor: colors.dangerTint }]}>
+                <Text style={[styles.emptyBadgeText, { color: colors.danger }]}>!</Text>
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Unable to Reach GeM Portal</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 Check your internet connection and retry, or open GeM executed contracts directly in your browser.
@@ -403,7 +405,15 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 12, fontWeight: '700' },
   cardActionsRow: { flexDirection: 'row', alignItems: 'center' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50 },
-  emptyEmoji: { fontSize: 32, marginBottom: 8 },
+  emptyBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyBadgeText: { fontSize: 17, fontWeight: '900' },
   emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
   emptySubtitle: { fontSize: 13, textAlign: 'center', maxWidth: 300, lineHeight: 18 },
 });

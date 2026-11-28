@@ -18,6 +18,8 @@ import {
   Linking,
   Modal,
   NativeModules,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -122,8 +124,11 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
   onClose,
   onPrepareDocuments,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, t } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const jumpScrollRef = useRef<ScrollView>(null);
+  const jumpTabXRef = useRef<Partial<Record<SectionKey, number>>>({});
+  const jumpLockUntilRef = useRef<number>(0);
   const sectionYRef = useRef<Partial<Record<SectionKey, number>>>({});
   const sectionsOffsetYRef = useRef<number>(0);
 
@@ -254,8 +259,17 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     }
   };
 
+  const syncJumpTabIntoView = (key: SectionKey) => {
+    const tabX = jumpTabXRef.current[key];
+    if (typeof tabX === 'number') {
+      jumpScrollRef.current?.scrollTo({ x: Math.max(0, tabX - 24), animated: true });
+    }
+  };
+
   const scrollToSection = (key: SectionKey) => {
+    jumpLockUntilRef.current = Date.now() + 450;
     setActiveJump(key);
+    syncJumpTabIntoView(key);
     if (key === 'overview') {
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
@@ -263,9 +277,42 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     const y = sectionYRef.current[key];
     if (typeof y === 'number') {
       scrollRef.current?.scrollTo({
-        y: Math.max(0, sectionsOffsetYRef.current + y - 8),
+        y: Math.max(0, sectionsOffsetYRef.current + y - 10),
         animated: true,
       });
+    }
+  };
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Date.now() < jumpLockUntilRef.current) return;
+    const scrollY = e.nativeEvent.contentOffset.y;
+    if (scrollY < 40) {
+      if (activeJump !== 'overview') {
+        setActiveJump('overview');
+        syncJumpTabIntoView('overview');
+      }
+      return;
+    }
+    const probeY = scrollY + 96;
+    const orderedKeys: SectionKey[] = [
+      'docs',
+      'terms',
+      'eligibility',
+      'atc',
+      'delivery',
+      'checklist',
+      'similar',
+    ];
+    let matched: SectionKey = 'overview';
+    for (const key of orderedKeys) {
+      const sy = sectionYRef.current[key];
+      if (typeof sy === 'number' && sectionsOffsetYRef.current + sy <= probeY) {
+        matched = key;
+      }
+    }
+    if (matched !== activeJump) {
+      setActiveJump(matched);
+      syncJumpTabIntoView(matched);
     }
   };
 
@@ -518,52 +565,51 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
     { key: 'similar', label: 'Similar' },
   ];
 
-  const renderDocRow = (document: OfficialBidDocument, idx: number, isFirstInGroup: boolean) => {
+  const renderDocRow = (document: OfficialBidDocument, _idx: number, isFirstInGroup: boolean) => {
     const badge = getDocumentBadgeStyle(document, colors);
     const format = document.fileFormat || PortalDocService.inferFileFormat(document.url);
     const isPdf = format === 'PDF';
 
     return (
-      <Pressable
-        key={document.id}
-        style={({ pressed }) => [
-          styles.docRow,
-          !isFirstInGroup && {
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: colors.borderSubtle,
-          },
-          pressed && { opacity: 0.72 },
-        ]}
-        onPress={() => handleOpenDoc(document.id)}
-      >
-        <View style={[styles.docKindBadge, { backgroundColor: badge.bg }]}>
-          <Text style={[styles.docKindBadgeText, { color: badge.fg }]}>{badge.label}</Text>
-        </View>
-        <View style={styles.docCopy}>
-          <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={2}>
-            {document.label}
-          </Text>
-          <Text style={[styles.docSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-            {document.subtitle ||
-              (isPdf ? 'Official GeM PDF · Read inside app' : `Official ${format} file`)}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.docActionPill,
-            {
-              backgroundColor: isPdf ? colors.primaryTint : colors.surfaceSubtle,
-              borderColor: isPdf ? 'transparent' : colors.borderSubtle,
-            },
-          ]}
+      <View key={document.id}>
+        {!isFirstInGroup ? (
+          <View style={[styles.insetDivider, { backgroundColor: colors.borderSubtle, marginLeft: 68 }]} />
+        ) : null}
+        <Pressable
+          style={({ pressed }) => [styles.docRow, pressed && { opacity: 0.68 }]}
+          onPress={() => handleOpenDoc(document.id)}
         >
-          <Text style={[styles.docActionCue, { color: isPdf ? colors.primary : colors.textPrimary }]}>
+          <View style={[styles.docKindBadge, { backgroundColor: badge.bg }]}>
+            <Text style={[styles.docKindBadgeText, { color: badge.fg }]}>{badge.label}</Text>
+          </View>
+          <View style={styles.docCopy}>
+            <Text style={[styles.docTitle, { color: colors.textPrimary }]} numberOfLines={2}>
+              {document.label}
+            </Text>
+            <Text style={[styles.docSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {document.subtitle ||
+                (isPdf ? 'Official GeM PDF · Read inside app' : `Official ${format} file`)}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.docActionCue,
+              { color: isPdf ? colors.primary : colors.textSecondary },
+            ]}
+          >
             {isPdf ? 'Read ›' : 'Open ↗'}
           </Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     );
   };
+
+  const closingDayDisplay = isValidDate
+    ? formatDateSafe(bid.closingTimeUtc, { day: 'numeric', month: 'short', year: 'numeric' })
+    : 'See PDF';
+  const closingTimeDisplay = isValidDate
+    ? formatDateSafe(bid.closingTimeUtc, { hour: 'numeric', minute: '2-digit', hour12: true })
+    : '';
 
   return (
     <>
@@ -574,7 +620,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
             backgroundColor={colors.surface}
           />
           <View style={[styles.container, { backgroundColor: colors.background }]}>
-            {/* 1. Slim 48dp Native Top Bar (Frameless & Clean) */}
+            {/* 1. Refined 52dp Apple-Style Navigation Bar */}
             <View
               style={[
                 styles.headerBar,
@@ -582,12 +628,12 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               ]}
             >
               <Pressable
-                style={({ pressed }) => [styles.headerBackBtn, pressed && { opacity: 0.65 }]}
+                style={({ pressed }) => [styles.headerBackBtn, pressed && { opacity: 0.6 }]}
                 onPress={onClose}
                 hitSlop={10}
                 accessibilityLabel="Close tender details"
               >
-                <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
+                <Text style={[styles.headerBackIcon, { color: colors.primary }]}>←</Text>
               </Pressable>
 
               <Pressable
@@ -618,6 +664,15 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     </Text>
                   </View>
                 </View>
+                <Text
+                  style={[
+                    styles.headerSubMeta,
+                    { color: isClosingSoon ? colors.danger : colors.textMuted },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {typeInfo.label} · {remainingLabel}
+                </Text>
               </Pressable>
 
               <Pressable
@@ -625,7 +680,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   styles.watchHeaderBtn,
                   {
                     backgroundColor: isWatched ? colors.warningTint : 'transparent',
-                    opacity: pressed ? 0.7 : 1,
+                    opacity: pressed ? 0.65 : 1,
                   },
                 ]}
                 onPress={() => void TenderRadarService.toggleWatch(effectiveBid)}
@@ -643,7 +698,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 style={({ pressed }) => [
                   styles.sharePillBtn,
                   { backgroundColor: colors.primaryTint },
-                  pressed && { opacity: 0.75 },
+                  pressed && { opacity: 0.7 },
                 ]}
                 onPress={() => setShowDealSheet(true)}
                 hitSlop={6}
@@ -653,7 +708,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               </Pressable>
             </View>
 
-            {/* 2. Sleek Native Underline Section Tabs */}
+            {/* 2. Live Scroll-Spy Section Strip */}
             <View
               style={[
                 styles.jumpBar,
@@ -661,6 +716,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               ]}
             >
               <ScrollView
+                ref={jumpScrollRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.jumpBarRow}
@@ -670,6 +726,9 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   return (
                     <Pressable
                       key={item.key}
+                      onLayout={(e) => {
+                        jumpTabXRef.current[item.key] = e.nativeEvent.layout.x;
+                      }}
                       onPress={() => scrollToSection(item.key)}
                       style={[
                         styles.jumpTab,
@@ -685,7 +744,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                               : item.highlight
                                 ? colors.success
                                 : colors.textSecondary,
-                            fontWeight: active ? '800' : '600',
+                            fontWeight: active ? '600' : '500',
                           },
                         ]}
                       >
@@ -702,20 +761,25 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               style={styles.scrollArea}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={32}
             >
-              {/* 1. Full-Bleed Editorial Overview + Compact Hairline Metric Strip */}
+              {/* 1. Executive Editorial Overview Sheet (Apple Stocks / Wallet Hierarchy) */}
               <View
                 style={[
                   styles.overviewSheet,
                   { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
                 ]}
               >
-                {/* Live Corrigendum / Pre-Bid Representation Compact Strip */}
+                {/* Live Corrigendum / Pre-Bid Representation Calm Banner */}
                 {(otherDetails?.hasCorrigendum || otherDetails?.hasRepresentation) && (
                   <View
                     style={[
                       styles.corrigendumBanner,
-                      { backgroundColor: colors.warningTint, borderColor: colors.warning },
+                      {
+                        backgroundColor: colors.warningTint,
+                        borderLeftColor: colors.warning,
+                      },
                     ]}
                   >
                     <View style={styles.corrigendumBannerTop}>
@@ -739,8 +803,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                             styles.corrigendumActionBtn,
                             {
                               backgroundColor: colors.surface,
-                              borderColor: colors.warning,
-                              opacity: pressed ? 0.78 : 1,
+                              opacity: pressed ? 0.72 : 1,
                             },
                           ]}
                         >
@@ -759,8 +822,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                             styles.corrigendumActionBtn,
                             {
                               backgroundColor: colors.surface,
-                              borderColor: colors.primary,
-                              opacity: pressed ? 0.78 : 1,
+                              opacity: pressed ? 0.72 : 1,
                             },
                           ]}
                         >
@@ -773,7 +835,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   </View>
                 )}
 
-                {/* Single Crisp Metadata Row */}
+                {/* Calm Category Eyebrow + Countdown Pill */}
                 <View style={styles.heroTopRow}>
                   <View style={styles.metaInlineRow}>
                     <View
@@ -793,7 +855,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     </Text>
                     {bid.isHighValue ? (
                       <Text style={[styles.metaHighValue, { color: colors.success }]}>
-                        · High Value (≥ ₹2 Cr)
+                        · High Value
                       </Text>
                     ) : null}
                   </View>
@@ -823,7 +885,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                   </View>
                 </View>
 
-                <Text style={[styles.bidTitle, { color: colors.textPrimary }]} numberOfLines={3}>
+                <Text style={[styles.bidTitle, { color: colors.textPrimary }]} numberOfLines={4}>
                   {effectiveBid.title || 'Untitled Bid'}
                 </Text>
 
@@ -837,54 +899,66 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                     .join(' · ')}
                 </Text>
 
-                {/* Compact Hairline-Divided 2×2 Key-Facts Matrix (Zero Box-in-Box Clutter) */}
-                <View
-                  style={[
-                    styles.metricMatrix,
-                    { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceSubtle },
-                  ]}
-                >
-                  <View style={[styles.metricRow, { borderBottomColor: colors.borderSubtle }]}>
-                    <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
-                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EST. VALUE</Text>
-                      <Text style={[styles.kpiValue, { color: colors.primary }]} numberOfLines={1}>
+                {/* 2-Tier Executive Summary Block: Value & Deadline Spotlight + 3-Col Financial Trio */}
+                <View style={[styles.metricMatrix, { backgroundColor: colors.surfaceSubtle }]}>
+                  <View style={[styles.spotlightRow, { borderBottomColor: colors.borderSubtle }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>
+                        ESTIMATED VALUE
+                      </Text>
+                      <Text style={[styles.spotlightValue, { color: colors.primary }]} numberOfLines={1}>
                         {estValueDisplay}
                       </Text>
                       {(isHighValueFallback || totalQty !== undefined) ? (
                         <Text style={[styles.kpiSub, { color: colors.textSecondary }]} numberOfLines={1}>
                           {isHighValueFallback
                             ? totalQty !== undefined
-                              ? `GeM flag · Qty ${totalQty.toLocaleString('en-IN')}`
-                              : 'GeM High Value flag'
-                            : `Qty ${totalQty!.toLocaleString('en-IN')} Units`}
+                              ? `GeM High Value · Qty ${totalQty.toLocaleString('en-IN')}`
+                              : 'GeM High Value flag (≥ ₹2 Cr)'
+                            : `Quantity ${totalQty!.toLocaleString('en-IN')} Units`}
                         </Text>
                       ) : null}
                     </View>
-                    <View style={styles.metricCell}>
-                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD</Text>
-                      <Text
-                        style={[
-                          styles.kpiValue,
-                          { color: emdIsPositive ? colors.success : colors.textPrimary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {emdShortDisplay}
+                    <View style={styles.closingCol}>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted, textAlign: 'right' }]}>
+                        CLOSES (IST)
                       </Text>
-                      {effectiveBid.isEmdExemptForMse ? (
-                        <Text style={[styles.kpiSub, { color: colors.success }]} numberOfLines={1}>
-                          MSE Exempt (OEM)
+                      <Text style={[styles.closingDateVal, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {closingDayDisplay}
+                      </Text>
+                      {closingTimeDisplay ? (
+                        <Text style={[styles.kpiSub, { color: colors.textSecondary, textAlign: 'right' }]} numberOfLines={1}>
+                          {closingTimeDisplay}
                         </Text>
                       ) : null}
                     </View>
                   </View>
 
-                  <View style={styles.metricRowBottom}>
-                    <View style={[styles.metricCell, styles.metricCellLeft, { borderRightColor: colors.borderSubtle }]}>
+                  <View style={styles.trioRow}>
+                    <View style={[styles.trioCell, { borderRightColor: colors.borderSubtle }]}>
+                      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>EMD</Text>
+                      <Text
+                        style={[
+                          styles.trioValue,
+                          { color: emdIsPositive ? colors.success : colors.textPrimary },
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
+                      >
+                        {emdShortDisplay}
+                      </Text>
+                      {effectiveBid.isEmdExemptForMse ? (
+                        <Text style={[styles.trioSub, { color: colors.success }]} numberOfLines={1}>
+                          MSE Exempt
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={[styles.trioCell, { borderRightColor: colors.borderSubtle }]}>
                       <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>e-PBG</Text>
                       <Text
                         style={[
-                          styles.kpiValue,
+                          styles.trioValue,
                           {
                             color:
                               effectiveBid.epbgPercentage === 0
@@ -895,359 +969,360 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                           },
                         ]}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
                       >
                         {effectiveBid.epbgPercentage === 0 ? 'None (0%)' : epbgDisplay}
                       </Text>
                     </View>
-                    <View style={styles.metricCell}>
+                    <View style={styles.trioCellLast}>
                       <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>DELIVERY</Text>
                       <Text
                         style={[
-                          styles.kpiValue,
+                          styles.trioValue,
                           { color: effectiveBid.deliveryPeriodDays ? colors.primary : colors.textPrimary },
                         ]}
                         numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
                       >
-                        {effectiveBid.deliveryPeriodDays && primaryDeliveryState
-                          ? `${effectiveBid.deliveryPeriodDays}d · ${primaryDeliveryState}`
-                          : deliveryDisplay}
+                        {deliveryDisplay}
                       </Text>
+                      {primaryDeliveryState ? (
+                        <Text style={[styles.trioSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {primaryDeliveryState}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 </View>
 
-                {/* Slim 1-Row Quick Tools Strip (Closes Date + 1-Tap Margin Calculator) */}
-                <View style={styles.quickActionBar}>
-                  <Text style={[styles.closesInlineText, { color: colors.textSecondary }]} numberOfLines={1}>
-                    Closes {formatDateSafe(bid.closingTimeUtc)}
-                  </Text>
-                  <Pressable
-                    onPress={() => setShowMarginCalc(true)}
-                    style={({ pressed }) => [
-                      styles.calcInlineChip,
-                      {
-                        backgroundColor: colors.primaryTint,
-                        opacity: pressed ? 0.78 : 1,
-                      },
-                    ]}
-                    accessibilityLabel="Open Bid Margin and RA Floor Calculator"
-                  >
-                    <AppIcon name="calculator" color={colors.primary} size={13} />
-                    <Text style={[styles.calcInlineText, { color: colors.primary }]}>
-                      Margin &amp; RA Calc ›
+                {/* Apple Wallet-Style Interactive Action Row for Margin & RA Calculator */}
+                <Pressable
+                  onPress={() => setShowMarginCalc(true)}
+                  style={({ pressed }) => [
+                    styles.calcActionRow,
+                    { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.68 : 1 },
+                  ]}
+                  accessibilityLabel="Open Bid Margin and RA Floor Calculator"
+                >
+                  <View style={[styles.calcIconBadge, { backgroundColor: colors.primaryTint }]}>
+                    <AppIcon name="calculator" color={colors.primary} size={15} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.calcRowTitle, { color: colors.textPrimary }]}>
+                      Bid Margin &amp; RA Floor Calculator
                     </Text>
-                  </Pressable>
-                </View>
+                    <Text style={[styles.calcRowSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                      Calculate GST quote, safe floor &amp; working capital
+                    </Text>
+                  </View>
+                  <Text style={[styles.calcRowCue, { color: colors.primary }]}>Open ›</Text>
+                </Pressable>
               </View>
 
+              {/* Unified 16pt Inset-Grouped Content Stack */}
               <View
                 style={styles.sectionsContainer}
                 onLayout={(e) => {
                   sectionsOffsetYRef.current = e.nativeEvent.layout.y;
                 }}
               >
-
-              {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
-              <View
-                onLayout={(e) => {
-                  sectionYRef.current.docs = e.nativeEvent.layout.y;
-                }}
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                ]}
-              >
-                <View style={styles.sectionHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                      Official Documents ({mainAndBuyerDocs.length})
+                {/* 2. Official Documents & Auto-Discovered Buyer Attachments */}
+                <View
+                  style={styles.sectionBlock}
+                  onLayout={(e) => {
+                    sectionYRef.current.docs = e.nativeEvent.layout.y;
+                  }}
+                >
+                  <View style={styles.sectionEyebrowRow}>
+                    <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                      OFFICIAL DOCUMENTS ({mainAndBuyerDocs.length})
                     </Text>
-                    <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]}>
-                      {isScanningPdf
-                        ? 'Scanning tender PDF for buyer specs, drawings & ATC…'
-                        : buyerAttachmentDocs.length > 0
-                          ? `${buyerAttachmentDocs.length} buyer attachment${buyerAttachmentDocs.length === 1 ? '' : 's'} discovered from PDF`
-                          : 'Tap any document to read inside the app'}
-                    </Text>
-                  </View>
-                  {isScanningPdf ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : buyerAttachmentDocs.length > 0 ? (
-                    <View style={[styles.foundBadge, { backgroundColor: colors.successTint }]}>
-                      <Text style={[styles.foundBadgeText, { color: colors.success }]}>
+                    {isScanningPdf ? (
+                      <View style={styles.eyebrowInlineStatus}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.eyebrowAction, { color: colors.primary }]}>
+                          Scanning PDF…
+                        </Text>
+                      </View>
+                    ) : buyerAttachmentDocs.length > 0 ? (
+                      <Text style={[styles.eyebrowAction, { color: colors.success }]}>
                         +{buyerAttachmentDocs.length} Linked
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                {primaryTenderDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
-
-                {buyerAttachmentDocs.length > 0 ? (
-                  <>
-                    <View
-                      style={[
-                        styles.docGroupHeader,
-                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                      ]}
-                    >
-                      <Text style={[styles.docGroupHeaderText, { color: colors.primary }]}>
-                        BUYER ATTACHMENTS DISCOVERED IN PDF ({buyerAttachmentDocs.length})
-                      </Text>
-                    </View>
-                    {buyerAttachmentDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
-                  </>
-                ) : null}
-
-                {gtcDocs.length > 0 ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.gtcRow,
-                      { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.72 : 1 },
-                    ]}
-                    onPress={() => handleOpenDoc(gtcDocs[0].id)}
-                  >
-                    <Text style={[styles.gtcRowText, { color: colors.textSecondary }]} numberOfLines={1}>
-                      GeM General Terms &amp; Conditions (GTC)
-                    </Text>
-                    <Text style={[styles.gtcRowLink, { color: colors.primary }]}>View PDF ›</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {/* 3. Scannable Key Tender Terms Table */}
-              <View
-                onLayout={(e) => {
-                  sectionYRef.current.terms = e.nativeEvent.layout.y;
-                }}
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                ]}
-              >
-                <View style={styles.sectionHeaderRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                      Key Tender Terms
-                    </Text>
-                    {scannedOk ? (
-                      <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {effectiveBid.parentBidNumber
-                          ? `Exact figures from Original Bid PDF (${effectiveBid.parentBidNumber})`
-                          : 'Exact figures from official GeM Bid PDF'}
                       </Text>
                     ) : null}
                   </View>
-                  {isScanningPdf ? (
-                    <View style={[styles.statusChip, { backgroundColor: colors.primaryTint }]}>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                      <Text style={[styles.statusChipText, { color: colors.primary }]}>Scanning…</Text>
-                    </View>
-                  ) : scannedOk ? (
-                    <Pressable
-                      onPress={handleScanPdfOnDevice}
-                      hitSlop={8}
-                      style={[styles.statusChip, { backgroundColor: colors.successTint }]}
-                    >
-                      <Text style={[styles.statusChipText, { color: colors.success }]}>
-                        ✓ Parsed from PDF
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={handleScanPdfOnDevice}
-                      hitSlop={8}
-                      style={[styles.statusChip, { backgroundColor: colors.primaryTint }]}
-                    >
-                      <Text style={[styles.statusChipText, { color: colors.primary }]}>Scan PDF ↻</Text>
-                    </Pressable>
-                  )}
+
+                  <View
+                    style={[
+                      styles.card,
+                      { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                    ]}
+                  >
+                    {primaryTenderDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
+
+                    {buyerAttachmentDocs.length > 0 ? (
+                      <>
+                        <View
+                          style={[
+                            styles.docSubgroupBar,
+                            {
+                              borderTopColor: colors.borderSubtle,
+                              backgroundColor: colors.surfaceSubtle,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.docSubgroupText, { color: colors.textMuted }]}>
+                            BUYER ATTACHMENTS IN PDF ({buyerAttachmentDocs.length})
+                          </Text>
+                        </View>
+                        {buyerAttachmentDocs.map((doc, idx) => renderDocRow(doc, idx, idx === 0))}
+                      </>
+                    ) : null}
+
+                    {gtcDocs.length > 0 ? (
+                      <>
+                        <View
+                          style={[
+                            styles.insetDivider,
+                            { backgroundColor: colors.borderSubtle, marginLeft: 16 },
+                          ]}
+                        />
+                        <Pressable
+                          style={({ pressed }) => [styles.gtcRow, pressed && { opacity: 0.68 }]}
+                          onPress={() => handleOpenDoc(gtcDocs[0].id)}
+                        >
+                          <Text style={[styles.gtcRowText, { color: colors.textSecondary }]} numberOfLines={1}>
+                            GeM General Terms &amp; Conditions (GTC)
+                          </Text>
+                          <Text style={[styles.gtcRowLink, { color: colors.primary }]}>Read ›</Text>
+                        </Pressable>
+                      </>
+                    ) : null}
+                  </View>
                 </View>
 
-                <View style={styles.termsTable}>
-                  {keyTermRows.map((row, idx) => (
-                    <View
-                      key={row.label}
-                      style={[
-                        styles.termRow,
-                        idx > 0 && {
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: colors.borderSubtle,
-                        },
-                      ]}
-                    >
-                      <View style={styles.termLabelWrap}>
-                        <Text style={[styles.termLabel, { color: colors.textSecondary }]}>
-                          {row.label}
-                        </Text>
-                        {row.glossaryKey ? (
-                          <Pressable
-                            onPress={() => setGlossaryTerm(row.glossaryKey!)}
-                            hitSlop={8}
-                            style={[
-                              styles.termHelpDot,
-                              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                            ]}
-                            accessibilityLabel={`Explain ${row.label}`}
-                          >
-                            <Text style={[styles.termHelpDotText, { color: colors.primary }]}>?</Text>
-                          </Pressable>
-                        ) : null}
+                {/* 3. Scannable Key Tender Terms Table */}
+                <View
+                  style={styles.sectionBlock}
+                  onLayout={(e) => {
+                    sectionYRef.current.terms = e.nativeEvent.layout.y;
+                  }}
+                >
+                  <View style={styles.sectionEyebrowRow}>
+                    <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                      KEY TENDER TERMS
+                    </Text>
+                    {isScanningPdf ? (
+                      <View style={styles.eyebrowInlineStatus}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.eyebrowAction, { color: colors.primary }]}>Scanning…</Text>
                       </View>
-                      <Text
-                        style={[styles.termValue, { color: row.accent || colors.textPrimary }]}
-                        numberOfLines={2}
+                    ) : scannedOk ? (
+                      <Pressable
+                        onPress={handleScanPdfOnDevice}
+                        hitSlop={10}
+                        style={({ pressed }) => [pressed && { opacity: 0.6 }]}
                       >
-                        {row.value}
-                      </Text>
+                        <Text style={[styles.eyebrowAction, { color: colors.success }]}>
+                          ✓ Parsed from PDF
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={handleScanPdfOnDevice}
+                        hitSlop={10}
+                        style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                      >
+                        <Text style={[styles.eyebrowAction, { color: colors.primary }]}>
+                          Scan PDF ↻
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  <View
+                    style={[
+                      styles.card,
+                      { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                    ]}
+                  >
+                    <View style={styles.termsTable}>
+                      {keyTermRows.map((row, idx) => (
+                        <View
+                          key={row.label}
+                          style={[
+                            styles.termRow,
+                            idx > 0 && {
+                              borderTopWidth: StyleSheet.hairlineWidth,
+                              borderTopColor: colors.borderSubtle,
+                            },
+                          ]}
+                        >
+                          <View style={styles.termLabelWrap}>
+                            <Text style={[styles.termLabel, { color: colors.textSecondary }]}>
+                              {row.label}
+                            </Text>
+                            {row.glossaryKey ? (
+                              <Pressable
+                                onPress={() => setGlossaryTerm(row.glossaryKey!)}
+                                hitSlop={10}
+                                style={[
+                                  styles.termHelpDot,
+                                  { backgroundColor: colors.surfaceSubtle },
+                                ]}
+                                accessibilityLabel={`Explain ${row.label}`}
+                              >
+                                <Text style={[styles.termHelpDotText, { color: colors.primary }]}>?</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={[styles.termValue, { color: row.accent || colors.textPrimary }]}
+                            numberOfLines={2}
+                          >
+                            {row.value}
+                          </Text>
+                        </View>
+                      ))}
                     </View>
-                  ))}
+
+                    {policyTags.length > 0 ? (
+                      <View
+                        style={[
+                          styles.policyTagsWrap,
+                          { borderTopColor: colors.borderSubtle },
+                        ]}
+                      >
+                        {policyTags.map((tag) => (
+                          <View key={tag.label} style={[styles.policyTag, { backgroundColor: tag.bg }]}>
+                            <Text style={[styles.policyTagText, { color: tag.fg }]}>{tag.label}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
 
-                {policyTags.length > 0 ? (
-                  <View style={styles.policyTagsRow}>
-                    {policyTags.map((tag) => (
-                      <View key={tag.label} style={[styles.policyTag, { backgroundColor: tag.bg }]}>
-                        <Text style={[styles.policyTagText, { color: tag.fg }]}>{tag.label}</Text>
-                      </View>
-                    ))}
+                {/* 4. Honest Eligibility & Key Watchouts + Quick Letter Drafts */}
+                {ext ? (
+                  <View
+                    onLayout={(e) => {
+                      sectionYRef.current.eligibility = e.nativeEvent.layout.y;
+                    }}
+                  >
+                    <PreBidDisqualificationShield
+                      tenderDetails={ext}
+                      onPrepareDocuments={handlePrepareDocuments}
+                    />
                   </View>
                 ) : null}
-              </View>
 
-              {/* 4. Honest Eligibility & Key Watchouts + Quick Letter Drafts */}
-              {ext ? (
-                <View
-                  onLayout={(e) => {
-                    sectionYRef.current.eligibility = e.nativeEvent.layout.y;
-                  }}
-                >
-                  <PreBidDisqualificationShield
-                    tenderDetails={ext}
-                    onPrepareDocuments={handlePrepareDocuments}
-                  />
-                </View>
-              ) : null}
+                {/* 4b. ATC Trap Extractor & Instant PDF Keyword Finder */}
+                {ext || pdfScan?.searchableText ? (
+                  <View
+                    onLayout={(e) => {
+                      sectionYRef.current.atc = e.nativeEvent.layout.y;
+                    }}
+                  >
+                    <AtcTrapAndSearchCard
+                      tenderDetails={ext}
+                      searchableText={pdfScan?.searchableText}
+                      isScanning={isScanningPdf}
+                      onExplainAtc={() => setGlossaryTerm('ATC')}
+                    />
+                  </View>
+                ) : null}
 
-              {/* 4b. ATC Trap Extractor & Instant PDF Keyword Finder */}
-              {ext || pdfScan?.searchableText ? (
-                <View
-                  onLayout={(e) => {
-                    sectionYRef.current.atc = e.nativeEvent.layout.y;
-                  }}
-                >
-                  <AtcTrapAndSearchCard
-                    tenderDetails={ext}
-                    searchableText={pdfScan?.searchableText}
-                    isScanning={isScanningPdf}
-                    onExplainAtc={() => setGlossaryTerm('ATC')}
-                  />
-                </View>
-              ) : null}
-
-              {/* 5. Delivery Locations (Consignees — Deduplicated) */}
-              {consignees.length > 0 ? (
-                <View
-                  onLayout={(e) => {
-                    sectionYRef.current.delivery = e.nativeEvent.layout.y;
-                  }}
-                  style={[
-                    styles.card,
-                    { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                  ]}
-                >
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                      Delivery Locations
-                    </Text>
-                    <View style={[styles.countPill, { backgroundColor: colors.primaryTint }]}>
-                      <Text style={[styles.countLabel, { color: colors.primary }]}>
+                {/* 5. Delivery Locations (Consignees — Deduplicated) */}
+                {consignees.length > 0 ? (
+                  <View
+                    style={styles.sectionBlock}
+                    onLayout={(e) => {
+                      sectionYRef.current.delivery = e.nativeEvent.layout.y;
+                    }}
+                  >
+                    <View style={styles.sectionEyebrowRow}>
+                      <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                        DELIVERY LOCATIONS
+                      </Text>
+                      <Text style={[styles.eyebrowAction, { color: colors.primary }]}>
                         {consignees.length} Consignee{consignees.length === 1 ? '' : 's'}
                       </Text>
                     </View>
-                  </View>
-                  {consignees.map((c, idx) => {
-                    const stateLine = [c.state, c.pincode].filter(Boolean).join(' · ') || 'India';
-                    const locNormalized = (c.location || '').replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
-                    const stateNormalized = stateLine.replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
-                    const primaryLine =
-                      locNormalized && locNormalized !== stateNormalized
-                        ? c.location
-                        : c.reportingOfficer || 'Consignee Office';
-                    const secondaryLine =
-                      primaryLine === c.reportingOfficer
-                        ? 'Consignee Reporting Officer'
-                        : c.reportingOfficer || 'Consignee Reporting Officer';
 
-                    return (
-                      <View
-                        key={idx}
-                        style={[
-                          styles.consigneeRow,
-                          idx > 0 && {
-                            borderTopWidth: StyleSheet.hairlineWidth,
-                            borderTopColor: colors.borderSubtle,
-                          },
-                        ]}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.consigneeLocation, { color: colors.textPrimary }]}>
-                            {primaryLine}
-                          </Text>
-                          <Text style={[styles.consigneeOfficer, { color: colors.textSecondary }]}>
-                            {secondaryLine}
-                          </Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <View style={[styles.stateBadgePill, { backgroundColor: colors.surfaceSubtle }]}>
-                            <Text style={[styles.stateBadge, { color: colors.primary }]}>{stateLine}</Text>
-                          </View>
-                          <Text style={[styles.consigneeQty, { color: colors.textPrimary }]}>
-                            {c.quantity !== undefined
-                              ? `${c.quantity.toLocaleString('en-IN')} Unit${c.quantity === 1 ? '' : 's'}`
-                              : 'See PDF'}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-
-              {/* 6. Interactive Seller Document Checklist with Progress Bar */}
-              {requiredDocuments.length > 0 ? (
-                <View
-                  onLayout={(e) => {
-                    sectionYRef.current.checklist = e.nativeEvent.layout.y;
-                  }}
-                  style={[
-                    styles.card,
-                    { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                  ]}
-                >
-                  <View style={styles.sectionHeaderRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                        Documents Required from Seller
-                      </Text>
-                      <Text style={[styles.sectionSubcopy, { color: colors.textSecondary }]}>
-                        Tap items as you gather them for technical upload
-                      </Text>
-                    </View>
                     <View
                       style={[
-                        styles.countPill,
-                        {
-                          backgroundColor:
-                            checkedCount === requiredDocuments.length
-                              ? colors.successTint
-                              : colors.primaryTint,
-                        },
+                        styles.card,
+                        { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                       ]}
                     >
+                      {consignees.map((c, idx) => {
+                        const stateLine = [c.state, c.pincode].filter(Boolean).join(' · ') || 'India';
+                        const locNormalized = (c.location || '').replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
+                        const stateNormalized = stateLine.replace(/\s*[-–·,]\s*/g, ' ').trim().toLowerCase();
+                        const primaryLine =
+                          locNormalized && locNormalized !== stateNormalized
+                            ? c.location
+                            : c.reportingOfficer || 'Consignee Office';
+                        const secondaryLine =
+                          primaryLine === c.reportingOfficer
+                            ? 'Consignee Reporting Officer'
+                            : c.reportingOfficer || 'Consignee Reporting Officer';
+
+                        return (
+                          <View
+                            key={idx}
+                            style={[
+                              styles.consigneeRow,
+                              idx > 0 && {
+                                borderTopWidth: StyleSheet.hairlineWidth,
+                                borderTopColor: colors.borderSubtle,
+                              },
+                            ]}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.consigneeLocation, { color: colors.textPrimary }]}>
+                                {primaryLine}
+                              </Text>
+                              <Text style={[styles.consigneeOfficer, { color: colors.textSecondary }]}>
+                                {secondaryLine}
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <View style={[styles.stateBadgePill, { backgroundColor: colors.surfaceSubtle }]}>
+                                <Text style={[styles.stateBadge, { color: colors.primary }]}>
+                                  {stateLine}
+                                </Text>
+                              </View>
+                              <Text style={[styles.consigneeQty, { color: colors.textPrimary }]}>
+                                {c.quantity !== undefined
+                                  ? `${c.quantity.toLocaleString('en-IN')} Unit${c.quantity === 1 ? '' : 's'}`
+                                  : 'See PDF'}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* 6. Interactive Seller Document Checklist (Apple Reminders Circular Style) */}
+                {requiredDocuments.length > 0 ? (
+                  <View
+                    style={styles.sectionBlock}
+                    onLayout={(e) => {
+                      sectionYRef.current.checklist = e.nativeEvent.layout.y;
+                    }}
+                  >
+                    <View style={styles.sectionEyebrowRow}>
+                      <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                        DOCUMENTS REQUIRED FROM SELLER
+                      </Text>
                       <Text
                         style={[
-                          styles.countLabel,
+                          styles.eyebrowAction,
                           {
                             color:
                               checkedCount === requiredDocuments.length
@@ -1259,123 +1334,140 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                         {checkedCount}/{requiredDocuments.length} Ready
                       </Text>
                     </View>
-                  </View>
 
-                  <View style={[styles.progressTrack, { backgroundColor: colors.surfaceSubtle }]}>
                     <View
                       style={[
-                        styles.progressFill,
-                        {
-                          width: `${Math.round(checklistRatio * 100)}%`,
-                          backgroundColor:
-                            checkedCount === requiredDocuments.length
-                              ? colors.success
-                              : colors.primary,
-                        },
-                      ]}
-                    />
-                  </View>
-
-                  {requiredDocuments.map((doc, idx) => {
-                    const isChecked = !!checkedDocs[doc];
-                    return (
-                      <TouchableOpacity
-                        key={idx}
-                        style={[
-                          styles.checkRow,
-                          idx > 0 && {
-                            borderTopWidth: StyleSheet.hairlineWidth,
-                            borderTopColor: colors.borderSubtle,
-                          },
-                        ]}
-                        onPress={() => toggleDoc(doc)}
-                        activeOpacity={0.7}
-                      >
-                        <View
-                          style={[
-                            styles.checkbox,
-                            { borderColor: isChecked ? colors.success : colors.border },
-                            isChecked && { backgroundColor: colors.success },
-                          ]}
-                        >
-                          <Text style={[styles.checkMark, { color: colors.textInverse }]}>
-                            {isChecked ? '✓' : ''}
-                          </Text>
-                        </View>
-                        <Text
-                          style={[
-                            styles.checkLabel,
-                            { color: isChecked ? colors.textPrimary : colors.textSecondary },
-                            isChecked && { fontWeight: '700' },
-                          ]}
-                        >
-                          {doc}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
-
-              {/* 7. Published Scope */}
-              {boqItems.length > 0 ? (
-                <View
-                  style={[
-                    styles.card,
-                    { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                  ]}
-                >
-                  <Text
-                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 8 }]}
-                  >
-                    Published Scope
-                  </Text>
-                  {boqItems.map((item, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.boqItemRow,
-                        idx > 0 && {
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: colors.borderSubtle,
-                        },
+                        styles.card,
+                        { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                       ]}
                     >
-                      <View style={styles.boqTopRow}>
-                        <Text style={[styles.boqItemTitle, { color: colors.textPrimary }]}>
-                          {item.itemTitle}
-                        </Text>
-                        <View style={[styles.boqQtyPill, { backgroundColor: colors.successTint }]}>
-                          <Text style={[styles.boqQtyText, { color: colors.success }]}>
-                            {item.quantity !== undefined
-                              ? `${item.quantity.toLocaleString('en-IN')} ${item.unit || 'Units'}`
-                              : 'See PDF'}
-                          </Text>
+                      <View style={styles.checklistProgressWrap}>
+                        <View style={[styles.progressTrack, { backgroundColor: colors.surfaceSubtle }]}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              {
+                                width: `${Math.round(checklistRatio * 100)}%`,
+                                backgroundColor:
+                                  checkedCount === requiredDocuments.length
+                                    ? colors.success
+                                    : colors.primary,
+                              },
+                            ]}
+                          />
                         </View>
                       </View>
-                      {item.specsSummary ? (
-                        <Text style={[styles.boqSpecsText, { color: colors.textSecondary }]}>
-                          {item.specsSummary}
-                        </Text>
-                      ) : null}
+
+                      {requiredDocuments.map((doc, idx) => {
+                        const isChecked = !!checkedDocs[doc];
+                        return (
+                          <View key={idx}>
+                            {idx > 0 ? (
+                              <View
+                                style={[
+                                  styles.insetDivider,
+                                  { backgroundColor: colors.borderSubtle, marginLeft: 50 },
+                                ]}
+                              />
+                            ) : null}
+                            <TouchableOpacity
+                              style={styles.checkRow}
+                              onPress={() => toggleDoc(doc)}
+                              activeOpacity={0.68}
+                            >
+                              <View
+                                style={[
+                                  styles.checkbox,
+                                  { borderColor: isChecked ? colors.success : colors.border },
+                                  isChecked && { backgroundColor: colors.success },
+                                ]}
+                              >
+                                <Text style={[styles.checkMark, { color: colors.textInverse }]}>
+                                  {isChecked ? '✓' : ''}
+                                </Text>
+                              </View>
+                              <Text
+                                style={[
+                                  styles.checkLabel,
+                                  { color: isChecked ? colors.textPrimary : colors.textSecondary },
+                                  isChecked && { fontWeight: '600' },
+                                ]}
+                              >
+                                {doc}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
                     </View>
-                  ))}
+                  </View>
+                ) : null}
+
+                {/* 7. Published Scope */}
+                {boqItems.length > 0 ? (
+                  <View style={styles.sectionBlock}>
+                    <View style={styles.sectionEyebrowRow}>
+                      <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+                        PUBLISHED SCOPE
+                      </Text>
+                      <Text style={[styles.eyebrowAction, { color: colors.textSecondary }]}>
+                        {boqItems.length} Item{boqItems.length === 1 ? '' : 's'}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.card,
+                        { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      {boqItems.map((item, idx) => (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.boqItemRow,
+                            idx > 0 && {
+                              borderTopWidth: StyleSheet.hairlineWidth,
+                              borderTopColor: colors.borderSubtle,
+                            },
+                          ]}
+                        >
+                          <View style={styles.boqTopRow}>
+                            <Text style={[styles.boqItemTitle, { color: colors.textPrimary }]}>
+                              {item.itemTitle}
+                            </Text>
+                            <View style={[styles.boqQtyPill, { backgroundColor: colors.successTint }]}>
+                              <Text style={[styles.boqQtyText, { color: colors.success }]}>
+                                {item.quantity !== undefined
+                                  ? `${item.quantity.toLocaleString('en-IN')} ${item.unit || 'Units'}`
+                                  : 'See PDF'}
+                              </Text>
+                            </View>
+                          </View>
+                          {item.specsSummary ? (
+                            <Text style={[styles.boqSpecsText, { color: colors.textSecondary }]}>
+                              {item.specsSummary}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* 8. Similar Concluded Bids & Awarded Contracts Archive */}
+                <View
+                  onLayout={(e) => {
+                    sectionYRef.current.similar = e.nativeEvent.layout.y;
+                  }}
+                >
+                  <SimilarConcludedBidsCard bid={effectiveBid} />
                 </View>
-              ) : null}
 
-              {/* 8. Similar Concluded Bids & Awarded Contracts Archive */}
-              <View
-                onLayout={(e) => {
-                  sectionYRef.current.similar = e.nativeEvent.layout.y;
-                }}
-              >
-                <SimilarConcludedBidsCard bid={effectiveBid} />
-              </View>
-
-              <Text style={[styles.footerDisclaimer, { color: colors.textMuted }]}>
-                Direct public GeM feed + local on-device PDF extraction. Final bid submission and
-                account-specific pricing remain on bidplus.gem.gov.in.
-              </Text>
+                <Text style={[styles.footerDisclaimer, { color: colors.textMuted }]}>
+                  Direct public GeM feed with local on-device PDF extraction. Official bid
+                  submission and account-specific pricing remain on bidplus.gem.gov.in.
+                </Text>
               </View>
             </ScrollView>
 
@@ -1389,24 +1481,24 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               <TouchableOpacity
                 style={[
                   styles.secondaryFooterBtn,
-                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
                 ]}
                 onPress={handlePrepareDocuments}
-                activeOpacity={0.8}
+                activeOpacity={0.75}
               >
                 <Text style={[styles.secondaryFooterText, { color: colors.textPrimary }]}>
-                  Prepare Docs
+                  {t('prepareDocs')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.primaryFooterBtn, { backgroundColor: colors.primary }]}
                 onPress={() => handleOpenDoc()}
-                activeOpacity={0.85}
+                activeOpacity={0.82}
               >
                 <Text style={[styles.primaryFooterText, { color: colors.textInverse }]}>
                   {mainAndBuyerDocs.length > 1
-                    ? `Read Documents (${mainAndBuyerDocs.length})`
-                    : 'Read Tender PDF'}
+                    ? `${t('readDocuments')} (${mainAndBuyerDocs.length})`
+                    : t('readTenderPdf')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1460,7 +1552,7 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerBar: {
-    height: 48,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -1468,73 +1560,109 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headerBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerBackIcon: { fontSize: 21, fontWeight: '600' },
+  headerCenter: { flex: 1, justifyContent: 'center' },
+  headerBidRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerBidNum: {
+    fontSize: 15,
+    fontWeight: '600',
+    flexShrink: 1,
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'],
+  },
+  headerSubMeta: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  copyChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  copyChipText: { fontSize: 10.5, fontWeight: '600' },
+  watchHeaderBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerBackIcon: { fontSize: 20, fontWeight: '700' },
-  headerCenter: { flex: 1 },
-  headerBidRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerBidNum: { fontSize: 15, fontWeight: '800', flexShrink: 1, letterSpacing: -0.2 },
-  copyChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  copyChipText: { fontSize: 10, fontWeight: '700' },
-  watchHeaderBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   sharePillBtn: {
-    paddingHorizontal: 11,
-    minHeight: 32,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    minHeight: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sharePillText: { fontSize: 11.5, fontWeight: '800' },
+  sharePillText: { fontSize: 12.5, fontWeight: '600' },
   jumpBar: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   jumpBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    gap: 18,
+    paddingHorizontal: 16,
+    gap: 20,
   },
   jumpTab: {
-    paddingVertical: 9,
-    borderBottomWidth: 2.5,
+    paddingVertical: 11,
+    borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   jumpTabText: {
-    fontSize: 12.5,
+    fontSize: 13,
   },
   scrollArea: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
+  scrollContent: { paddingBottom: 28 },
   overviewSheet: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionsContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingHorizontal: 16,
+  },
+  sectionBlock: {
+    marginTop: 20,
+  },
+  sectionEyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  sectionEyebrow: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+  },
+  eyebrowInlineStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  eyebrowAction: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   corrigendumBanner: {
-    borderWidth: 1,
+    borderLeftWidth: 3.5,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+    gap: 8,
   },
   corrigendumBannerTop: {
     flexDirection: 'row',
@@ -1542,311 +1670,343 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   corrigendumDot: { width: 7, height: 7, borderRadius: 3.5 },
-  corrigendumTitle: { fontSize: 12, fontWeight: '800', flex: 1 },
+  corrigendumTitle: { fontSize: 13, fontWeight: '600', flex: 1 },
   corrigendumActionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 7,
+    gap: 8,
   },
   corrigendumActionBtn: {
-    minHeight: 32,
-    paddingHorizontal: 10,
-    borderRadius: 7,
-    borderWidth: 1,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  corrigendumActionText: { fontSize: 11.5, fontWeight: '800' },
+  corrigendumActionText: { fontSize: 12, fontWeight: '600' },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    marginBottom: 5,
+    marginBottom: 8,
   },
   metaInlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     flex: 1,
     flexWrap: 'wrap',
   },
   typeDot: { width: 6, height: 6, borderRadius: 3 },
-  metaTypeText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.4 },
-  metaHighValue: { fontSize: 10.5, fontWeight: '800' },
+  metaTypeText: { fontSize: 11.5, fontWeight: '600', letterSpacing: 0.5 },
+  metaHighValue: { fontSize: 11.5, fontWeight: '600' },
   countdownPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
-  countdownPillText: { fontSize: 10.5, fontWeight: '800' },
-  bidTitle: { fontSize: 16, fontWeight: '800', lineHeight: 21.5, marginBottom: 3 },
-  deptText: { fontSize: 12, lineHeight: 16.5, marginBottom: 10 },
+  countdownPillText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  bidTitle: {
+    fontSize: 19.5,
+    fontWeight: '700',
+    lineHeight: 25,
+    letterSpacing: -0.35,
+    marginBottom: 6,
+  },
+  deptText: {
+    fontSize: 13,
+    lineHeight: 18.5,
+    marginBottom: 14,
+  },
   metricMatrix: {
-    borderRadius: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  spotlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  spotlightValue: {
+    fontSize: 21,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
+  closingCol: {
+    alignItems: 'flex-end',
+  },
+  closingDateVal: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    marginTop: 4,
+  },
+  trioRow: {
+    flexDirection: 'row',
+  },
+  trioCell: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  trioCellLast: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  kpiLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.45,
+    marginBottom: 3,
+  },
+  kpiSub: {
+    fontSize: 12,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  trioValue: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  trioSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  calcActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    minHeight: 54,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  calcIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calcRowTitle: { fontSize: 14, fontWeight: '600' },
+  calcRowSub: { fontSize: 12, marginTop: 1 },
+  calcRowCue: { fontSize: 13, fontWeight: '600' },
+  card: {
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
-  metricRow: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  insetDivider: {
+    height: StyleSheet.hairlineWidth,
   },
-  metricRowBottom: {
-    flexDirection: 'row',
-  },
-  metricCell: {
-    flex: 1,
-    paddingHorizontal: 11,
+  docSubgroupBar: {
+    paddingHorizontal: 16,
     paddingVertical: 7,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  metricCellLeft: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-  },
-  kpiLabel: {
-    fontSize: 9.5,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    marginBottom: 2,
-  },
-  kpiValue: {
-    fontSize: 13.5,
-    fontWeight: '800',
-  },
-  kpiSub: {
+  docSubgroupText: {
     fontSize: 10.5,
-    marginTop: 1,
-  },
-  quickActionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 9,
-  },
-  closesInlineText: { fontSize: 11.5, fontWeight: '600', flex: 1 },
-  calcInlineChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 11,
-    minHeight: 32,
-    borderRadius: 16,
-  },
-  calcInlineText: { fontSize: 11.5, fontWeight: '800' },
-  card: {
-    borderRadius: 12,
-    padding: 13,
-    marginBottom: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 8,
-  },
-  sectionHeading: { fontSize: 15, fontWeight: '800' },
-  sectionSubcopy: { fontSize: 11.5, marginTop: 2 },
-  foundBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  foundBadgeText: { fontSize: 10.5, fontWeight: '800' },
-  docGroupHeader: {
-    marginTop: 8,
-    marginBottom: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  docGroupHeaderText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.6,
+    fontWeight: '600',
+    letterSpacing: 0.55,
   },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    minHeight: 56,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    minHeight: 62,
+    gap: 12,
   },
   docKindBadge: {
-    minWidth: 48,
-    height: 34,
-    borderRadius: 8,
-    paddingHorizontal: 6,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  docKindBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+  docKindBadgeText: { fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 },
   docCopy: { flex: 1 },
-  docTitle: { fontSize: 13.5, fontWeight: '700', lineHeight: 18 },
-  docSubtitle: { fontSize: 11, marginTop: 2 },
-  docActionPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  docActionCue: { fontSize: 11.5, fontWeight: '800' },
+  docTitle: { fontSize: 14.5, fontWeight: '600', lineHeight: 19 },
+  docSubtitle: { fontSize: 12.5, marginTop: 2 },
+  docActionCue: { fontSize: 13, fontWeight: '600' },
   gtcRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 11,
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
     gap: 8,
   },
-  gtcRowText: { flex: 1, fontSize: 12, fontWeight: '600' },
-  gtcRowLink: { fontSize: 12, fontWeight: '800' },
-  statusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
+  gtcRowText: { flex: 1, fontSize: 13.5, fontWeight: '500' },
+  gtcRowLink: { fontSize: 13, fontWeight: '600' },
+  termsTable: {
+    paddingHorizontal: 16,
   },
-  statusChipText: { fontSize: 10.5, fontWeight: '800' },
-  termsTable: { marginTop: 2 },
   termRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 13,
+    minHeight: 48,
     gap: 12,
   },
   termLabelWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  termLabel: { fontSize: 12.5, fontWeight: '500', flexShrink: 1 },
+  termLabel: { fontSize: 14, fontWeight: '400', flexShrink: 1 },
   termHelpDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1,
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  termHelpDotText: { fontSize: 10.5, fontWeight: '900' },
-  termValue: { fontSize: 13, fontWeight: '800', textAlign: 'right', flex: 1.15 },
-  policyTagsRow: {
+  termHelpDotText: { fontSize: 11, fontWeight: '700' },
+  termValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1.15,
+    fontVariant: ['tabular-nums'],
+  },
+  policyTagsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   policyTag: {
-    borderRadius: 7,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  policyTagText: { fontSize: 10.5, fontWeight: '700' },
-  countPill: {
     borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  countLabel: { fontSize: 11, fontWeight: '800' },
+  policyTagText: { fontSize: 12, fontWeight: '600' },
   consigneeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
-  consigneeLocation: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
-  consigneeOfficer: { fontSize: 11.5, marginTop: 2 },
+  consigneeLocation: { fontSize: 14.5, fontWeight: '600', lineHeight: 20 },
+  consigneeOfficer: { fontSize: 12.5, marginTop: 2 },
   stateBadgePill: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    borderRadius: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  stateBadge: { fontSize: 10.5, fontWeight: '800' },
-  consigneeQty: { fontSize: 12.5, fontWeight: '800', marginTop: 4 },
+  stateBadge: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  consigneeQty: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    marginTop: 5,
+    fontVariant: ['tabular-nums'],
+  },
+  checklistProgressWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
   progressTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 5,
+    borderRadius: 2.5,
     overflow: 'hidden',
-    marginBottom: 10,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 2.5,
   },
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 46,
-    paddingVertical: 8,
+    minHeight: 50,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
   },
   checkbox: {
     width: 22,
     height: 22,
-    borderRadius: 6,
-    borderWidth: 1.8,
+    borderRadius: 11,
+    borderWidth: 1.6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
-  checkMark: { fontSize: 13, fontWeight: '900' },
-  checkLabel: { fontSize: 13, flex: 1, lineHeight: 18 },
-  boqItemRow: { paddingVertical: 9 },
+  checkMark: { fontSize: 12.5, fontWeight: '700' },
+  checkLabel: { fontSize: 14, flex: 1, lineHeight: 20 },
+  boqItemRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   boqTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
   },
-  boqItemTitle: { fontSize: 13, fontWeight: '700', flex: 1, lineHeight: 18 },
+  boqItemTitle: { fontSize: 14.5, fontWeight: '600', flex: 1, lineHeight: 20 },
   boqQtyPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
   },
-  boqQtyText: { fontSize: 11, fontWeight: '800' },
-  boqSpecsText: { fontSize: 11.5, lineHeight: 16, marginTop: 4 },
+  boqQtyText: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  boqSpecsText: { fontSize: 13, lineHeight: 18.5, marginTop: 5 },
   footerDisclaimer: {
-    fontSize: 10.5,
-    lineHeight: 15,
+    fontSize: 11.5,
+    lineHeight: 16.5,
     textAlign: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
+    marginTop: 18,
     marginBottom: 8,
   },
   stickyFooter: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   secondaryFooterBtn: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 10,
-    borderWidth: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  secondaryFooterText: { fontSize: 13, fontWeight: '700' },
+  secondaryFooterText: { fontSize: 14.5, fontWeight: '600' },
   primaryFooterBtn: {
     flex: 1.45,
-    minHeight: 46,
-    borderRadius: 10,
+    minHeight: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  primaryFooterText: { fontSize: 13.5, fontWeight: '800' },
+  primaryFooterText: { fontSize: 14.5, fontWeight: '600' },
 });

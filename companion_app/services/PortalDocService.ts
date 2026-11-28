@@ -6,7 +6,12 @@
  * hosted on official *.gem.gov.in domains.
  */
 
-import type { DeconstructedBidDoc, OfficialBidDocument, OfficialBidDocumentKind } from '../types/index';
+import type {
+  DeconstructedBidDoc,
+  OfficialBidDocument,
+  OfficialBidDocumentKind,
+  OfficialBidFileFormat,
+} from '../types/index';
 
 const OFFICIAL_PDF_URL_PATTERN =
   /^https:\/\/(?:bidplus|bidplus-global)\.gem\.gov\.in\/(?:showbidDocument|showradocumentPdf|showdirectradocumentPdf)\/\d+/i;
@@ -14,6 +19,7 @@ const OFFICIAL_PDF_URL_PATTERN =
 const ALLOWED_GEM_HOSTS = new Set([
   'bidplus.gem.gov.in',
   'bidplus-global.gem.gov.in',
+  'bidnext.gem.gov.in',
   'mkp.gem.gov.in',
   'fulfilment.gem.gov.in',
   'admin.gem.gov.in',
@@ -156,10 +162,12 @@ export class PortalDocService {
   /**
    * Infers file format from an official GeM attachment URL or query parameter.
    */
-  public static inferFileFormat(url: string): 'PDF' | 'XLSX' | 'CSV' | 'IMAGE' | 'WEB' {
+  public static inferFileFormat(url: string): OfficialBidFileFormat {
     const clean = url.toLowerCase();
+    if (/\.(?:docx?|rtf)(?:$|[?#&])/i.test(clean)) return 'DOC';
     if (/\.xlsx?(?:$|[?#&])/i.test(clean) || /\/bidding\/excel\//i.test(clean)) return 'XLSX';
     if (/\.csv(?:$|[?#&])/i.test(clean) || /boqlineitemsdocument/i.test(clean)) return 'CSV';
+    if (/\.zip(?:$|[?#&])/i.test(clean)) return 'ZIP';
     if (/\.(?:png|jpe?g|webp|gif)(?:$|[?#&])/i.test(clean)) return 'IMAGE';
     if (/\/bidsla\//i.test(clean)) return 'WEB';
     if (
@@ -172,6 +180,57 @@ export class PortalDocService {
       return 'PDF';
     }
     return 'WEB';
+  }
+
+  /**
+   * Resolves the real attachment format & filename from HTTP response headers
+   * (especially useful for GeM fulfilment `documentdownload` URLs that omit file
+   * extensions and frequently serve buyer-uploaded `.doc`, `.docx`, `.xlsx`, or `.zip` files).
+   */
+  public static detectFormatFromHeaders(
+    contentType?: string | null,
+    contentDisposition?: string | null,
+    fallbackUrl = ''
+  ): { format: OfficialBidFileFormat; filename?: string } {
+    let filename: string | undefined;
+    if (contentDisposition) {
+      const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+      const plainMatch = contentDisposition.match(/filename\s*=\s*"?([^";]+)"?/i);
+      const rawName = (utf8Match?.[1] || plainMatch?.[1] || '').trim();
+      if (rawName) {
+        try {
+          filename = decodeURIComponent(rawName).replace(/^["']|["']$/g, '');
+        } catch {
+          filename = rawName.replace(/^["']|["']$/g, '');
+        }
+      }
+    }
+
+    const nameLower = (filename || '').toLowerCase();
+    const ct = (contentType || '').toLowerCase();
+
+    if (/\.(?:docx?|rtf)$/i.test(nameLower) || /msword|wordprocessingml|rtf/.test(ct)) {
+      return { format: 'DOC', filename };
+    }
+    if (/\.xlsx?$/i.test(nameLower) || /spreadsheetml|ms-excel/.test(ct)) {
+      return { format: 'XLSX', filename };
+    }
+    if (/\.csv$/i.test(nameLower) || /text\/csv/.test(ct)) {
+      return { format: 'CSV', filename };
+    }
+    if (/\.zip$/i.test(nameLower) || /application\/(?:x-)?zip/.test(ct)) {
+      return { format: 'ZIP', filename };
+    }
+    if (/\.(?:png|jpe?g|webp|gif)$/i.test(nameLower) || /^image\//.test(ct)) {
+      return { format: 'IMAGE', filename };
+    }
+    if (/\.pdf$/i.test(nameLower) || /application\/pdf/.test(ct)) {
+      return { format: 'PDF', filename };
+    }
+    if (/text\/html/.test(ct)) {
+      return { format: 'WEB', filename };
+    }
+    return { format: this.inferFileFormat(fallbackUrl), filename };
   }
 
   /**

@@ -52,9 +52,42 @@ const ThemeContext = createContext<ThemeContextType>({
   t: (key) => LanguageAndGlossaryService.translate('en', key),
 });
 
+const COLOR_MODE_STORAGE_KEY = '@gem-mobile-companion/ui-color-mode-v1';
+const FONT_SCALE_STORAGE_KEY = '@gem-mobile-companion/ui-font-scale-v1';
+
+async function loadThemePrefs(): Promise<{ colorMode?: ColorMode; fontScale?: FontSizeScale }> {
+  try {
+    const mod = await import('@react-native-async-storage/async-storage');
+    const storage = mod.default || mod;
+    const [savedMode, savedScale] = await Promise.all([
+      storage.getItem(COLOR_MODE_STORAGE_KEY),
+      storage.getItem(FONT_SCALE_STORAGE_KEY),
+    ]);
+    return {
+      colorMode: savedMode === 'dark' || savedMode === 'light' ? savedMode : undefined,
+      fontScale:
+        savedScale === 'small' || savedScale === 'medium' || savedScale === 'large'
+          ? savedScale
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function saveThemePref(key: string, value: string): Promise<void> {
+  try {
+    const mod = await import('@react-native-async-storage/async-storage');
+    const storage = mod.default || mod;
+    await storage.setItem(key, value);
+  } catch {
+    // Non-fatal in non-native environments
+  }
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [colorMode, setColorMode] = useState<ColorMode>('light');
-  const [fontScale, setFontScale] = useState<FontSizeScale>('medium');
+  const [fontScale, setFontScaleState] = useState<FontSizeScale>('medium');
   const [language, setLanguageState] = useState<AppLanguage>('en');
 
   useEffect(() => {
@@ -64,13 +97,29 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (active) setLanguageState(saved);
       })
       .catch(() => undefined);
+    loadThemePrefs()
+      .then((prefs) => {
+        if (!active) return;
+        if (prefs.colorMode) setColorMode(prefs.colorMode);
+        if (prefs.fontScale) setFontScaleState(prefs.fontScale);
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
   }, []);
 
   const toggleColorMode = useCallback(() => {
-    setColorMode((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setColorMode((prev) => {
+      const next: ColorMode = prev === 'light' ? 'dark' : 'light';
+      void saveThemePref(COLOR_MODE_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  const setFontScale = useCallback((next: FontSizeScale) => {
+    setFontScaleState(next);
+    void saveThemePref(FONT_SCALE_STORAGE_KEY, next);
   }, []);
 
   const setLanguage = useCallback((next: AppLanguage) => {

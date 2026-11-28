@@ -17,6 +17,7 @@ import {
   RefreshControl,
   BackHandler,
   ActivityIndicator,
+  Linking,
   Pressable,
 } from 'react-native';
 import type { DeconstructedBidDoc } from '../types/index';
@@ -31,7 +32,7 @@ import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
 import { TenderRadarService } from '../services/TenderRadarService';
 import { AppIcon } from '../components/AppIcons';
-import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import {
   SearchField,
   SegmentedTabs,
@@ -43,7 +44,7 @@ import {
 } from '../components/SharedUI';
 import { formatLakhs, formatDateSafe } from '../utils/formatters';
 
-export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Closed' | 'Cancelled';
+export type GeMStatusTab = 'Ongoing' | 'Live RA' | 'Railways' | 'Closed' | 'Cancelled';
 type TypeChip = 'All' | 'Goods' | 'Services' | 'BOQ' | 'Custom';
 
 const BATCH_PAGES = 3; // 30 tenders per parallel GeM batch
@@ -52,11 +53,21 @@ interface BidsHubScreenProps {
   bids: DeconstructedBidDoc[];
   initialFilter?: string;
   initialSearch?: string;
+  initialRailwaysOnly?: boolean;
   navTrigger?: number;
   onSyncLive?: () => Promise<void> | void;
   isSyncing?: boolean;
   onInspectBid?: (bid: DeconstructedBidDoc) => void;
   onPrepareDocuments?: (bid: DeconstructedBidDoc) => void;
+}
+
+const RAILWAYS_BIDNEXT_URL = 'https://bidnext.gem.gov.in/bidnext/public.jsp';
+const IREPS_ZONAL_CONTRACTS_URL =
+  'https://www.ireps.gov.in/html/misc/awardedSupplyContractZonalRly.html';
+
+function isRailwayBid(bid: DeconstructedBidDoc): boolean {
+  const hay = `${bid.ministry || ''} ${bid.department || ''}`;
+  return /railway/i.test(hay);
 }
 
 function mapTypeChipToPortalParam(tab: GeMStatusTab, chip: TypeChip): GeMPortalByType {
@@ -84,25 +95,36 @@ function mapStatusTabToPortalParam(tab: GeMStatusTab): GeMPortalStatusType {
 export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
   bids,
   initialSearch,
+  initialRailwaysOnly = false,
   navTrigger = 0,
   onSyncLive,
   isSyncing = false,
   onInspectBid,
   onPrepareDocuments,
 }) => {
-  const { colors, fontMultiplier } = useTheme();
+  const { colors, fontMultiplier, t } = useTheme();
 
-  const [activeStatusTab, setActiveStatusTab] = useState<GeMStatusTab>('Ongoing');
+  const [activeStatusTab, setActiveStatusTab] = useState<GeMStatusTab>(
+    initialRailwaysOnly ? 'Railways' : 'Ongoing'
+  );
   const [activeTypeChip, setActiveTypeChip] = useState<TypeChip>('All');
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch || '');
   const [debouncedQuery, setDebouncedQuery] = useState<string>((initialSearch || '').trim());
 
+  const isRailwaysTab = activeStatusTab === 'Railways';
+
   useEffect(() => {
-    if (initialSearch !== undefined) {
+    if (navTrigger > 0) {
+      if (initialSearch !== undefined) {
+        setSearchQuery(initialSearch);
+        setDebouncedQuery(initialSearch.trim());
+      }
+      setActiveStatusTab(initialRailwaysOnly ? 'Railways' : 'Ongoing');
+    } else if (initialSearch !== undefined) {
       setSearchQuery(initialSearch);
       setDebouncedQuery(initialSearch.trim());
     }
-  }, [initialSearch, navTrigger]);
+  }, [initialSearch, initialRailwaysOnly, navTrigger]);
 
   const [highValueOnly, setHighValueOnly] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-Start-Date-Latest');
@@ -179,19 +201,26 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           ? 'Bid-End-Date-Latest'
           : sortOrder;
       const isExactBidNum = /^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery);
+      const useExactRailwaysQuery = isRailwaysTab && !debouncedQuery;
+      const isRailwaysKeywordNarrow = isRailwaysTab && Boolean(debouncedQuery) && !isExactBidNum;
+
+      const portalSearchBid = useExactRailwaysQuery ? 'Ministry of Railways' : debouncedQuery;
+      const portalSearchType: 'exact' | 'fullText' =
+        useExactRailwaysQuery || isExactBidNum ? 'exact' : 'fullText';
+      const batchPages = isExactBidNum ? 1 : isRailwaysKeywordNarrow ? 5 : BATCH_PAGES;
 
       try {
         const res = await GeMLiveSyncService.queryLivePortalBatch(
           {
             page: startPage,
-            searchBid: debouncedQuery,
-            searchType: isExactBidNum ? 'exact' : 'fullText',
+            searchBid: portalSearchBid,
+            searchType: portalSearchType,
             bidStatusType,
             byType,
             highBidValue: highValueOnly ? 'highValue' : '',
             sort: effectiveSort,
           },
-          isExactBidNum ? 1 : BATCH_PAGES
+          batchPages
         );
 
         if (reqId !== requestIdRef.current) return;
@@ -207,15 +236,18 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           return;
         }
 
-        // Apply secondary local filter when inside Live RA + Goods/Services sub-chip
+        // Apply secondary local filter when inside Live RA + Goods/Services sub-chip or Railways keyword search
         let results = res.bids;
+        if (isRailwaysKeywordNarrow) {
+          results = results.filter(isRailwayBid);
+        }
         if (activeStatusTab === 'Live RA' && activeTypeChip === 'Services') {
           results = results.filter((b) => b.type === 'SERVICE');
         } else if (activeStatusTab === 'Live RA' && activeTypeChip === 'Goods') {
           results = results.filter((b) => b.type !== 'SERVICE');
         }
 
-        setQueryTotal(res.total);
+        setQueryTotal(isRailwaysKeywordNarrow ? 0 : res.total);
         setLastPageFetched(res.lastPageFetched);
         setHasMore(res.hasMore);
         setQueryBids((prev) => {
@@ -232,7 +264,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         }
       }
     },
-    [activeStatusTab, activeTypeChip, debouncedQuery, highValueOnly, sortOrder]
+    [activeStatusTab, isRailwaysTab, activeTypeChip, debouncedQuery, highValueOnly, sortOrder]
   );
 
   // ONLY reset when the user explicitly changes tab, search, type chip, high-value flag, or sort!
@@ -248,6 +280,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
       setHasMore(true);
       return;
     }
+    setQueryBids([]);
+    setQueryTotal(0);
     runPortalBatch(1, false);
   }, [filterKey, isDefaultOngoingView, runPortalBatch]);
 
@@ -275,13 +309,15 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
 
   const displayedBids = useMemo(() => {
     if (queryBids !== null) return queryBids;
+    if (!isDefaultOngoingView) return [];
     return bids.filter((bid) => {
       const status = bid.lifecycleStatus || GeMLiveSyncService.computeLifecycleStatus(bid);
       return status === 'ONGOING' || status === 'BID_TO_RA';
     });
-  }, [queryBids, bids]);
+  }, [queryBids, isDefaultOngoingView, bids]);
 
-  const activeTotalCount = queryBids !== null ? queryTotal : liveStats.totalPortalOngoingBids;
+  const activeTotalCount =
+    queryBids !== null ? queryTotal : isDefaultOngoingView ? liveStats.totalPortalOngoingBids : 0;
   const effectiveHasMore =
     hasMore && (activeTotalCount === 0 || displayedBids.length < activeTotalCount);
 
@@ -364,7 +400,7 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             styles.bidCard,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: colors.borderSubtle,
             },
           ]}
         >
@@ -500,12 +536,12 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           {/* Actions: View PDF + Inspect Details */}
           <View style={styles.cardActionsRow}>
             <SecondaryButton
-              label="View PDF"
+              label={t('viewPdf')}
               onPress={() => handleOpenDoc(item)}
               style={{ flex: 1, marginRight: 8 }}
             />
             <PrimaryButton
-              label="View Bid Details"
+              label={t('viewBidDetails')}
               onPress={() => handleInspect(item)}
               style={{ flex: 1.5 }}
             />
@@ -513,19 +549,24 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         </View>
       );
     },
-    [colors, fontMultiplier, watchedSet, handleOpenDoc, handleInspect]
+    [colors, fontMultiplier, watchedSet, handleOpenDoc, handleInspect, t]
   );
 
   const busy = (isSyncing && displayedBids.length === 0) || isQuerying;
 
+  const isRailwaysKeywordNarrow =
+    isRailwaysTab && Boolean(debouncedQuery) && !/^GEM\/\d{4}\/[BR]\/\d+/i.test(debouncedQuery);
+
   const tabNoun =
-    activeStatusTab === 'Closed'
-      ? 'concluded bids'
-      : activeStatusTab === 'Cancelled'
-        ? 'cancelled tenders'
-        : activeStatusTab === 'Live RA'
-          ? 'live reverse auctions'
-          : 'live tenders';
+    activeStatusTab === 'Railways'
+      ? 'live Railways tenders'
+      : activeStatusTab === 'Closed'
+        ? 'concluded bids'
+        : activeStatusTab === 'Cancelled'
+          ? 'cancelled tenders'
+          : activeStatusTab === 'Live RA'
+            ? 'live reverse auctions'
+            : 'live tenders';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -540,7 +581,9 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           <View style={styles.liveDotWrap}>
             <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
             <Text style={[styles.liveNoticeLabel, { color: colors.success }]}>
-              LIVE GeM FEED · bidplus.gem.gov.in
+              {isRailwaysTab
+                ? 'LIVE RAILWAYS FEED · bidplus.gem.gov.in'
+                : 'LIVE GeM FEED · bidplus.gem.gov.in'}
             </Text>
           </View>
           <Pressable
@@ -552,16 +595,18 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
           </Pressable>
         </View>
         <Text style={[styles.liveNoticeText, { color: colors.textSecondary }]}>
-          {activeTotalCount > 0
-            ? `Showing ${displayedBids.length.toLocaleString('en-IN')} of ${activeTotalCount.toLocaleString('en-IN')} ${tabNoun}${effectiveHasMore ? ' · Scroll down to auto-load more' : ''}`
-            : 'Direct phone-to-GeM public feed. No backend proxy or mock records.'}
+          {isRailwaysKeywordNarrow
+            ? `Showing ${displayedBids.length.toLocaleString('en-IN')} matching Railways tenders (scanned ${(lastPageFetched * 10).toLocaleString('en-IN')} live GeM records)`
+            : activeTotalCount > 0
+              ? `Showing ${displayedBids.length.toLocaleString('en-IN')} of ${activeTotalCount.toLocaleString('en-IN')} ${tabNoun}${effectiveHasMore ? ' · Scroll down to auto-load more' : ''}`
+              : 'Direct phone-to-GeM public feed. No backend proxy or mock records.'}
         </Text>
       </View>
 
-      {/* 1. Status Tabs (Ongoing, Live RA, Closed, Cancelled) */}
+      {/* 1. Status Tabs (Ongoing, Live RA, Railways, Closed, Cancelled) */}
       <View style={styles.topSection}>
         <SegmentedTabs
-          options={['Ongoing', 'Live RA', 'Closed', 'Cancelled']}
+          options={['Ongoing', 'Live RA', 'Railways', 'Closed', 'Cancelled']}
           selected={activeStatusTab}
           onSelect={(tab) => setActiveStatusTab(tab as GeMStatusTab)}
           style={{ marginBottom: 10 }}
@@ -571,7 +616,11 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         <SearchField
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search all GeM tenders (e.g. Laptop, Solar, GEM/2026/...)"
+          placeholder={
+            isRailwaysTab
+              ? 'Search Railways bids (e.g. coach, cable, signal, GEM/2026/...)'
+              : t('bidsSearchPlaceholder')
+          }
           style={{ marginBottom: 10 }}
         />
 
@@ -616,6 +665,61 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
         removeClippedSubviews={true}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.45}
+        ListHeaderComponent={
+          isRailwaysTab ? (
+            <View
+              style={[
+                styles.railwaysCard,
+                { backgroundColor: colors.surface, borderColor: colors.primary },
+              ]}
+            >
+              <View style={styles.railwaysHeaderRow}>
+                <View style={[styles.railwaysIconBox, { backgroundColor: colors.primaryTint }]}>
+                  <AppIcon name="rail" color={colors.primary} size={17} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.railwaysTitle, { color: colors.textPrimary }]}>
+                    Indian Railways Bids · Ministry of Railways
+                  </Text>
+                  <Text style={[styles.railwaysSub, { color: colors.textSecondary }]}>
+                    Live Ministry of Railways bids from GeM. Open dedicated BidNext or IREPS portals
+                    for Railway-specific login/CAPTCHA listings:
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.railwaysActionsRow}>
+                <Pressable
+                  onPress={() => Linking.openURL(RAILWAYS_BIDNEXT_URL).catch(() => undefined)}
+                  style={({ pressed }) => [
+                    styles.railwaysPriBtn,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+                  ]}
+                  accessibilityLabel="Open official GeM BidNext Railways portal"
+                >
+                  <Text style={[styles.railwaysPriBtnText, { color: colors.textInverse }]}>
+                    GeM BidNext Railways ↗
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => Linking.openURL(IREPS_ZONAL_CONTRACTS_URL).catch(() => undefined)}
+                  style={({ pressed }) => [
+                    styles.railwaysSecBtn,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.82 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="Open official IREPS Zonal Railways Contracts"
+                >
+                  <Text style={[styles.railwaysSecBtnText, { color: colors.primary }]}>
+                    IREPS Zonal Contracts ↗
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={isQuerying || (isSyncing && displayedBids.length > 0)}
@@ -645,11 +749,12 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
             ) : effectiveHasMore ? (
               <View style={styles.loadMoreWrap}>
                 <Text style={[styles.footerStatusText, { color: colors.textMuted }]}>
-                  Loaded {displayedBids.length.toLocaleString('en-IN')} of{' '}
-                  {activeTotalCount.toLocaleString('en-IN')} {tabNoun}
+                  {isRailwaysKeywordNarrow
+                    ? `Loaded ${displayedBids.length.toLocaleString('en-IN')} matching Railways tenders`
+                    : `Loaded ${displayedBids.length.toLocaleString('en-IN')} of ${activeTotalCount.toLocaleString('en-IN')} ${tabNoun}`}
                 </Text>
                 <SecondaryButton
-                  label="Load 30 More from GeM"
+                  label={isRailwaysKeywordNarrow ? 'Scan More Railways Bids' : 'Load 30 More from GeM'}
                   onPress={handleLoadMore}
                   style={{ marginTop: 8 }}
                 />
@@ -777,13 +882,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topSection: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 8,
   },
   liveNotice: {
-    paddingHorizontal: DESIGN_TOKENS.pagePaddingMobile,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   liveNoticeTopRow: {
     flexDirection: 'row',
@@ -825,22 +931,79 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  railwaysCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 15,
+    marginBottom: 12,
+  },
+  railwaysHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  railwaysIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  railwaysTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  railwaysSub: {
+    fontSize: 12.5,
+    lineHeight: 17.5,
+  },
+  railwaysActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  railwaysPriBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  railwaysPriBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  railwaysSecBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  railwaysSecBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
   listContent: {
-    padding: DESIGN_TOKENS.pagePaddingMobile,
+    paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 40,
   },
   bidCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
     marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 9,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
@@ -849,48 +1012,52 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bidNumberText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
     marginLeft: 8,
     flexShrink: 1,
+    fontVariant: ['tabular-nums'],
   },
   watchMiniBtn: {
-    width: 30,
-    height: 28,
-    borderRadius: 7,
-    borderWidth: 1,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bidTitle: {
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 4,
-    lineHeight: 20,
+    lineHeight: 21,
+    letterSpacing: -0.15,
   },
   deptText: {
-    fontSize: 12,
-    marginBottom: 10,
+    fontSize: 12.5,
+    lineHeight: 17,
+    marginBottom: 12,
   },
   metaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     borderRadius: 10,
-    padding: 8,
+    padding: 9,
     marginBottom: 12,
   },
   metricItem: {
     width: '50%',
-    padding: 4,
+    padding: 5,
   },
   metricLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.45,
     marginBottom: 2,
   },
   metricValue: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   cardActionsRow: {
     flexDirection: 'row',

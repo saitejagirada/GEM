@@ -27,7 +27,7 @@ import { AppIcon } from '../components/AppIcons';
 import { isNetworkOnline } from '../utils/network';
 import { ReverseAuctionScreen } from './ReverseAuctionScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
-import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import {
   SearchField,
   SegmentedTabs,
@@ -40,6 +40,15 @@ import {
 type TabMode = 'Live Reverse' | 'Forward e-Scrap';
 
 const RA_BATCH_PAGES = 3; // 30 Reverse Auctions per scroll
+
+// Module-level session cache so switching away from Auctions tab & returning is instant (0ms)
+let MODULE_RA_CACHE: {
+  key: string;
+  items: ReverseAuctionDetailItem[];
+  total: number;
+  lastPage: number;
+  hasMore: boolean;
+} | null = null;
 
 export interface ReverseAuctionDetailItem {
   id: string;
@@ -94,22 +103,26 @@ const mapBidDocToReverseAuction = (bid: DeconstructedBidDoc): ReverseAuctionDeta
 };
 
 export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareDocuments }) => {
-  const { colors, fontMultiplier } = useTheme();
+  const { colors, fontMultiplier, t } = useTheme();
   const [activeTab, setActiveTab] = useState<TabMode>('Live Reverse');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedQuery, setDebouncedQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<GeMPortalSort>('Bid-End-Date-Oldest');
   const [highValueOnly, setHighValueOnly] = useState<boolean>(false);
 
-  const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>([]);
-  const [totalPortalRas, setTotalPortalRas] = useState<number>(0);
-  const [lastPageFetched, setLastPageFetched] = useState<number>(0);
-  const [hasMore, setHasMore] = useState<boolean>(true);
+  const defaultCache =
+    MODULE_RA_CACHE && MODULE_RA_CACHE.key === '||Bid-End-Date-Oldest' ? MODULE_RA_CACHE : null;
+  const [reverseAuctions, setReverseAuctions] = useState<ReverseAuctionDetailItem[]>(
+    () => defaultCache?.items || []
+  );
+  const [totalPortalRas, setTotalPortalRas] = useState<number>(() => defaultCache?.total || 0);
+  const [lastPageFetched, setLastPageFetched] = useState<number>(() => defaultCache?.lastPage || 0);
+  const [hasMore, setHasMore] = useState<boolean>(() => defaultCache?.hasMore ?? true);
 
   const [selectedRa, setSelectedRa] = useState<ReverseAuctionDetailItem | null>(null);
   const [documentBid, setDocumentBid] = useState<DeconstructedBidDoc | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !defaultCache);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState<boolean>(false);
@@ -186,15 +199,30 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
         }
 
         const mapped = batch.bids.map(mapBidDocToReverseAuction);
-        setTotalPortalRas(batch.total || mapped.length);
+        const nextTotal = batch.total || mapped.length;
+        setTotalPortalRas(nextTotal);
         setLastPageFetched(batch.lastPageFetched);
         setHasMore(batch.hasMore);
         setIsOffline(false);
 
+        const cacheKey = `${debouncedQuery}|${highValueOnly ? 'hv' : ''}|${sortOrder}`;
         setReverseAuctions((prev) => {
-          if (!append) return mapped;
-          const seen = new Set(prev.map((item) => item.contractNumber));
-          return [...prev, ...mapped.filter((item) => !seen.has(item.contractNumber))];
+          const nextItems = !append
+            ? mapped
+            : [
+                ...prev,
+                ...mapped.filter(
+                  (item) => !prev.some((existing) => existing.contractNumber === item.contractNumber)
+                ),
+              ];
+          MODULE_RA_CACHE = {
+            key: cacheKey,
+            items: nextItems,
+            total: nextTotal,
+            lastPage: batch.lastPageFetched,
+            hasMore: batch.hasMore,
+          };
+          return nextItems;
         });
       } catch {
         if (append) {
@@ -217,9 +245,19 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
   );
 
   useEffect(() => {
+    const cacheKey = `${debouncedQuery}|${highValueOnly ? 'hv' : ''}|${sortOrder}`;
+    if (MODULE_RA_CACHE && MODULE_RA_CACHE.key === cacheKey && MODULE_RA_CACHE.items.length > 0) {
+      setReverseAuctions(MODULE_RA_CACHE.items);
+      setTotalPortalRas(MODULE_RA_CACHE.total);
+      setLastPageFetched(MODULE_RA_CACHE.lastPage);
+      setHasMore(MODULE_RA_CACHE.hasMore);
+      setIsLoading(false);
+      setIsOffline(false);
+      return;
+    }
     setIsLoading(true);
     loadAuctionBatch(1, false);
-  }, [loadAuctionBatch]);
+  }, [debouncedQuery, highValueOnly, sortOrder, loadAuctionBatch]);
 
   useEffect(() => {
     if (!selectedRa) return;
@@ -244,7 +282,7 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
       <View
         style={[
           styles.auctionCard,
-          { backgroundColor: colors.surface, borderColor: colors.border },
+          { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
         ]}
       >
         <View style={styles.cardHeaderRow}>
@@ -322,20 +360,20 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
         <View style={styles.cardActionsRow}>
           {ra.sourceBid ? (
             <SecondaryButton
-              label="View PDF"
+              label={t('viewPdf')}
               onPress={() => setDocumentBid(ra.sourceBid || null)}
               style={{ flex: 1, marginRight: 8 }}
             />
           ) : null}
           <PrimaryButton
-            label="Inspect Auction"
+            label={t('inspectAuction')}
             onPress={() => setSelectedRa(ra)}
             style={{ flex: 1.4 }}
           />
         </View>
       </View>
     ),
-    [colors, fontMultiplier, watchedSet]
+    [colors, fontMultiplier, watchedSet, t]
   );
 
   if (selectedRa) {
@@ -355,7 +393,7 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
           options={['Live Reverse', 'Forward e-Scrap']}
           selected={activeTab}
           onSelect={(tab) => setActiveTab(tab as TabMode)}
-          counts={{ 'Live Reverse': totalPortalRas || reverseAuctions.length }}
+          counts={totalPortalRas > 0 ? { 'Live Reverse': totalPortalRas } : undefined}
           style={{ marginBottom: 10 }}
         />
 
@@ -364,7 +402,7 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
             <SearchField
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Live search all GeM reverse auctions (ID, item, dept)"
+              placeholder={t('auctionsSearchPlaceholder')}
               style={{ marginBottom: 10 }}
             />
 
@@ -541,45 +579,45 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topSection: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingBottom: 6 },
+  topSection: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
   chipRow: { flexDirection: 'row', alignItems: 'center' },
-  progressMeta: { fontSize: 11, fontWeight: '600', marginTop: 8 },
-  listContent: { padding: DESIGN_TOKENS.pagePaddingMobile, paddingTop: 4, paddingBottom: 40 },
+  progressMeta: { fontSize: 11.5, fontWeight: '500', marginTop: 8, fontVariant: ['tabular-nums'] },
+  listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 },
   auctionCard: {
-    borderRadius: DESIGN_TOKENS.cardRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
-    padding: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
     marginBottom: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 9,
     gap: 8,
   },
-  auctionNumber: { fontSize: 12, fontWeight: '600', flex: 1 },
-  closingText: { fontSize: 11, fontWeight: '700' },
+  auctionNumber: { fontSize: 12.5, fontWeight: '600', flex: 1, fontVariant: ['tabular-nums'] },
+  closingText: { fontSize: 11.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
   watchMiniBtn: {
-    width: 28,
-    height: 26,
-    borderRadius: 7,
-    borderWidth: 1,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  auctionTitle: { fontWeight: '700', marginBottom: 4, lineHeight: 18 },
-  deptText: { fontSize: 12, marginBottom: 10 },
+  auctionTitle: { fontWeight: '600', marginBottom: 4, lineHeight: 20, letterSpacing: -0.15 },
+  deptText: { fontSize: 12.5, marginBottom: 12, lineHeight: 17 },
   metaGrid: {
     flexDirection: 'row',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+    borderRadius: 10,
+    padding: 11,
+    marginBottom: 10,
     justifyContent: 'space-between',
   },
   metaCol: { flex: 1 },
-  metaLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 2 },
-  metaValue: { fontSize: 13, fontWeight: '700' },
+  metaLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.45, marginBottom: 3 },
+  metaValue: { fontSize: 13.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
   cardActionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   footerWrap: { marginTop: 6, marginBottom: 18, alignItems: 'center' },
   footerText: { fontSize: 11.5, fontWeight: '600', textAlign: 'center' },

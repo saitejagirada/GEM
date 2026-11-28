@@ -70,12 +70,12 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
               <Pressable
                 key={tab}
                 onPress={() => setActiveTab(tab)}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                style={[styles.tabBtn, active && { borderBottomColor: colors.primary }]}
               >
                 <Text
                   style={[
                     styles.tabLabel,
-                    { color: active ? '#0B3B60' : colors.textSecondary },
+                    { color: active ? colors.primary : colors.textSecondary },
                     active && styles.tabLabelActive,
                   ]}
                 >
@@ -114,8 +114,8 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({
               ]}
               onPress={() => onSelectCategory(cat)}
             >
-              <View style={[styles.codeBox, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-                <Text style={styles.codeText}>{cat.shortCode || cat.icon}</Text>
+              <View style={[styles.codeBox, { backgroundColor: colors.primaryTint, borderColor: colors.borderSubtle }]}>
+                <Text style={[styles.codeText, { color: colors.primary }]}>{cat.shortCode || cat.icon}</Text>
               </View>
 
               <View style={styles.infoCol}>
@@ -174,7 +174,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabBtnActive: { borderBottomColor: '#0B3B60' },
   tabLabel: { fontSize: 13, fontWeight: '600' },
   tabLabelActive: { fontWeight: '800' },
   listContainer: { flex: 1 },
@@ -197,7 +196,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   codeText: {
-    color: '#0B3B60',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.4,

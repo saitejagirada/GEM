@@ -7,7 +7,7 @@
  * - MSE statutory benefit privileges (100% EMD waiver & 10-day payment SLA)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,11 +19,11 @@ import {
   Pressable,
 } from 'react-native';
 import { PortalOnboardingService, MsmeTier, BusinessConstitution } from '../services/PortalOnboardingService';
+import { BusinessProfileService } from '../services/BusinessProfileService';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
 import {
   SegmentedTabs,
   CompactChip,
-  StatusBadge,
   PrimaryButton,
   SecondaryButton,
 } from '../components/SharedUI';
@@ -33,30 +33,101 @@ export interface PortalRegistrationScreenProps {
   onBack?: () => void;
 }
 
+const CONSTITUTION_MAP: Record<string, BusinessConstitution> = {
+  Proprietorship: 'PROPRIETORSHIP',
+  'Private Limited': 'PRIVATE_LIMITED',
+  Partnership: 'PARTNERSHIP',
+  LLP: 'PARTNERSHIP',
+  Society: 'SOCIETY_TRUST',
+};
+
 export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> = ({
   initialMode = 'BUYER',
   onBack,
 }) => {
   const { colors, fontMultiplier } = useTheme();
+  const savedProfile = useMemo(() => BusinessProfileService.getProfile(), []);
 
   const [activeRole, setActiveRole] = useState<'BUYER' | 'SELLER'>(initialMode);
 
-  // Buyer Stepper (Screen 7)
+  // Buyer Stepper (Screen 7) — clean empty defaults (zero pre-filled dummy PII)
   const [buyerStep, setBuyerStep] = useState<number>(1);
-  const [buyerMinistry, setBuyerMinistry] = useState<string>('Ministry of Finance');
-  const [buyerOffice, setBuyerOffice] = useState<string>('Directorate of Income Tax');
-  const [buyerName, setBuyerName] = useState<string>('Rajesh Kumar');
-  const [buyerEmail, setBuyerEmail] = useState<string>('rajesh.kumar@gov.in');
+  const [buyerMinistry, setBuyerMinistry] = useState<string>('');
+  const [buyerOffice, setBuyerOffice] = useState<string>('');
+  const [buyerName, setBuyerName] = useState<string>('');
+  const [buyerEmail, setBuyerEmail] = useState<string>('');
   const [buyerRole, setBuyerRole] = useState<'Primary User / HOD' | 'Secondary Buyer'>('Primary User / HOD');
 
-  // Seller Stepper (Screen 8)
+  // Seller Stepper (Screen 8) — clean empty defaults (zero pre-filled dummy PII)
   const [sellerStep, setSellerStep] = useState<number>(1);
-  const [enterpriseName, setEnterpriseName] = useState<string>('Garuda Tech & Electrical Solutions');
-  const [businessType, setBusinessType] = useState<string>('Private Limited');
-  const [sellerPan, setSellerPan] = useState<string>('AABCG1234F');
-  const [sellerGstin, setSellerGstin] = useState<string>('07AABCG1234F1Z8');
-  const [sellerUdyam, setSellerUdyam] = useState<string>('UDYAM-DL-01-0098765');
+  const [enterpriseName, setEnterpriseName] = useState<string>('');
+  const [businessType, setBusinessType] = useState<string>('Proprietorship');
+  const [sellerPan, setSellerPan] = useState<string>('');
+  const [sellerGstin, setSellerGstin] = useState<string>('');
+  const [sellerUdyam, setSellerUdyam] = useState<string>('');
   const [classification, setClassification] = useState<MsmeTier>('MICRO');
+
+  const buyerEmailTrimmed = buyerEmail.trim().toLowerCase();
+  const buyerEmailIsGov =
+    buyerEmailTrimmed.length > 0 &&
+    /(@|\.)(gov\.in|nic\.in|mil\.in|railnet\.gov\.in)$/i.test(buyerEmailTrimmed);
+
+  const buyerValidation = useMemo(
+    () =>
+      PortalOnboardingService.validateBuyerOnboarding({
+        fullName: buyerName,
+        officialGovEmail: buyerEmail,
+        designation: buyerRole,
+        mobileNumber: '9999999999',
+        ministry: buyerMinistry,
+        department: buyerMinistry,
+        officeName: buyerOffice,
+        role: buyerRole === 'Primary User / HOD' ? 'PRIMARY_HOD' : 'BUYER',
+      }),
+    [buyerName, buyerEmail, buyerRole, buyerMinistry, buyerOffice]
+  );
+
+  const sellerPanValid = sellerPan.trim().length > 0 && /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(sellerPan.trim().toUpperCase());
+  const sellerGstinValid =
+    sellerGstin.trim().length === 0 ||
+    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(sellerGstin.trim().toUpperCase());
+  const sellerUdyamValid =
+    sellerUdyam.trim().length === 0 || /^UDYAM-/i.test(sellerUdyam.trim());
+
+  const sellerPrivileges = useMemo(
+    () => PortalOnboardingService.calculateMsmePrivileges(classification),
+    [classification]
+  );
+
+  const sellerValidation = useMemo(
+    () =>
+      PortalOnboardingService.validateSellerOnboarding({
+        companyName: enterpriseName,
+        constitution: CONSTITUTION_MAP[businessType] || 'PROPRIETORSHIP',
+        panNumber: sellerPan,
+        gstin: sellerGstin || '07AAAAA0000A1Z5',
+        authorizedSignatoryAadhaarLast4: '0000',
+        bankAccountNumber: '0000000000',
+        bankIfsc: 'SBIN0000001',
+        hasUdyamRegistration: sellerUdyam.trim().length > 0,
+        udyamRegistrationNumber: sellerUdyam.trim().toUpperCase() || undefined,
+        msmeTier: classification,
+      }),
+    [enterpriseName, businessType, sellerPan, sellerGstin, sellerUdyam, classification]
+  );
+
+  const applySavedBusinessProfile = () => {
+    if (!savedProfile) return;
+    if (savedProfile.organizationName) setEnterpriseName(savedProfile.organizationName);
+    const tier: MsmeTier =
+      savedProfile.msmeCategory === 'MICRO' ||
+      savedProfile.msmeCategory === 'SMALL' ||
+      savedProfile.msmeCategory === 'MEDIUM' ||
+      savedProfile.msmeCategory === 'LARGE'
+        ? savedProfile.msmeCategory
+        : 'MICRO';
+    setClassification(tier);
+  };
 
   const openOfficialSignup = (type: 'buyer' | 'seller') => {
     const url = `https://mkp.gem.gov.in/registration/signup#!/${type}`;
@@ -66,32 +137,38 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Top Header / Back navigation */}
-      <View style={styles.topNavRow}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Sticky 48dp Sub-Screen Header */}
+      <View
+        style={[
+          styles.stickyHeader,
+          { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+        ]}
+      >
         {onBack && (
-          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn}>
+          <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Go back">
             <Text style={[styles.backArrow, { color: colors.primary }]}>←</Text>
           </Pressable>
         )}
-        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 18 * fontMultiplier }]}>
-          {activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
+        <Text style={[styles.navTitle, { color: colors.textPrimary, fontSize: 16.5 * fontMultiplier }]}>
+          {activeRole === 'BUYER' ? 'Buyer Registration Guide' : 'Seller / MSE KYC Guide'}
         </Text>
       </View>
 
-      {/* Role Switcher */}
-      <SegmentedTabs
-        options={['Buyer Registration', 'Seller / MSE KYC']}
-        selected={activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
-        onSelect={(tab) => {
-          setActiveRole(tab === 'Buyer Registration' ? 'BUYER' : 'SELLER');
-        }}
-        style={{ marginBottom: 16 }}
-      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Role Switcher */}
+        <SegmentedTabs
+          options={['Buyer Registration', 'Seller / MSE KYC']}
+          selected={activeRole === 'BUYER' ? 'Buyer Registration' : 'Seller / MSE KYC'}
+          onSelect={(tab) => {
+            setActiveRole(tab === 'Buyer Registration' ? 'BUYER' : 'SELLER');
+          }}
+          style={{ marginBottom: 16 }}
+        />
 
       {/* =========================================================================
           SCREEN 7: BUYER REGISTRATION
@@ -232,6 +309,18 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
+                  {buyerEmailTrimmed.length > 0 && (
+                    <Text
+                      style={[
+                        styles.validationHint,
+                        { color: buyerEmailIsGov ? colors.success : colors.danger },
+                      ]}
+                    >
+                      {buyerEmailIsGov
+                        ? '✓ Official government email domain recognized'
+                        : 'GeM Buyer registration requires an official @gov.in / @nic.in email.'}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -283,19 +372,19 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                 <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Ministry:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerMinistry}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerMinistry || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Office Unit:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerOffice}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerOffice || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Officer Name:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerName}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerName || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Gov Email:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerEmail}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{buyerEmail || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Designated Role:</Text>
@@ -303,8 +392,21 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                 </View>
 
+                {buyerValidation.errors.length > 0 && (
+                  <View style={[styles.validationBox, { backgroundColor: colors.warningTint, borderColor: colors.warning }]}>
+                    <Text style={[styles.validationBoxTitle, { color: colors.warning }]}>
+                      Checklist before official signup
+                    </Text>
+                    {buyerValidation.errors.map((err) => (
+                      <Text key={err} style={[styles.validationBoxItem, { color: colors.textPrimary }]}>
+                        • {err}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
                 <PrimaryButton
-                  label="Submit to Official GeM Portal ↗"
+                  label="Open Official GeM Buyer Signup ↗"
                   onPress={() => openOfficialSignup('buyer')}
                   style={{ marginTop: 14 }}
                 />
@@ -381,6 +483,23 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                 <Text style={[styles.formSecHeader, { color: colors.textPrimary }]}>
                   Enterprise &amp; Constitution
                 </Text>
+                <Text style={[styles.formDesc, { color: colors.textSecondary }]}>
+                  Prepare your details privately on-device before completing Aadhaar/PAN OTP signup on GeM.
+                </Text>
+
+                {savedProfile?.organizationName ? (
+                  <Pressable
+                    onPress={applySavedBusinessProfile}
+                    style={[
+                      styles.prefillBanner,
+                      { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+                    ]}
+                  >
+                    <Text style={[styles.prefillText, { color: colors.primary }]}>
+                      Fill from My Business Profile ({savedProfile.organizationName}) →
+                    </Text>
+                  </Pressable>
+                ) : null}
 
                 <View style={styles.inputGroup}>
                   <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
@@ -388,7 +507,7 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </Text>
                   <TextInput
                     style={[styles.inputBox, { borderColor: colors.border, color: colors.textPrimary }]}
-                    placeholder="e.g. Garuda Tech Solutions Pvt Ltd"
+                    placeholder="Enter legal business / trade name"
                     placeholderTextColor={colors.textMuted}
                     value={enterpriseName}
                     onChangeText={setEnterpriseName}
@@ -438,6 +557,11 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                     onChangeText={setSellerPan}
                     autoCapitalize="characters"
                   />
+                  {sellerPan.trim().length > 0 && (
+                    <Text style={[styles.validationHint, { color: sellerPanValid ? colors.success : colors.danger }]}>
+                      {sellerPanValid ? '✓ Valid 10-character PAN format' : 'PAN must be 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F)'}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -452,6 +576,11 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                     onChangeText={setSellerGstin}
                     autoCapitalize="characters"
                   />
+                  {sellerGstin.trim().length > 0 && (
+                    <Text style={[styles.validationHint, { color: sellerGstinValid ? colors.success : colors.danger }]}>
+                      {sellerGstinValid ? '✓ Valid 15-character GSTIN format' : 'GSTIN must be 15 characters (e.g. 07ABCDE1234F1Z5)'}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -466,6 +595,11 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                     onChangeText={setSellerUdyam}
                     autoCapitalize="characters"
                   />
+                  {sellerUdyam.trim().length > 0 && !sellerUdyamValid && (
+                    <Text style={[styles.validationHint, { color: colors.danger }]}>
+                      Udyam numbers begin with UDYAM- (e.g. UDYAM-DL-01-0012345)
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.btnRow}>
@@ -519,15 +653,37 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   ))}
                 </View>
 
-                {/* MSE Statutory Benefit Notice */}
-                <View style={[styles.benefitNotice, { backgroundColor: colors.successTint }]}>
-                  <Text style={[styles.benefitTitle, { color: colors.success }]}>
-                    Verified MSE statutory privileges
+                {/* Dynamic Statutory Benefit Notice driven by PortalOnboardingService */}
+                <View
+                  style={[
+                    styles.benefitNotice,
+                    {
+                      backgroundColor:
+                        sellerPrivileges.emdWaiverPercent > 0
+                          ? colors.successTint
+                          : colors.surfaceSubtle,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.benefitTitle,
+                      {
+                        color:
+                          sellerPrivileges.emdWaiverPercent > 0
+                            ? colors.success
+                            : colors.textPrimary,
+                      },
+                    ]}
+                  >
+                    {sellerPrivileges.emdWaiverPercent > 0
+                      ? `Eligible ${classification} MSE statutory privileges`
+                      : 'General Non-MSME procurement terms'}
                   </Text>
                   <Text style={[styles.benefitDesc, { color: colors.textPrimary }]}>
-                    • 100% EMD Exemption on all eligible public procurement tenders.{'\n'}
-                    • 25% annual government procurement quota reserved for MSEs.{'\n'}
-                    • 10-day statutory CRAC deemed payment guarantee under GFR 149.
+                    {sellerPrivileges.emdWaiverPercent > 0
+                      ? `• ${sellerPrivileges.emdWaiverPercent}% EMD Exemption on eligible public procurement tenders (OEMs for Goods).\n• Purchase preference: ${sellerPrivileges.purchasePreferenceBand} (${sellerPrivileges.procurementQuotaPercent}% MSE quota).\n• ${sellerPrivileges.paymentSlaDays}-day statutory CRAC payment SLA under GFR 149.`
+                      : `• EMD Waiver: ${sellerPrivileges.emdWaiverPercent}% (standard bid security applies unless buyer waives).\n• Purchase preference: ${sellerPrivileges.purchasePreferenceBand}.\n• ${sellerPrivileges.paymentSlaDays}-day statutory CRAC payment SLA under GFR 149.`}
                   </Text>
                 </View>
 
@@ -555,7 +711,7 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                 <View style={[styles.reviewCard, { backgroundColor: colors.surfaceSubtle }]}>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Enterprise:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{enterpriseName}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{enterpriseName || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>Type:</Text>
@@ -563,7 +719,7 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>PAN:</Text>
-                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerPan}</Text>
+                    <Text style={[styles.reviewVal, { color: colors.textPrimary }]}>{sellerPan || 'Not entered'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={[styles.reviewKey, { color: colors.textSecondary }]}>GSTIN:</Text>
@@ -579,8 +735,21 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
                   </View>
                 </View>
 
+                {sellerValidation.errors.length > 0 && (
+                  <View style={[styles.validationBox, { backgroundColor: colors.warningTint, borderColor: colors.warning }]}>
+                    <Text style={[styles.validationBoxTitle, { color: colors.warning }]}>
+                      Checklist before official signup
+                    </Text>
+                    {sellerValidation.errors.map((err) => (
+                      <Text key={err} style={[styles.validationBoxItem, { color: colors.textPrimary }]}>
+                        • {err}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
                 <PrimaryButton
-                  label="Complete Verification on GeM Portal ↗"
+                  label="Open Official GeM Seller Signup ↗"
                   onPress={() => openOfficialSignup('seller')}
                   style={{ marginTop: 14 }}
                 />
@@ -589,7 +758,8 @@ export const PortalRegistrationScreen: React.FC<PortalRegistrationScreenProps> =
           </View>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -597,14 +767,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  stickyHeader: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+  },
   contentContainer: {
     padding: DESIGN_TOKENS.pagePaddingMobile,
     paddingBottom: 40,
-  },
-  topNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
   },
   backBtn: {
     marginRight: 10,
@@ -616,6 +788,37 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     fontWeight: '700',
+  },
+  prefillBanner: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  prefillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  validationHint: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginTop: 5,
+  },
+  validationBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 11,
+    marginTop: 10,
+  },
+  validationBoxTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  validationBoxItem: {
+    fontSize: 11.5,
+    lineHeight: 16.5,
   },
   stepperContainer: {
     flexDirection: 'row',

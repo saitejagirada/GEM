@@ -276,101 +276,155 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
   }, [profileReport, colors]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-      <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {profileReport ? 'Go / No-Go Eligibility Verdict' : 'Eligibility & Key Watchouts'}
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-            {profileReport && activeProfile
-              ? BusinessProfileService.formatProfileSummary(activeProfile)
-              : 'Key rules extracted directly from the official GeM PDF'}
-          </Text>
-        </View>
+    <View style={styles.sectionBlock}>
+      {/* Apple Inset-Grouped External Section Header */}
+      <View style={styles.sectionEyebrowRow}>
+        <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+          {profileReport ? 'ELIGIBILITY VERDICT' : 'ELIGIBILITY & WATCHOUTS'}
+        </Text>
         {profileReport ? (
           <Pressable
             onPress={() => setShowProfileModal(true)}
-            hitSlop={8}
-            style={[
-              styles.editProfilePill,
-              { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-            ]}
+            hitSlop={10}
+            style={({ pressed }) => [pressed && { opacity: 0.6 }]}
           >
-            <Text style={[styles.editProfileText, { color: colors.primary }]}>Edit Profile</Text>
+            <Text style={[styles.eyebrowAction, { color: colors.primary }]}>Edit Profile</Text>
           </Pressable>
         ) : null}
       </View>
 
-      {/* Live Go / Caution / No-Go Verdict Banner (Mode 2) OR 30s Profile Setup Prompt (Mode 1) */}
-      {profileReport && verdictMeta ? (
-        <View
-          style={[
-            styles.verdictBanner,
-            { backgroundColor: verdictMeta.bg, borderColor: verdictMeta.border },
-          ]}
-        >
-          <View style={styles.verdictTopRow}>
-            <Text style={[styles.verdictBadgeText, { color: verdictMeta.fg }]}>
-              {verdictMeta.label}
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+        ]}
+      >
+        {/* Live Go / Caution / No-Go Verdict Header (Mode 2) OR 30s Profile Setup Row (Mode 1) */}
+        {profileReport && verdictMeta ? (
+          <View
+            style={[
+              styles.verdictBanner,
+              {
+                backgroundColor: verdictMeta.bg,
+                borderLeftColor: verdictMeta.border,
+              },
+            ]}
+          >
+            <View style={styles.verdictTopRow}>
+              <View style={styles.verdictBadgeWrap}>
+                <View style={[styles.verdictDot, { backgroundColor: verdictMeta.fg }]} />
+                <Text style={[styles.verdictBadgeText, { color: verdictMeta.fg }]}>
+                  {verdictMeta.label}
+                </Text>
+              </View>
+              <Text style={[styles.verdictCounts, { color: verdictMeta.fg }]}>
+                {profileReport.passedCount} OK · {profileReport.warningCount} Check ·{' '}
+                {profileReport.criticalDisqualificationCount} Blocker
+              </Text>
+            </View>
+            <Text style={[styles.verdictHeadline, { color: colors.textPrimary }]}>
+              {verdictMeta.headline}
             </Text>
-            <Text style={[styles.verdictCounts, { color: verdictMeta.fg }]}>
-              {profileReport.passedCount} OK · {profileReport.warningCount} Check ·{' '}
-              {profileReport.criticalDisqualificationCount} Blocker
-            </Text>
+            {activeProfile ? (
+              <Text style={[styles.verdictProfileMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                {BusinessProfileService.formatProfileSummary(activeProfile)}
+              </Text>
+            ) : null}
           </View>
-          <Text style={[styles.verdictHeadline, { color: colors.textPrimary }]}>
-            {verdictMeta.headline}
-          </Text>
-        </View>
-      ) : (
-        <Pressable
-          onPress={() => setShowProfileModal(true)}
-          style={({ pressed }) => [
-            styles.setupPromptBox,
-            {
-              backgroundColor: colors.primaryTint,
-              borderColor: colors.primary,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-        >
-          <View style={[styles.setupIconWrap, { backgroundColor: colors.surface }]}>
-            <AppIcon name="profile" color={colors.primary} size={16} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.setupPromptTitle, { color: colors.primary }]}>
-              Check if your business qualifies
-            </Text>
-            <Text style={[styles.setupPromptSub, { color: colors.textSecondary }]}>
-              Set up 30s private profile (OEM/Reseller, Turnover, MSE) for instant Go/No-Go verdicts.
-            </Text>
-          </View>
-          <Text style={[styles.setupPromptCta, { color: colors.primary }]}>Setup ›</Text>
-        </Pressable>
-      )}
+        ) : (
+          <Pressable
+            onPress={() => setShowProfileModal(true)}
+            style={({ pressed }) => [
+              styles.setupPromptBox,
+              {
+                backgroundColor: colors.primaryTint,
+                opacity: pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            <View style={[styles.setupIconWrap, { backgroundColor: colors.surface }]}>
+              <AppIcon name="profile" color={colors.primary} size={17} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.setupPromptTitle, { color: colors.primary }]}>
+                Check if your business qualifies
+              </Text>
+              <Text style={[styles.setupPromptSub, { color: colors.textSecondary }]}>
+                Set up a 30s private profile (OEM/Reseller, Turnover, MSE) for instant Go/No-Go verdicts.
+              </Text>
+            </View>
+            <Text style={[styles.setupPromptCta, { color: colors.primary }]}>Setup ›</Text>
+          </Pressable>
+        )}
 
-      {/* Mode 1: Honest published rules (default when no seller profile is configured) */}
-      {!profileReport ? (
-        publishedWatchouts.length > 0 ? (
+        {/* Mode 1: Honest published rules (default when no seller profile is configured) */}
+        {!profileReport ? (
+          publishedWatchouts.length > 0 ? (
+            <View style={styles.listWrap}>
+              {publishedWatchouts.map((item, idx) => {
+                const tagBg =
+                  item.tone === 'positive'
+                    ? colors.successTint
+                    : item.tone === 'caution'
+                      ? colors.warningTint
+                      : colors.primaryTint;
+                const tagFg =
+                  item.tone === 'positive'
+                    ? colors.success
+                    : item.tone === 'caution'
+                      ? colors.warning
+                      : colors.primary;
+
+                return (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.watchoutRow,
+                      idx > 0 && {
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.borderSubtle,
+                      },
+                    ]}
+                  >
+                    <View style={styles.checkTitleLine}>
+                      <View style={[styles.statusDot, { backgroundColor: tagFg }]} />
+                      <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
+                        {item.title}
+                      </Text>
+                      <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
+                        <Text style={[styles.tagPillText, { color: tagFg }]}>{item.tag}</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
+                      {item.detail}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={[styles.noRulesNote, { color: colors.textSecondary }]}>
+              No mandatory turnover, EMD, or experience thresholds were flagged in the scanned summary.
+              Confirm full terms inside the official Bid PDF.
+            </Text>
+          )
+        ) : (
+          /* Mode 2: Full-width structured checks (no squished left column) */
           <View style={styles.listWrap}>
-            {publishedWatchouts.map((item, idx) => {
-              const tagBg =
-                item.tone === 'positive'
-                  ? colors.successTint
-                  : item.tone === 'caution'
-                    ? colors.warningTint
-                    : colors.primaryTint;
-              const tagFg =
-                item.tone === 'positive'
-                  ? colors.success
-                  : item.tone === 'caution'
-                    ? colors.warning
-                    : colors.primary;
+            {profileReport.checks.map((check, idx) => {
+              const isCritical = check.severity === 'CRITICAL';
+              const isWarning = check.severity === 'WARNING';
+              const tagBg = isCritical
+                ? colors.dangerTint
+                : isWarning
+                  ? colors.warningTint
+                  : colors.successTint;
+              const tagFg = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
+              const tagText = isCritical ? 'Blocker' : isWarning ? 'Check' : 'Pass';
 
               return (
                 <View
-                  key={item.id}
+                  key={check.id}
                   style={[
                     styles.watchoutRow,
                     idx > 0 && {
@@ -379,163 +433,125 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
                     },
                   ]}
                 >
-                  <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
-                    <Text style={[styles.tagPillText, { color: tagFg }]}>{item.tag}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.checkTitleLine}>
+                    <View style={[styles.statusDot, { backgroundColor: tagFg }]} />
                     <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
-                      {item.title}
+                      {check.title}
                     </Text>
-                    <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
-                      {item.detail}
-                    </Text>
+                    <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
+                      <Text style={[styles.tagPillText, { color: tagFg }]}>{tagText}</Text>
+                    </View>
                   </View>
-                </View>
-              );
-            })}
-          </View>
-        ) : (
-          <Text style={[styles.noRulesNote, { color: colors.textSecondary }]}>
-            No mandatory turnover, EMD, or experience thresholds were flagged in the scanned summary.
-            Confirm full terms inside the official Bid PDF.
-          </Text>
-        )
-      ) : (
-        /* Mode 2: Real profile comparison (clean, calm, zero emojis) */
-        <View style={styles.listWrap}>
-          {profileReport.checks.map((check, idx) => {
-            const isCritical = check.severity === 'CRITICAL';
-            const isWarning = check.severity === 'WARNING';
-            const tagBg = isCritical
-              ? colors.dangerTint
-              : isWarning
-                ? colors.warningTint
-                : colors.successTint;
-            const tagFg = isCritical ? colors.danger : isWarning ? colors.warning : colors.success;
-            const tagText = isCritical ? 'BLOCKER' : isWarning ? 'CHECK' : 'OK';
-
-            return (
-              <View
-                key={check.id}
-                style={[
-                  styles.watchoutRow,
-                  idx > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: colors.borderSubtle,
-                  },
-                ]}
-              >
-                <View style={[styles.tagPill, { backgroundColor: tagBg }]}>
-                  <Text style={[styles.tagPillText, { color: tagFg }]}>{tagText}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowTitle, { color: colors.textPrimary }]}>
-                    {check.title}
-                  </Text>
                   <Text style={[styles.rowDetail, { color: colors.textSecondary }]}>
                     {check.reason}
                   </Text>
                   {check.remediation ? (
-                    <Text style={[styles.remediationLine, { color: colors.primary }]}>
-                      Next step: {check.remediation}
-                    </Text>
+                    <View
+                      style={[
+                        styles.remediationBox,
+                        { backgroundColor: colors.surfaceSubtle, borderLeftColor: colors.primary },
+                      ]}
+                    >
+                      <Text style={[styles.remediationLine, { color: colors.textPrimary }]}>
+                        <Text style={{ color: colors.primary, fontWeight: '600' }}>Next step: </Text>
+                        {check.remediation}
+                      </Text>
+                    </View>
                   ) : null}
                 </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
+              );
+            })}
+          </View>
+        )}
 
-      {/* Delivery State Split (if present in PDF) */}
-      {stateEntries.length > 0 ? (
+        {/* Delivery State Split (if present in PDF) */}
+        {stateEntries.length > 0 ? (
+          <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
+            <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>DELIVERY STATES</Text>
+            <View style={styles.chipWrap}>
+              {stateEntries.map(([state, data]) => (
+                <View
+                  key={state}
+                  style={[
+                    styles.stateChip,
+                    { backgroundColor: colors.surfaceSubtle },
+                  ]}
+                >
+                  <Text style={[styles.stateChipText, { color: colors.textPrimary }]}>
+                    {state} · {data.quantity.toLocaleString('en-IN')} ({data.percentage}%)
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Useful 1-Tap Compliance Letter Drafts */}
         <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
-          <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>DELIVERY STATES</Text>
+          <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>
+            QUICK LETTER DRAFTS
+          </Text>
           <View style={styles.chipWrap}>
-            {stateEntries.map(([state, data]) => (
-              <View
-                key={state}
-                style={[
-                  styles.stateChip,
-                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
-                ]}
-              >
-                <Text style={[styles.stateChipText, { color: colors.textPrimary }]}>
-                  {state} · {data.quantity.toLocaleString('en-IN')} ({data.percentage}%)
-                </Text>
-              </View>
-            ))}
+            <Pressable
+              style={({ pressed }) => [
+                styles.draftBtn,
+                {
+                  backgroundColor: colors.primaryTint,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+              onPress={() => handleOpenTemplate('MII_DECLARATION')}
+            >
+              <Text style={[styles.draftBtnText, { color: colors.primary }]}>MII Declaration ↗</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.draftBtn,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+              onPress={() => handleOpenTemplate('CA_UDIN_REQUEST')}
+            >
+              <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
+                CA UDIN Request ↗
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.draftBtn,
+                {
+                  backgroundColor: colors.surfaceSubtle,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+              onPress={() => handleOpenTemplate('OEM_MAF_REQUEST')}
+            >
+              <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
+                OEM MAF Request ↗
+              </Text>
+            </Pressable>
           </View>
         </View>
-      ) : null}
 
-      {/* Useful 1-Tap Compliance Letter Drafts */}
-      <View style={[styles.subSection, { borderTopColor: colors.borderSubtle }]}>
-        <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>
-          QUICK LETTER DRAFTS
-        </Text>
-        <View style={styles.chipWrap}>
+        {onPrepareDocuments ? (
           <Pressable
             style={({ pressed }) => [
-              styles.draftBtn,
-              {
-                backgroundColor: colors.primaryTint,
-                borderColor: colors.primary,
-                opacity: pressed ? 0.78 : 1,
-              },
+              styles.prepareLinkRow,
+              { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.7 : 1 },
             ]}
-            onPress={() => handleOpenTemplate('MII_DECLARATION')}
+            onPress={onPrepareDocuments}
           >
-            <Text style={[styles.draftBtnText, { color: colors.primary }]}>MII Declaration ↗</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.draftBtn,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.border,
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}
-            onPress={() => handleOpenTemplate('CA_UDIN_REQUEST')}
-          >
-            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
-              CA UDIN Request ↗
+            <Text style={[styles.prepareLinkText, { color: colors.primary }]}>
+              Organize &amp; attach tender documents in Workspace
             </Text>
+            <Text style={[styles.prepareChevron, { color: colors.textMuted }]}>›</Text>
           </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.draftBtn,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.border,
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}
-            onPress={() => handleOpenTemplate('OEM_MAF_REQUEST')}
-          >
-            <Text style={[styles.draftBtnText, { color: colors.textPrimary }]}>
-              OEM MAF Request ↗
-            </Text>
-          </Pressable>
-        </View>
+        ) : null}
       </View>
-
-      {onPrepareDocuments ? (
-        <Pressable
-          style={({ pressed }) => [
-            styles.prepareLinkRow,
-            { borderTopColor: colors.borderSubtle, opacity: pressed ? 0.75 : 1 },
-          ]}
-          onPress={onPrepareDocuments}
-        >
-          <Text style={[styles.prepareLinkText, { color: colors.primary }]}>
-            Organize &amp; attach tender documents in Workspace →
-          </Text>
-        </Pressable>
-      ) : null}
 
       {/* Compliance Letter Draft Modal */}
       <Modal
@@ -549,9 +565,10 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
           <View
             style={[
               styles.modalCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
             ]}
           >
+            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
             <View style={[styles.modalHeader, { borderBottomColor: colors.borderSubtle }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]} numberOfLines={2}>
                 {activeTemplate?.title}
@@ -590,44 +607,35 @@ export const PreBidDisqualificationShield: React.FC<PreBidDisqualificationShield
 };
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
+  sectionBlock: {
+    marginTop: 20,
   },
-  headerRow: {
+  sectionEyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    gap: 8,
   },
-  title: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  subtitle: {
+  sectionEyebrow: {
     fontSize: 11.5,
-    marginTop: 2,
+    fontWeight: '600',
+    letterSpacing: 0.6,
   },
-  editProfilePill: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 32,
-    justifyContent: 'center',
+  eyebrowAction: {
+    fontSize: 12.5,
+    fontWeight: '600',
   },
-  editProfileText: {
-    fontSize: 11.5,
-    fontWeight: '800',
+  container: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
   verdictBanner: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 11,
-    marginBottom: 6,
+    borderLeftWidth: 3.5,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   verdictTopRow: {
     flexDirection: 'row',
@@ -635,105 +643,130 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
     flexWrap: 'wrap',
-    marginBottom: 4,
+    marginBottom: 5,
+  },
+  verdictBadgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  verdictDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   verdictBadgeText: {
-    fontSize: 11.5,
-    fontWeight: '900',
-    letterSpacing: 0.4,
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   verdictCounts: {
-    fontSize: 10.5,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   verdictHeadline: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
-    lineHeight: 17,
+    lineHeight: 20,
+  },
+  verdictProfileMeta: {
+    fontSize: 12,
+    marginTop: 4,
   },
   setupPromptBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 11,
-    marginBottom: 8,
-    minHeight: 54,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 60,
   },
   setupIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   setupPromptTitle: {
-    fontSize: 12.5,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '600',
   },
   setupPromptSub: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 17,
     marginTop: 2,
   },
   setupPromptCta: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '600',
   },
   noRulesNote: {
-    fontSize: 12,
-    lineHeight: 17,
-    paddingVertical: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   listWrap: {
-    marginTop: 2,
+    paddingHorizontal: 16,
   },
   watchoutRow: {
+    paddingVertical: 14,
+  },
+  checkTitleLine: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 10,
-    gap: 10,
-  },
-  tagPill: {
-    minWidth: 68,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
     alignItems: 'center',
-    marginTop: 1,
+    gap: 8,
+    marginBottom: 5,
   },
-  tagPillText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   rowTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
+    fontSize: 14.5,
+    fontWeight: '600',
+    lineHeight: 20,
+    flex: 1,
+  },
+  tagPill: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  tagPillText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   rowDetail: {
-    fontSize: 11.5,
-    lineHeight: 16.5,
-    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 19,
+    paddingLeft: 16,
+  },
+  remediationBox: {
+    marginLeft: 16,
+    marginTop: 8,
+    borderLeftWidth: 2.5,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   remediationLine: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    lineHeight: 16,
-    marginTop: 4,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
   subSection: {
-    marginTop: 8,
-    paddingTop: 10,
+    marginHorizontal: 16,
+    paddingVertical: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   subSectionTitle: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 8,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginBottom: 9,
   },
   chipWrap: {
     flexDirection: 'row',
@@ -741,35 +774,44 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stateChip: {
-    borderRadius: 7,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   stateChipText: {
-    fontSize: 11.5,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
   draftBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    minHeight: 36,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    minHeight: 38,
     justifyContent: 'center',
   },
   draftBtnText: {
-    fontSize: 11.5,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '600',
   },
   prepareLinkRow: {
-    marginTop: 12,
-    paddingTop: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 48,
     borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
   },
   prepareLinkText: {
-    fontSize: 12.5,
-    fontWeight: '700',
+    fontSize: 13.5,
+    fontWeight: '600',
+    flex: 1,
+  },
+  prepareChevron: {
+    fontSize: 19,
+    fontWeight: '400',
   },
   modalBackdrop: {
     flex: 1,
@@ -777,25 +819,33 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalCard: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
     maxHeight: '82%',
+    paddingTop: 10,
     paddingBottom: 16,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 10,
   },
-  modalTitle: { fontSize: 15, fontWeight: '800', flex: 1 },
-  modalClose: { fontSize: 18, fontWeight: '700' },
-  modalBody: { paddingHorizontal: 16, paddingVertical: 12, maxHeight: 420 },
-  templateContent: { fontSize: 12.5, lineHeight: 19 },
+  modalTitle: { fontSize: 16, fontWeight: '700', flex: 1 },
+  modalClose: { fontSize: 18, fontWeight: '600' },
+  modalBody: { paddingHorizontal: 16, paddingVertical: 14, maxHeight: 420 },
+  templateContent: { fontSize: 13.5, lineHeight: 21 },
   modalFooter: {
     paddingHorizontal: 16,
     paddingTop: 12,

@@ -115,6 +115,7 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
         const isSelected = selected === option;
         const count = counts?.[option];
         const label = count !== undefined ? `${option} (${count})` : option;
+        const isCompact = options.length >= 5;
 
         return (
           <Pressable
@@ -125,6 +126,7 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
             android_ripple={{ color: 'rgba(0, 0, 0, 0.08)' }}
             style={({ pressed }) => [
               styles.segmentTab,
+              isCompact && { paddingHorizontal: 2 },
               pressed && { opacity: 0.8 },
               isSelected && [
                 styles.segmentTabActive,
@@ -141,10 +143,12 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
                 {
                   color: isSelected ? colors.primary : colors.textSecondary,
                   fontWeight: isSelected ? '700' : '500',
-                  fontSize: 13 * fontMultiplier,
+                  fontSize: (isCompact ? 11.5 : 13) * fontMultiplier,
                 },
               ]}
               numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.82}
             >
               {label}
             </Text>
@@ -191,7 +195,16 @@ export const CompactChip: React.FC<CompactChipProps> = ({
         style,
       ]}
     >
-      {icon ? <Text style={styles.chipIcon}>{icon}</Text> : null}
+      {icon ? (
+        <Text
+          style={[
+            styles.chipIcon,
+            { color: selected ? colors.primary : colors.textSecondary },
+          ]}
+        >
+          {icon}
+        </Text>
+      ) : null}
       <Text
         style={[
           styles.chipText,
@@ -295,7 +308,16 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
         style,
       ]}
     >
-      {icon ? <Text style={styles.btnIcon}>{icon}</Text> : null}
+      {icon ? (
+        <Text
+          style={[
+            styles.btnIcon,
+            { color: disabled ? colors.textMuted : colors.textInverse },
+          ]}
+        >
+          {icon}
+        </Text>
+      ) : null}
       <Text
         style={[
           styles.primaryBtnText,
@@ -339,7 +361,16 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
         style,
       ]}
     >
-      {icon ? <Text style={styles.btnIcon}>{icon}</Text> : null}
+      {icon ? (
+        <Text
+          style={[
+            styles.btnIcon,
+            { color: disabled ? colors.textMuted : colors.primary },
+          ]}
+        >
+          {icon}
+        </Text>
+      ) : null}
       <Text
         style={[
           styles.secondaryBtnText,
@@ -457,7 +488,7 @@ export const FilterBottomSheetModal: React.FC<FilterBottomSheetModalProps> = ({
             },
           ]}
         >
-          <View style={styles.sheetHandle} />
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>{title}</Text>
             {onReset && (
@@ -489,12 +520,12 @@ export const FilterBottomSheetModal: React.FC<FilterBottomSheetModalProps> = ({
 // -----------------------------------------------------------------------------
 const styles = StyleSheet.create({
   searchContainer: {
-    height: 48,
-    borderRadius: DESIGN_TOKENS.inputRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
+    height: 46,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
   },
   searchIcon: {
     fontSize: 16,
@@ -511,12 +542,12 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   segmentedBar: {
-    height: 40,
-    borderRadius: DESIGN_TOKENS.inputRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     padding: 3,
     alignItems: 'center',
@@ -524,22 +555,22 @@ const styles = StyleSheet.create({
   segmentTab: {
     flex: 1,
     height: '100%',
-    borderRadius: DESIGN_TOKENS.inputRadius - 2,
+    borderRadius: 7.5,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
   segmentTabActive: {
-    borderWidth: DESIGN_TOKENS.borderWidth,
+    borderWidth: StyleSheet.hairlineWidth,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.08,
-        shadowRadius: 2,
+        shadowRadius: 2.5,
       },
       android: {
-        elevation: 1,
+        elevation: 1.5,
       },
     }),
   },
@@ -547,10 +578,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   chip: {
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: DESIGN_TOKENS.chipRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
+    height: 34,
+    paddingHorizontal: 13,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -562,9 +593,9 @@ const styles = StyleSheet.create({
   },
   chipText: {},
   badge: {
-    height: 24,
+    height: 23,
     paddingHorizontal: 8,
-    borderRadius: DESIGN_TOKENS.inputRadius,
+    borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -577,12 +608,12 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.25,
   },
   primaryBtn: {
     minHeight: DESIGN_TOKENS.touchTargetMin,
-    borderRadius: DESIGN_TOKENS.buttonRadius,
+    borderRadius: 11,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -595,8 +626,8 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     minHeight: DESIGN_TOKENS.touchTargetMin,
-    borderRadius: DESIGN_TOKENS.buttonRadius,
-    borderWidth: DESIGN_TOKENS.borderWidth,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -632,16 +663,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetContainer: {
-    borderTopLeftRadius: DESIGN_TOKENS.cardRadius,
-    borderTopRightRadius: DESIGN_TOKENS.cardRadius,
-    borderTopWidth: 1,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
     maxHeight: '75%',
     paddingBottom: 24,
   },
   sheetHandle: {
     width: 36,
     height: 4,
-    backgroundColor: '#CBD5E1',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,

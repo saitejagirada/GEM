@@ -30,7 +30,7 @@ export type LinkedDocKind =
   | 'GTC'
   | 'OTHER';
 
-export type LinkedDocFormat = 'PDF' | 'XLSX' | 'CSV' | 'IMAGE' | 'WEB';
+export type LinkedDocFormat = 'PDF' | 'DOC' | 'XLSX' | 'CSV' | 'ZIP' | 'IMAGE' | 'WEB';
 
 export interface ExtractedLinkedDocument {
   id: string;
@@ -1724,10 +1724,14 @@ export class GemPdfExtractor {
 
       // Determine file format
       let fileFormat: LinkedDocFormat = 'WEB';
-      if (/\.xlsx?(?:$|[?#&])/i.test(urlLower) || /\/bidding\/excel\//i.test(urlLower)) {
+      if (/\.(?:docx?|rtf)(?:$|[?#&])/i.test(urlLower)) {
+        fileFormat = 'DOC';
+      } else if (/\.xlsx?(?:$|[?#&])/i.test(urlLower) || /\/bidding\/excel\//i.test(urlLower)) {
         fileFormat = 'XLSX';
       } else if (/\.csv(?:$|[?#&])/i.test(urlLower) || /boqlineitemsdocument/i.test(urlLower)) {
         fileFormat = 'CSV';
+      } else if (/\.zip(?:$|[?#&])/i.test(urlLower)) {
+        fileFormat = 'ZIP';
       } else if (/\.(?:png|jpe?g|webp|gif)(?:$|[?#&])/i.test(urlLower)) {
         fileFormat = 'IMAGE';
       } else if (/\/bidsla\//i.test(urlLower)) {

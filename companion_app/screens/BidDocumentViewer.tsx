@@ -25,7 +25,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { DeconstructedBidDoc, OfficialBidDocument, OfficialBidDocumentKind } from '../types/index';
+import type {
+  DeconstructedBidDoc,
+  OfficialBidDocument,
+  OfficialBidDocumentKind,
+  OfficialBidFileFormat,
+} from '../types/index';
 import { BidDocService } from '../services/BidDocService';
 import { PortalDocService } from '../services/PortalDocService';
 import { useTheme } from '../theme/ThemeContext';
@@ -122,6 +127,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [resolvedFormat, setResolvedFormat] = useState<OfficialBidFileFormat | null>(null);
+  const [resolvedFilename, setResolvedFilename] = useState<string | null>(null);
+  const [isProbingFormat, setIsProbingFormat] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [showTermsPeek, setShowTermsPeek] = useState(false);
@@ -132,6 +140,9 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setPage(1);
     setPageCount(0);
     setLoadError(null);
+    setResolvedFormat(null);
+    setResolvedFilename(null);
+    setIsProbingFormat(false);
     setRetryNonce(0);
     setFocusMode(false);
     setShowTermsPeek(false);
@@ -182,7 +193,8 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
 
   if (!bid || !selectedDocument) return null;
 
-  const format = selectedDocument.fileFormat || PortalDocService.inferFileFormat(selectedDocument.url);
+  const format: OfficialBidFileFormat =
+    resolvedFormat || selectedDocument.fileFormat || PortalDocService.inferFileFormat(selectedDocument.url);
   const isPdfDocument = format === 'PDF';
   const safeId = (bid.b_id || bid.bidNumber).replace(/[^a-zA-Z0-9_-]/g, '-');
   const urlHash = Array.from(selectedDocument.url).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) | 0), 7);
@@ -193,13 +205,67 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
     setPage(1);
     setPageCount(0);
     setLoadError(null);
+    setResolvedFormat(null);
+    setResolvedFilename(null);
+    setIsProbingFormat(false);
   };
 
   const handleRetry = () => {
     setLoadError(null);
+    setResolvedFormat(null);
+    setResolvedFilename(null);
+    setIsProbingFormat(false);
     setPage(1);
     setPageCount(0);
     setRetryNonce((n) => n + 1);
+  };
+
+  const probeActualDocumentFormat = async (url: string, errorMsg: string) => {
+    if (!PortalDocService.isSafeGemUrl(url)) return;
+    setIsProbingFormat(true);
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      try {
+        let res = await fetch(url, {
+          method: 'HEAD',
+          headers: {
+            'User-Agent': PDF_USER_AGENT,
+            Referer: 'https://bidplus.gem.gov.in/',
+          },
+          signal: controller.signal,
+        });
+        if (res.status === 405 || res.status === 403) {
+          res = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'User-Agent': PDF_USER_AGENT,
+              Referer: 'https://bidplus.gem.gov.in/',
+              Range: 'bytes=0-64',
+            },
+            signal: controller.signal,
+          });
+        }
+        const detected = PortalDocService.detectFormatFromHeaders(
+          res.headers.get('content-type'),
+          res.headers.get('content-disposition'),
+          url
+        );
+        if (detected.filename) setResolvedFilename(detected.filename);
+        if (detected.format !== 'PDF') {
+          setResolvedFormat(detected.format);
+          setLoadError(null);
+          return;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      // Fall back to regular error display below
+    } finally {
+      setIsProbingFormat(false);
+    }
+    setLoadError(errorMsg);
   };
 
   const jumpPage = (delta: number) => {
@@ -372,24 +438,55 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
           {!isPdfDocument ? (
             <View style={[styles.errorState, { backgroundColor: colors.background }]}>
               <View style={[styles.formatPillBig, { backgroundColor: colors.primaryTint, borderColor: colors.primary }]}>
-                <Text style={[styles.formatPillBigText, { color: colors.primary }]}>{format}</Text>
+                <Text style={[styles.formatPillBigText, { color: colors.primary }]}>
+                  {format === 'DOC' ? 'WORD / DOC' : format}
+                </Text>
               </View>
               <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>
                 {selectedDocument.label}
               </Text>
-              <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-                {format === 'XLSX' || format === 'CSV'
-                  ? `This buyer-attached ${format} spreadsheet is hosted directly on ${sourceHost}. Open it in Excel, Sheets, or your browser to inspect all BOQ rows.`
-                  : `This official GeM ${format === 'WEB' ? 'catalogue / SLA web' : format} document opens directly on ${sourceHost}.`}
-              </Text>
-              <Pressable
-                style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
-                onPress={openInSystemViewer}
-              >
-                <Text style={[styles.primaryActionText, { color: colors.textInverse }]}>
-                  Open {format === 'WEB' ? 'Official Page' : `${format} File`} ↗
+              {resolvedFilename ? (
+                <Text style={[styles.resolvedFileTag, { color: colors.primary }]} numberOfLines={2}>
+                  {resolvedFilename}
                 </Text>
-              </Pressable>
+              ) : null}
+              <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+                {format === 'DOC'
+                  ? `The buyer uploaded a Microsoft Word (${resolvedFilename?.toLowerCase().endsWith('.docx') ? '.docx' : '.doc'}) file instead of a PDF on ${sourceHost}. Open it in Word, Google Docs, or your browser to read all ATC clauses.`
+                  : format === 'XLSX' || format === 'CSV'
+                    ? `This buyer-attached ${format} spreadsheet is hosted directly on ${sourceHost}. Open it in Excel, Sheets, or your browser to inspect all BOQ rows.`
+                    : format === 'ZIP'
+                      ? `This buyer uploaded a compressed ZIP archive on ${sourceHost}. Open it in your browser or file manager to unpack its files.`
+                      : `This official GeM ${format === 'WEB' ? 'catalogue / SLA web' : format} document opens directly on ${sourceHost}.`}
+              </Text>
+              <View style={styles.errorActions}>
+                <Pressable
+                  style={[styles.primaryActionBtn, { backgroundColor: colors.primary }]}
+                  onPress={openInSystemViewer}
+                >
+                  <Text style={[styles.primaryActionText, { color: colors.textInverse }]}>
+                    Open {format === 'WEB' ? 'Official Page' : format === 'DOC' ? 'Word Document' : `${format} File`} ↗
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.secondaryActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  onPress={shareDocumentLink}
+                >
+                  <Text style={[styles.secondaryActionText, { color: colors.primary }]}>
+                    Share Link
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : isProbingFormat ? (
+            <View style={[styles.loadingState, { backgroundColor: colors.background }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingTitle, { color: colors.textPrimary }]}>
+                Checking official file format…
+              </Text>
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                Verifying attachment headers from {sourceHost}
+              </Text>
             </View>
           ) : !NativePdf || loadError ? (
             <View style={[styles.errorState, { backgroundColor: colors.background }]}>
@@ -471,7 +568,12 @@ export const BidDocumentViewer: React.FC<BidDocumentViewerProps> = ({
                     : typeof err === 'string'
                       ? err
                       : `Unable to fetch the PDF from ${sourceHost}.`;
-                setLoadError(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
+                const trimmedMsg = msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
+                if (/not in pdf format|corrupted|cannot create document|invalid pdf/i.test(msg)) {
+                  void probeActualDocumentFormat(selectedDocument.url, trimmedMsg);
+                } else {
+                  setLoadError(trimmedMsg);
+                }
               }}
               style={styles.pdf}
               renderActivityIndicator={(progress) => (
@@ -795,6 +897,13 @@ const styles = StyleSheet.create({
   },
   errorIcon: { fontSize: 18, fontWeight: '900' },
   errorTitle: { fontSize: 16, fontWeight: '800', textAlign: 'center', marginBottom: 6 },
+  resolvedFileTag: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxWidth: 310,
+    marginBottom: 8,
+  },
   errorText: { fontSize: 13, textAlign: 'center', lineHeight: 19, maxWidth: 310, marginBottom: 18 },
   errorActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
   primaryActionBtn: {

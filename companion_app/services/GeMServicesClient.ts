@@ -59,6 +59,114 @@ export interface LiveGeMServiceSeller {
   totalValue?: string | number | null;
 }
 
+export interface LiveGeMServiceSellerCertificate {
+  category: string;
+  count: number;
+}
+
+export interface LiveGeMServiceSellerDetail {
+  sellerId: string;
+  serviceId: string;
+  totalVerifiedProjects: number;
+  totalProjectValueInr: number;
+  certificates: LiveGeMServiceSellerCertificate[];
+}
+
+export type ServiceSellerFilterMode = 'ALL' | 'VERIFIED' | 'HIGHEST_VALUE';
+
+export function parseNumericProjectValue(val?: string | number | null): number {
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^0-9.]/g, '');
+    const parsed = parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+export function parseServiceSellerDetailPayload(
+  serviceId: string,
+  sellerId: string,
+  json: {
+    meta?: { result?: string };
+    result?: {
+      seller_certificate_hash?: Record<string, unknown>;
+      approved_project_details?: {
+        total_verified_projects?: { value?: number | string };
+        total_project_value?: { value?: number | string };
+      };
+    } | null;
+  } | null
+): LiveGeMServiceSellerDetail | null {
+  const r = json?.result;
+  if (!r || json?.meta?.result !== 'success') return null;
+
+  const approved = r.approved_project_details;
+  const totalVerifiedProjects = Math.max(
+    0,
+    Math.round(parseNumericProjectValue(approved?.total_verified_projects?.value))
+  );
+  const totalProjectValueInr = Math.max(
+    0,
+    parseNumericProjectValue(approved?.total_project_value?.value)
+  );
+
+  const certHash = r.seller_certificate_hash && typeof r.seller_certificate_hash === 'object'
+    ? r.seller_certificate_hash
+    : {};
+  const certificates: LiveGeMServiceSellerCertificate[] = Object.entries(certHash)
+    .map(([category, items]) => ({
+      category: category.trim(),
+      count: Array.isArray(items) ? items.length : items ? 1 : 0,
+    }))
+    .filter((c) => Boolean(c.category) && c.count > 0);
+
+  return {
+    sellerId,
+    serviceId,
+    totalVerifiedProjects,
+    totalProjectValueInr,
+    certificates,
+  };
+}
+
+export function filterAndSortServiceSellers(
+  sellers: LiveGeMServiceSeller[],
+  query: string,
+  mode: ServiceSellerFilterMode
+): LiveGeMServiceSeller[] {
+  const q = query.trim().toLowerCase();
+  let list = sellers;
+
+  if (q) {
+    list = list.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.sellerId.toLowerCase().includes(q)
+    );
+  }
+
+  if (mode === 'VERIFIED') {
+    list = list.filter(
+      (s) => s.verifiedProjects > 0 || parseNumericProjectValue(s.totalValue) > 0
+    );
+  }
+
+  if (mode === 'HIGHEST_VALUE' || mode === 'VERIFIED') {
+    return [...list].sort((a, b) => {
+      const valDiff =
+        parseNumericProjectValue(b.totalValue) - parseNumericProjectValue(a.totalValue);
+      if (valDiff !== 0) return valDiff;
+      if (b.verifiedProjects !== a.verifiedProjects) {
+        return b.verifiedProjects - a.verifiedProjects;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  return list;
+}
+
 export interface LiveGeMServiceListResponse {
   services: LiveGeMServiceSummary[];
   total: number;
@@ -124,6 +232,8 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = REQUEST_TIMEOUT_
 
 export class GeMServicesClient {
   private static detailCache = new Map<string, LiveGeMServiceDetail>();
+  private static sellerDetailCache = new Map<string, LiveGeMServiceSellerDetail>();
+  private static allSellersCache = new Map<string, { sellers: LiveGeMServiceSeller[]; total: number }>();
   private static directoryPageCache = new Map<string, LiveGeMServiceListResponse>();
   private static fullDirectoryCache: { services: LiveGeMServiceSummary[]; total: number } | null = null;
   private static fullDirectoryPromise: Promise<{ services: LiveGeMServiceSummary[]; total: number }> | null = null;
@@ -338,28 +448,32 @@ export class GeMServicesClient {
 
   /**
    * Fetches paginated live registered GeM Service Providers for a specific service ID.
+   * Uses `per_page=100..500` (live-verified on mkp.gem.gov.in) for high-throughput browsing.
    */
   public static async fetchServiceSellers(
     serviceId: string,
-    page = 1
+    page = 1,
+    perPage = 100,
+    timeoutMs?: number
   ): Promise<LiveGeMServiceSellersResponse> {
     const cleanId = serviceId.trim();
     if (!cleanId) return { sellers: [], total: 0, page, hasMore: false };
 
-    const url = `${MKP_ORIGIN}/pub/api/service_catalogs/${encodeURIComponent(cleanId)}/get_seller_list?page=${page}`;
+    const safePerPage = Math.min(1000, Math.max(10, perPage));
+    const effectiveTimeout = timeoutMs ?? (safePerPage >= 500 ? 22000 : REQUEST_TIMEOUT_MS);
+    const url = `${MKP_ORIGIN}/pub/api/service_catalogs/${encodeURIComponent(cleanId)}/get_seller_list?page=${page}&per_page=${safePerPage}`;
     const json = await fetchJsonWithTimeout<{
       result?: {
         seller_list?: Record<string, { name?: string }>;
         srvc_catalog_hash?: Record<string, { verified_projects?: number; total_value?: string | number | null }>;
         pagination_meta?: { total_items?: number; per_page?: number; page?: string | number };
       };
-    }>(url);
+    }>(url, effectiveTimeout);
 
     const sellerMap = json?.result?.seller_list ?? {};
     const catalogHash = json?.result?.srvc_catalog_hash ?? {};
     const meta = json?.result?.pagination_meta;
     const total = Number(meta?.total_items ?? Object.keys(sellerMap).length);
-    const perPage = Number(meta?.per_page ?? 10);
 
     const sellers: LiveGeMServiceSeller[] = Object.entries(sellerMap)
       .filter(([, info]) => Boolean(info?.name))
@@ -370,11 +484,166 @@ export class GeMServicesClient {
         totalValue: catalogHash[sellerId]?.total_value ?? null,
       }));
 
+    // GeM returns `pagination_meta.per_page: 10` even when `per_page=500` returns 500 sellers.
+    const effectivePerPage = Math.max(safePerPage, sellers.length, Number(meta?.per_page ?? 10));
+
     return {
       sellers,
       total,
       page,
-      hasMore: page * perPage < total && sellers.length > 0,
+      hasMore: page * effectivePerPage < total && sellers.length > 0,
     };
+  }
+
+  /**
+   * Returns cached full provider list for a service if already fetched this session.
+   */
+  public static getCachedAllServiceSellers(
+    serviceId: string
+  ): { sellers: LiveGeMServiceSeller[]; total: number } | null {
+    const cleanId = serviceId.trim();
+    if (!cleanId) return null;
+    return this.allSellersCache.get(cleanId) ?? null;
+  }
+
+  /**
+   * Automatically fetches ALL live registered GeM Service Providers for a service in one
+   * pass (no manual "next, next" paging) by fast-painting page 1 (100 sellers) and then
+   * streaming all remaining 500-seller chunks concurrently via 5 parallel workers.
+   */
+  public static async fetchAllServiceSellers(
+    serviceId: string,
+    options?: {
+      onProgress?: (
+        sellers: LiveGeMServiceSeller[],
+        total: number,
+        isComplete: boolean
+      ) => void;
+      isCancelled?: () => boolean;
+      chunkSize?: number;
+      concurrency?: number;
+    }
+  ): Promise<{ sellers: LiveGeMServiceSeller[]; total: number }> {
+    const cleanId = serviceId.trim();
+    if (!cleanId) return { sellers: [], total: 0 };
+
+    const cached = this.allSellersCache.get(cleanId);
+    if (cached && cached.sellers.length > 0) {
+      options?.onProgress?.(cached.sellers, cached.total, true);
+      return cached;
+    }
+
+    const sellerById = new Map<string, LiveGeMServiceSeller>();
+    const mergeSellers = (batch: LiveGeMServiceSeller[]) => {
+      for (const item of batch) {
+        const existing = sellerById.get(item.sellerId);
+        if (!existing) {
+          sellerById.set(item.sellerId, item);
+        } else if (
+          parseNumericProjectValue(item.totalValue) > parseNumericProjectValue(existing.totalValue) ||
+          item.verifiedProjects > existing.verifiedProjects
+        ) {
+          sellerById.set(item.sellerId, item);
+        }
+      }
+    };
+
+    // Step 1: Fast first paint (100 sellers in ~1s so UI renders immediately)
+    const first = await this.fetchServiceSellers(cleanId, 1, 100);
+    if (options?.isCancelled?.()) {
+      return { sellers: first.sellers, total: first.total };
+    }
+    mergeSellers(first.sellers);
+    let total = Math.max(first.total, sellerById.size);
+
+    if (!first.hasMore || total <= first.sellers.length) {
+      const doneList = Array.from(sellerById.values());
+      const doneResult = { sellers: doneList, total: Math.max(total, doneList.length) };
+      if (doneList.length > 0) {
+        this.allSellersCache.set(cleanId, doneResult);
+      }
+      options?.onProgress?.(doneResult.sellers, doneResult.total, true);
+      return doneResult;
+    }
+
+    options?.onProgress?.(Array.from(sellerById.values()), total, false);
+
+    // Step 2: Parallel 500-seller streaming across ALL remaining pages automatically
+    const chunkSize = Math.min(500, Math.max(100, options?.chunkSize ?? 500));
+    const concurrency = Math.min(6, Math.max(2, options?.concurrency ?? 5));
+    const totalChunkPages = Math.ceil(total / chunkSize);
+    const pageQueue: number[] = Array.from({ length: totalChunkPages }, (_, idx) => idx + 1);
+
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < pageQueue.length) {
+        if (options?.isCancelled?.()) return;
+        const pageNum = pageQueue[nextIndex++];
+        let res = await this.fetchServiceSellers(cleanId, pageNum, chunkSize, 22000);
+        // Retry once cleanly if GeM briefly stalled on a 500-row chunk
+        if (res.sellers.length === 0 && !options?.isCancelled?.()) {
+          res = await this.fetchServiceSellers(cleanId, pageNum, chunkSize, 24000);
+        }
+        if (options?.isCancelled?.()) return;
+        if (res.sellers.length > 0) {
+          mergeSellers(res.sellers);
+          total = Math.max(total, res.total, sellerById.size);
+          options?.onProgress?.(Array.from(sellerById.values()), total, false);
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, pageQueue.length) }, () => worker())
+    );
+
+    const finalList = Array.from(sellerById.values());
+    const finalTotal = Math.max(total, finalList.length);
+    const finalResult = { sellers: finalList, total: finalTotal };
+
+    if (!options?.isCancelled?.()) {
+      // Cache only when we completed an uninterrupted full sweep
+      if (finalList.length > 0) {
+        this.allSellersCache.set(cleanId, finalResult);
+      }
+      options?.onProgress?.(finalResult.sellers, finalResult.total, true);
+    }
+
+    return finalResult;
+  }
+
+  /**
+   * Fetches live public seller credentials & verified GeM project value for a specific
+   * Service Provider via mkp.gem.gov.in's public `get_seller_details` endpoint.
+   */
+  public static async fetchServiceSellerDetail(
+    serviceId: string,
+    sellerId: string
+  ): Promise<LiveGeMServiceSellerDetail | null> {
+    const cleanServiceId = serviceId.trim();
+    const cleanSellerId = sellerId.trim();
+    if (!cleanServiceId || !cleanSellerId) return null;
+
+    const cacheKey = `${cleanServiceId}:${cleanSellerId}`;
+    const cached = this.sellerDetailCache.get(cacheKey);
+    if (cached) return cached;
+
+    const url = `${MKP_ORIGIN}/pub/api/service_catalogs/${encodeURIComponent(cleanServiceId)}/get_seller_details?seller_id=${encodeURIComponent(cleanSellerId)}&show_seller_details=true`;
+    const json = await fetchJsonWithTimeout<{
+      meta?: { result?: string };
+      result?: {
+        seller_certificate_hash?: Record<string, unknown>;
+        approved_project_details?: {
+          total_verified_projects?: { value?: number | string };
+          total_project_value?: { value?: number | string };
+        };
+      } | null;
+    }>(url);
+
+    const parsed = parseServiceSellerDetailPayload(cleanServiceId, cleanSellerId, json);
+    if (parsed) {
+      this.sellerDetailCache.set(cacheKey, parsed);
+    }
+    return parsed;
   }
 }

@@ -105,5 +105,48 @@ describe('PortalDocService', () => {
       PortalDocService.isSafeGemUrl('https://admin.gem.gov.in/apis/v1/gtc/pdfByDate/?date=20260922'),
       true
     );
+    assert.strictEqual(
+      PortalDocService.isSafeGemUrl('https://bidnext.gem.gov.in/bidnext/public.jsp'),
+      true
+    );
+  });
+
+  it('infers DOC and ZIP formats from attachment URLs and detects Word/Excel files from GeM fulfilment headers', () => {
+    assert.strictEqual(
+      PortalDocService.inferFileFormat('https://fulfilment.gem.gov.in/files/ATC_clause.doc'),
+      'DOC'
+    );
+    assert.strictEqual(
+      PortalDocService.inferFileFormat('https://fulfilment.gem.gov.in/files/specs.docx'),
+      'DOC'
+    );
+    assert.strictEqual(
+      PortalDocService.inferFileFormat('https://fulfilment.gem.gov.in/files/drawings.zip'),
+      'ZIP'
+    );
+
+    const wordProbe = PortalDocService.detectFormatFromHeaders(
+      'application/msword',
+      'attachment; filename="ATC_2ccd6eca_prabhakar@223.doc"',
+      'https://fulfilment.gem.gov.in/contract/documentdownload'
+    );
+    assert.strictEqual(wordProbe.format, 'DOC');
+    assert.strictEqual(wordProbe.filename, 'ATC_2ccd6eca_prabhakar@223.doc');
+
+    const excelProbe = PortalDocService.detectFormatFromHeaders(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'attachment; filename="BOQ_Pricing.xlsx"',
+      'https://fulfilment.gem.gov.in/contract/documentdownload'
+    );
+    assert.strictEqual(excelProbe.format, 'XLSX');
+    assert.strictEqual(excelProbe.filename, 'BOQ_Pricing.xlsx');
+
+    const pdfProbe = PortalDocService.detectFormatFromHeaders(
+      'application/pdf',
+      'inline; filename="GeM-Bidding-9835867.pdf"',
+      'https://bidplus.gem.gov.in/showbidDocument/9835867'
+    );
+    assert.strictEqual(pdfProbe.format, 'PDF');
+    assert.strictEqual(pdfProbe.filename, 'GeM-Bidding-9835867.pdf');
   });
 });

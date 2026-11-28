@@ -1,12 +1,16 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Image,
+  Keyboard,
   Linking,
   Modal,
+  NativeModules,
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -14,15 +18,34 @@ import {
 } from 'react-native';
 import {
   GeMServicesClient,
+  filterAndSortServiceSellers,
+  parseNumericProjectValue,
   type LiveGeMServiceDetail,
   type LiveGeMServiceSeller,
+  type LiveGeMServiceSellerDetail,
+  type ServiceSellerFilterMode,
 } from '../services/GeMServicesClient';
 import { GeMLiveSyncService } from '../services/GeMLiveSyncService';
 import type { DeconstructedBidDoc } from '../types/index';
 import { useTheme } from '../theme/ThemeContext';
-import { formatDateSafe } from '../utils/formatters';
+import { AppIcon } from '../components/AppIcons';
+import { CompactChip, SearchField } from '../components/SharedUI';
+import { formatDateSafe, formatInr, formatLakhs } from '../utils/formatters';
 import { BidInspectorScreen } from './BidInspectorScreen';
 import { BidDocumentViewer } from './BidDocumentViewer';
+
+function copyToClipboardSafe(value: string): boolean {
+  try {
+    const nativeClipboard = NativeModules?.Clipboard || NativeModules?.RNCClipboard;
+    if (nativeClipboard && typeof nativeClipboard.setString === 'function') {
+      nativeClipboard.setString(value);
+      return true;
+    }
+  } catch {
+    // Fallback handled by caller
+  }
+  return false;
+}
 
 export interface ActiveServiceTarget {
   gemServiceId: string;
@@ -48,17 +71,23 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
   onClose,
   onPrepareDocuments,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<DetailTab>('PROVIDERS');
   const [detail, setDetail] = useState<LiveGeMServiceDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   const [sellers, setSellers] = useState<LiveGeMServiceSeller[]>([]);
   const [sellersTotal, setSellersTotal] = useState(0);
-  const [sellersPage, setSellersPage] = useState(1);
-  const [sellersHasMore, setSellersHasMore] = useState(false);
   const [isLoadingSellers, setIsLoadingSellers] = useState(false);
-  const [isLoadingMoreSellers, setIsLoadingMoreSellers] = useState(false);
+  const [isSyncingAllSellers, setIsSyncingAllSellers] = useState(false);
+  const [sellerSearchInput, setSellerSearchInput] = useState('');
+  const [sellerSearchQuery, setSellerSearchQuery] = useState('');
+  const [sellerFilterMode, setSellerFilterMode] = useState<ServiceSellerFilterMode>('ALL');
+
+  const [selectedSeller, setSelectedSeller] = useState<LiveGeMServiceSeller | null>(null);
+  const [sellerDetail, setSellerDetail] = useState<LiveGeMServiceSellerDetail | null>(null);
+  const [isLoadingSellerDetail, setIsLoadingSellerDetail] = useState(false);
+  const [copiedSellerId, setCopiedSellerId] = useState(false);
 
   const [tenders, setTenders] = useState<DeconstructedBidDoc[]>([]);
   const [tendersTotal, setTendersTotal] = useState(0);
@@ -72,12 +101,21 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
     if (!service || !visible) return;
     let cancelled = false;
 
+    const cachedAll = GeMServicesClient.getCachedAllServiceSellers(service.gemServiceId);
+
     setActiveTab('PROVIDERS');
     setDetail(null);
-    setSellers([]);
-    setSellersTotal(0);
-    setSellersPage(1);
-    setSellersHasMore(false);
+    setSellers(cachedAll ? cachedAll.sellers : []);
+    setSellersTotal(cachedAll ? cachedAll.total : 0);
+    setIsLoadingSellers(!cachedAll);
+    setIsSyncingAllSellers(!cachedAll);
+    setSellerSearchInput('');
+    setSellerSearchQuery('');
+    setSellerFilterMode('ALL');
+    setSelectedSeller(null);
+    setSellerDetail(null);
+    setIsLoadingSellerDetail(false);
+    setCopiedSellerId(false);
     setTenders([]);
     setTendersTotal(0);
     setSlaExpanded(false);
@@ -93,19 +131,23 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
         if (!cancelled) setIsLoadingDetail(false);
       });
 
-    setIsLoadingSellers(true);
-    GeMServicesClient.fetchServiceSellers(service.gemServiceId, 1)
-      .then((res) => {
+    if (!cachedAll) {
+      GeMServicesClient.fetchAllServiceSellers(service.gemServiceId, {
+        isCancelled: () => cancelled,
+        onProgress: (nextSellers, total, isComplete) => {
+          if (cancelled) return;
+          setSellers(nextSellers);
+          setSellersTotal(total);
+          setIsLoadingSellers(false);
+          setIsSyncingAllSellers(!isComplete);
+        },
+      }).finally(() => {
         if (!cancelled) {
-          setSellers(res.sellers);
-          setSellersTotal(res.total);
-          setSellersPage(1);
-          setSellersHasMore(res.hasMore);
+          setIsLoadingSellers(false);
+          setIsSyncingAllSellers(false);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingSellers(false);
       });
+    }
 
     // Query live active Service Tenders on bidplus.gem.gov.in matching this service
     const cleanSearch =
@@ -155,22 +197,124 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
     };
   }, [service, visible]);
 
-  const handleLoadMoreSellers = useCallback(async () => {
-    if (!service || isLoadingMoreSellers || !sellersHasMore) return;
-    setIsLoadingMoreSellers(true);
-    try {
-      const nextPage = sellersPage + 1;
-      const res = await GeMServicesClient.fetchServiceSellers(service.gemServiceId, nextPage);
-      setSellers((prev) => {
-        const seen = new Set(prev.map((s) => s.sellerId));
-        return [...prev, ...res.sellers.filter((s) => !seen.has(s.sellerId))];
-      });
-      setSellersPage(nextPage);
-      setSellersHasMore(res.hasMore);
-    } finally {
-      setIsLoadingMoreSellers(false);
+  const filteredSellers = useMemo(
+    () => filterAndSortServiceSellers(sellers, sellerSearchQuery, sellerFilterMode),
+    [sellers, sellerSearchQuery, sellerFilterMode]
+  );
+
+  const verifiedLoadedCount = useMemo(
+    () =>
+      sellers.filter(
+        (s) => s.verifiedProjects > 0 || parseNumericProjectValue(s.totalValue) > 0
+      ).length,
+    [sellers]
+  );
+
+  const handleApplySellerSearch = useCallback(() => {
+    Keyboard.dismiss();
+    setSellerSearchQuery(sellerSearchInput.trim());
+  }, [sellerSearchInput]);
+
+  const handleOpenSellerDetail = useCallback(
+    (seller: LiveGeMServiceSeller) => {
+      if (!service) return;
+      setSelectedSeller(seller);
+      setSellerDetail(null);
+      setCopiedSellerId(false);
+      setIsLoadingSellerDetail(true);
+      GeMServicesClient.fetchServiceSellerDetail(service.gemServiceId, seller.sellerId)
+        .then((res) => {
+          setSellerDetail(res);
+        })
+        .finally(() => {
+          setIsLoadingSellerDetail(false);
+        });
+    },
+    [service]
+  );
+
+  const renderSellerItem = useCallback(
+    ({ item: seller }: { item: LiveGeMServiceSeller }) => {
+      const projectValInr = parseNumericProjectValue(seller.totalValue);
+      return (
+        <Pressable
+          onPress={() => handleOpenSellerDetail(seller)}
+          style={({ pressed }) => [
+            styles.sellerRow,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: pressed ? 0.78 : 1,
+            },
+          ]}
+          accessibilityLabel={`Inspect details for ${seller.name}`}
+        >
+          <View style={[styles.sellerInitialCircle, { backgroundColor: colors.primaryTint }]}>
+            <Text style={[styles.sellerInitialText, { color: colors.primary }]}>
+              {seller.name.slice(0, 2).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sellerName, { color: colors.textPrimary }]} numberOfLines={2}>
+              {seller.name}
+            </Text>
+            <Text style={[styles.sellerMeta, { color: colors.textSecondary }]}>
+              GeM Seller ID: {seller.sellerId}
+              {seller.verifiedProjects > 0
+                ? ` · ${seller.verifiedProjects} verified project${seller.verifiedProjects === 1 ? '' : 's'}`
+                : ' · Registered Provider'}
+            </Text>
+            {projectValInr > 0 ? (
+              <View style={styles.sellerValueRow}>
+                <View style={[styles.sellerValuePill, { backgroundColor: colors.successTint }]}>
+                  <Text style={[styles.sellerValuePillText, { color: colors.success }]}>
+                    Approved Value: {formatLakhs(projectValInr)}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.sellerRightCol}>
+            <View style={[styles.verifiedTag, { backgroundColor: colors.successTint }]}>
+              <Text style={[styles.verifiedTagText, { color: colors.success }]}>LIVE</Text>
+            </View>
+            <Text style={[styles.sellerChevron, { color: colors.textMuted }]}>›</Text>
+          </View>
+        </Pressable>
+      );
+    },
+    [colors, handleOpenSellerDetail]
+  );
+
+  const handleCopySellerId = useCallback((sellerId: string) => {
+    const ok = copyToClipboardSafe(sellerId);
+    if (ok) {
+      setCopiedSellerId(true);
+      setTimeout(() => setCopiedSellerId(false), 2000);
+    } else {
+      void Share.share({ message: `GeM Seller ID: ${sellerId}` }).catch(() => undefined);
     }
-  }, [service, isLoadingMoreSellers, sellersHasMore, sellersPage]);
+  }, []);
+
+  const handleShareSeller = useCallback(
+    (seller: LiveGeMServiceSeller, liveDetail: LiveGeMServiceSellerDetail | null) => {
+      if (!service) return;
+      const projects = liveDetail?.totalVerifiedProjects ?? seller.verifiedProjects;
+      const valueInr =
+        liveDetail?.totalProjectValueInr ?? parseNumericProjectValue(seller.totalValue);
+      const portal = detail?.portalUrl || GeMServicesClient.buildPortalUrl(service.gemServiceId);
+      const lines = [
+        `GeM Service Provider: ${seller.name}`,
+        `GeM Seller ID: ${seller.sellerId}`,
+        `Service: ${detail?.displayName || service.name}`,
+        `Verified Projects on GeM: ${projects}`,
+        valueInr > 0 ? `Approved Project Value: ${formatLakhs(valueInr)} (₹${formatInr(valueInr)})` : null,
+        `Official GeM Catalog: ${portal}`,
+      ].filter(Boolean);
+      void Share.share({ message: lines.join('\n') }).catch(() => undefined);
+    },
+    [service, detail]
+  );
 
   if (!service) return null;
 
@@ -180,36 +324,63 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#0B3B60' }}>
-          <StatusBar barStyle="light-content" backgroundColor="#0B3B60" />
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => {
+          if (selectedSeller) {
+            setSelectedSeller(null);
+          } else {
+            onClose();
+          }
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
+          <StatusBar
+            barStyle={isDark ? 'light-content' : 'dark-content'}
+            backgroundColor={colors.surface}
+          />
           <View style={[styles.root, { backgroundColor: colors.background }]}>
-            {/* Top Bar */}
-            <View style={styles.headerBar}>
+            {/* Slim Frameless Top Bar (matches BidInspectorScreen in Light & Dark Mode) */}
+            <View
+              style={[
+                styles.headerBar,
+                { backgroundColor: colors.surface, borderBottomColor: colors.borderSubtle },
+              ]}
+            >
               <Pressable
                 onPress={onClose}
-                style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [
+                  styles.headerBtn,
+                  { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                  pressed && { opacity: 0.75 },
+                ]}
                 hitSlop={8}
                 accessibilityLabel="Close service details"
               >
-                <Text style={styles.headerBackIcon}>←</Text>
+                <Text style={[styles.headerBackIcon, { color: colors.textPrimary }]}>←</Text>
               </Pressable>
               <View style={styles.headerCopy}>
-                <Text style={styles.headerTitle} numberOfLines={1}>
+                <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                   {detail?.displayName || service.name}
                 </Text>
-                <Text style={styles.headerSub} numberOfLines={1}>
+                <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={1}>
                   {service.category || 'GeM Live Service'}
                   {detail?.versionNumber ? ` · v${detail.versionNumber}` : ''}
                 </Text>
               </View>
               <Pressable
                 onPress={() => Linking.openURL(portalUrl).catch(() => undefined)}
-                style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [
+                  styles.headerBtn,
+                  { backgroundColor: colors.primaryTint, borderColor: 'transparent' },
+                  pressed && { opacity: 0.75 },
+                ]}
                 hitSlop={8}
                 accessibilityLabel="Open service page on GeM website"
               >
-                <Text style={styles.headerExternalIcon}>↗</Text>
+                <Text style={[styles.headerExternalIcon, { color: colors.primary }]}>↗</Text>
               </Pressable>
             </View>
 
@@ -217,7 +388,11 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
             <View style={[styles.overviewStrip, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
               <View style={styles.overviewTop}>
                 {heroImage ? (
-                  <Image source={{ uri: heroImage }} style={styles.heroThumb} resizeMode="cover" />
+                  <Image
+                    source={{ uri: heroImage }}
+                    style={[styles.heroThumb, { backgroundColor: colors.surfaceSubtle }]}
+                    resizeMode="cover"
+                  />
                 ) : null}
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.serviceHeading, { color: colors.textPrimary }]} numberOfLines={2}>
@@ -225,8 +400,8 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                   </Text>
                   <View style={styles.metaPillsRow}>
                     {providerCount > 0 ? (
-                      <View style={styles.metaPillGreen}>
-                        <Text style={styles.metaPillGreenText}>
+                      <View style={[styles.metaPillGreen, { backgroundColor: colors.successTint }]}>
+                        <Text style={[styles.metaPillGreenText, { color: colors.success }]}>
                           {providerCount.toLocaleString('en-IN')} Providers
                         </Text>
                       </View>
@@ -259,12 +434,12 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                     <Pressable
                       key={tab.id}
                       onPress={() => setActiveTab(tab.id)}
-                      style={[styles.tabBtn, active && styles.tabBtnActive]}
+                      style={[styles.tabBtn, active && { borderBottomColor: colors.primary }]}
                     >
                       <Text
                         style={[
                           styles.tabText,
-                          { color: active ? '#0B3B60' : colors.textSecondary },
+                          { color: active ? colors.primary : colors.textSecondary },
                           active && styles.tabTextActive,
                         ]}
                         numberOfLines={1}
@@ -278,21 +453,26 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
             </View>
 
             {/* Tab Content */}
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-              {activeTab === 'PROVIDERS' && (
-                <View>
-                  {isLoadingSellers ? (
-                    <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
-                      <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
-                        Loading live GeM providers…
-                      </Text>
-                      <Text style={[styles.centerSub, { color: colors.textSecondary }]}>
-                        Fetching registered service providers directly from mkp.gem.gov.in
-                      </Text>
-                    </View>
-                  ) : sellers.length === 0 ? (
-                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {activeTab === 'PROVIDERS' ? (
+              <View style={styles.providersTabWrap}>
+                {isLoadingSellers ? (
+                  <View style={styles.centerBox}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
+                      Loading all live GeM providers…
+                    </Text>
+                    <Text style={[styles.centerSub, { color: colors.textSecondary }]}>
+                      Fetching registered service providers directly from mkp.gem.gov.in
+                    </Text>
+                  </View>
+                ) : sellers.length === 0 ? (
+                  <View style={styles.providersEmptyPad}>
+                    <View
+                      style={[
+                        styles.card,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
                       <Text style={[styles.emptyHeading, { color: colors.textPrimary }]}>
                         {detail?.isCustomBidService
                           ? 'Custom Bid Service — Open Bidding Mode'
@@ -304,69 +484,215 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                           : 'This service uses tender-based selection. Check Live Tenders or Specs & SLA tabs for requirements.'}
                       </Text>
                       <Pressable
-                        style={styles.switchTabCta}
+                        style={[styles.switchTabCta, { backgroundColor: colors.primary }]}
                         onPress={() => setActiveTab('TENDERS')}
                       >
-                        <Text style={styles.switchTabCtaText}>View Live Service Tenders →</Text>
+                        <Text style={[styles.switchTabCtaText, { color: colors.textInverse }]}>
+                          View Live Service Tenders →
+                        </Text>
                       </Pressable>
                     </View>
-                  ) : (
-                    <>
-                      <Text style={[styles.listIntro, { color: colors.textSecondary }]}>
-                        Showing {sellers.length} of {sellersTotal.toLocaleString('en-IN')} live GeM registered service providers
-                      </Text>
-                      {sellers.map((seller) => (
-                        <View
-                          key={seller.sellerId}
-                          style={[styles.sellerRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  </View>
+                ) : (
+                  <>
+                    {/* Pinned Search Bar + Filter Chips + Live Auto-Sync Progress */}
+                    <View style={styles.providersStickyTop}>
+                      <View style={styles.sellerSearchRow}>
+                        <SearchField
+                          value={sellerSearchInput}
+                          onChangeText={(txt) => {
+                            setSellerSearchInput(txt);
+                            setSellerSearchQuery(txt.trim());
+                          }}
+                          onClear={() => {
+                            setSellerSearchInput('');
+                            setSellerSearchQuery('');
+                          }}
+                          onSubmit={handleApplySellerSearch}
+                          placeholder="Search provider name or Seller ID…"
+                          accessibilityLabel="Search service providers"
+                          style={{ flex: 1 }}
+                        />
+                        <Pressable
+                          onPress={handleApplySellerSearch}
+                          style={({ pressed }) => [
+                            styles.sellerSearchBtn,
+                            { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+                          ]}
+                          accessibilityLabel="Search service providers"
                         >
-                          <View style={styles.sellerInitialCircle}>
-                            <Text style={styles.sellerInitialText}>
-                              {seller.name.slice(0, 2).toUpperCase()}
+                          <AppIcon name="search" color={colors.textInverse} size={15} />
+                          <Text style={[styles.sellerSearchBtnText, { color: colors.textInverse }]}>
+                            Search
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.sellerFilterRow}
+                      >
+                        <CompactChip
+                          label={`All (${sellers.length.toLocaleString('en-IN')})`}
+                          selected={sellerFilterMode === 'ALL'}
+                          onPress={() => setSellerFilterMode('ALL')}
+                        />
+                        <CompactChip
+                          label={`Verified Projects (${verifiedLoadedCount.toLocaleString('en-IN')})`}
+                          selected={sellerFilterMode === 'VERIFIED'}
+                          onPress={() => setSellerFilterMode('VERIFIED')}
+                        />
+                        <CompactChip
+                          label="Highest Value"
+                          selected={sellerFilterMode === 'HIGHEST_VALUE'}
+                          onPress={() => setSellerFilterMode('HIGHEST_VALUE')}
+                        />
+                      </ScrollView>
+
+                      {isSyncingAllSellers ? (
+                        <View
+                          style={[
+                            styles.syncProgressBox,
+                            { backgroundColor: colors.primaryTint, borderColor: colors.borderSubtle },
+                          ]}
+                        >
+                          <View style={styles.syncProgressTopRow}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={[styles.syncProgressText, { color: colors.primary }]}>
+                              Fetching all providers from GeM…{' '}
+                              {sellers.length.toLocaleString('en-IN')} /{' '}
+                              {Math.max(sellersTotal, sellers.length).toLocaleString('en-IN')} (
+                              {Math.min(
+                                99,
+                                Math.round(
+                                  (sellers.length / Math.max(sellersTotal, sellers.length, 1)) * 100
+                                )
+                              )}
+                              %)
                             </Text>
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.sellerName, { color: colors.textPrimary }]} numberOfLines={2}>
-                              {seller.name}
-                            </Text>
-                            <Text style={[styles.sellerMeta, { color: colors.textSecondary }]}>
-                              GeM Seller ID: {seller.sellerId}
-                              {seller.verifiedProjects > 0
-                                ? ` · ${seller.verifiedProjects} verified project${seller.verifiedProjects === 1 ? '' : 's'}`
-                                : ' · Registered Provider'}
-                            </Text>
-                          </View>
-                          <View style={styles.verifiedTag}>
-                            <Text style={styles.verifiedTagText}>LIVE</Text>
+                          <View
+                            style={[
+                              styles.syncProgressTrack,
+                              { backgroundColor: colors.surface },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.syncProgressFill,
+                                {
+                                  backgroundColor: colors.primary,
+                                  width: `${Math.min(
+                                    100,
+                                    Math.max(
+                                      4,
+                                      Math.round(
+                                        (sellers.length /
+                                          Math.max(sellersTotal, sellers.length, 1)) *
+                                          100
+                                      )
+                                    )
+                                  )}%`,
+                                },
+                              ]}
+                            />
                           </View>
                         </View>
-                      ))}
+                      ) : (
+                        <View style={styles.listIntroRow}>
+                          <Text style={[styles.listIntro, { color: colors.textSecondary, flex: 1 }]}>
+                            {sellerSearchQuery || sellerFilterMode !== 'ALL'
+                              ? `${filteredSellers.length.toLocaleString('en-IN')} matched across all ${sellers.length.toLocaleString('en-IN')} live GeM providers`
+                              : `All ${sellers.length.toLocaleString('en-IN')} live GeM providers loaded · Tap any provider for details`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
 
-                      {sellersHasMore ? (
-                        <Pressable
-                          style={[styles.loadMoreBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                          onPress={handleLoadMoreSellers}
-                          disabled={isLoadingMoreSellers}
-                        >
-                          {isLoadingMoreSellers ? (
-                            <ActivityIndicator size="small" color="#0B3B60" />
-                          ) : (
-                            <Text style={[styles.loadMoreText, { color: colors.primary }]}>
-                              Load More Providers
+                    {/* Virtualized 60fps FlatList across all loaded providers */}
+                    <FlatList
+                      data={filteredSellers}
+                      keyExtractor={(item) => item.sellerId}
+                      renderItem={renderSellerItem}
+                      contentContainerStyle={styles.providersListContent}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                      initialNumToRender={16}
+                      maxToRenderPerBatch={20}
+                      windowSize={7}
+                      removeClippedSubviews={true}
+                      ListEmptyComponent={
+                        isSyncingAllSellers ? (
+                          <View
+                            style={[
+                              styles.card,
+                              { backgroundColor: colors.surface, borderColor: colors.border },
+                            ]}
+                          >
+                            <View style={styles.syncEmptyRow}>
+                              <ActivityIndicator size="small" color={colors.primary} />
+                              <Text style={[styles.emptyHeading, { color: colors.textPrimary, marginBottom: 0 }]}>
+                                Searching all {Math.max(sellersTotal, sellers.length).toLocaleString('en-IN')} providers…
+                              </Text>
+                            </View>
+                            <Text style={[styles.bodyCopy, { color: colors.textSecondary, marginTop: 6 }]}>
+                              Scanned {sellers.length.toLocaleString('en-IN')} live GeM providers so
+                              far. Matches for &ldquo;{sellerSearchQuery}&rdquo; will appear
+                              automatically as GeM finishes streaming.
                             </Text>
-                          )}
-                        </Pressable>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-              )}
-
-              {activeTab === 'TENDERS' && (
+                          </View>
+                        ) : (
+                          <View
+                            style={[
+                              styles.card,
+                              { backgroundColor: colors.surface, borderColor: colors.border },
+                            ]}
+                          >
+                            <Text style={[styles.emptyHeading, { color: colors.textPrimary }]}>
+                              No matching provider found
+                            </Text>
+                            <Text style={[styles.bodyCopy, { color: colors.textSecondary }]}>
+                              Searched all {sellers.length.toLocaleString('en-IN')} live GeM
+                              registered providers for this service. Try another spelling or clear
+                              the filter.
+                            </Text>
+                            <View style={styles.emptyActionRow}>
+                              <Pressable
+                                style={[
+                                  styles.clearFilterBtn,
+                                  {
+                                    borderColor: colors.border,
+                                    backgroundColor: colors.surfaceSubtle,
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSellerSearchInput('');
+                                  setSellerSearchQuery('');
+                                  setSellerFilterMode('ALL');
+                                }}
+                              >
+                                <Text
+                                  style={[styles.clearFilterBtnText, { color: colors.textPrimary }]}
+                                >
+                                  Clear Filter
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        )
+                      }
+                    />
+                  </>
+                )}
+              </View>
+            ) : (
+              <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+                {activeTab === 'TENDERS' && (
                 <View>
                   {isLoadingTenders ? (
                     <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
                         Searching live service bids…
                       </Text>
@@ -390,7 +716,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                         style={[styles.tenderCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                       >
                         <View style={styles.tenderTopRow}>
-                          <Text style={styles.tenderNum}>{bid.bidNumber}</Text>
+                          <Text style={[styles.tenderNum, { color: colors.primary }]}>{bid.bidNumber}</Text>
                           <Text style={[styles.tenderClose, { color: colors.textSecondary }]}>
                             Closes {formatDateSafe(bid.closingTimeUtc)}
                           </Text>
@@ -411,10 +737,12 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                             </Text>
                           </Pressable>
                           <Pressable
-                            style={styles.tenderPriBtn}
+                            style={[styles.tenderPriBtn, { backgroundColor: colors.primary }]}
                             onPress={() => setInspectBid(bid)}
                           >
-                            <Text style={styles.tenderPriBtnText}>Inspect Fundamentals</Text>
+                            <Text style={[styles.tenderPriBtnText, { color: colors.textInverse }]}>
+                              Inspect Fundamentals
+                            </Text>
                           </Pressable>
                         </View>
                       </View>
@@ -427,7 +755,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                 <View>
                   {isLoadingDetail ? (
                     <View style={styles.centerBox}>
-                      <ActivityIndicator size="large" color="#0B3B60" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.centerTitle, { color: colors.textPrimary }]}>
                         Loading official GeM specifications…
                       </Text>
@@ -533,7 +861,7 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                               Official GeM Service STC / SLA
                             </Text>
                             <Pressable onPress={() => setSlaExpanded((prev) => !prev)} hitSlop={8}>
-                              <Text style={styles.slaToggle}>
+                              <Text style={[styles.slaToggle, { color: colors.primary }]}>
                                 {slaExpanded ? 'Collapse' : 'Read full'}
                               </Text>
                             </Pressable>
@@ -550,7 +878,278 @@ export const ServiceDetailModal: React.FC<ServiceDetailModalProps> = ({
                   )}
                 </View>
               )}
-            </ScrollView>
+              </ScrollView>
+            )}
+
+            {/* In-Modal Service Provider Details Sheet (works cleanly on both iOS & Android) */}
+            {selectedSeller ? (
+              <View style={styles.sheetOverlay}>
+                <Pressable
+                  style={styles.sheetBackdrop}
+                  onPress={() => setSelectedSeller(null)}
+                  accessibilityLabel="Dismiss provider details"
+                />
+                <View
+                  style={[
+                    styles.sheetSurface,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                >
+                  <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+                  <View style={styles.sheetHeaderRow}>
+                    <View
+                      style={[
+                        styles.sellerInitialCircle,
+                        { backgroundColor: colors.primaryTint, width: 42, height: 42 },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.sellerInitialText,
+                          { color: colors.primary, fontSize: 14 },
+                        ]}
+                      >
+                        {selectedSeller.name.slice(0, 2).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.sheetSellerName, { color: colors.textPrimary }]}
+                        numberOfLines={2}
+                      >
+                        {selectedSeller.name}
+                      </Text>
+                      <View style={styles.sheetIdRow}>
+                        <Text style={[styles.sheetSellerId, { color: colors.textSecondary }]}>
+                          GeM Seller ID: {selectedSeller.sellerId}
+                        </Text>
+                        <Pressable
+                          onPress={() => handleCopySellerId(selectedSeller.sellerId)}
+                          style={[
+                            styles.copyIdPill,
+                            {
+                              backgroundColor: copiedSellerId
+                                ? colors.successTint
+                                : colors.primaryTint,
+                            },
+                          ]}
+                          hitSlop={8}
+                          accessibilityLabel="Copy GeM Seller ID"
+                        >
+                          <Text
+                            style={[
+                              styles.copyIdText,
+                              { color: copiedSellerId ? colors.success : colors.primary },
+                            ]}
+                          >
+                            {copiedSellerId ? 'Copied ✓' : 'Copy ID'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <Pressable
+                      onPress={() => setSelectedSeller(null)}
+                      style={[
+                        styles.sheetCloseBtn,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                      ]}
+                      hitSlop={8}
+                      accessibilityLabel="Close provider details"
+                    >
+                      <Text style={[styles.sheetCloseText, { color: colors.textSecondary }]}>✕</Text>
+                    </Pressable>
+                  </View>
+
+                  <ScrollView
+                    style={styles.sheetScroll}
+                    contentContainerStyle={styles.sheetScrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {/* Registered Service Context */}
+                    <View
+                      style={[
+                        styles.sheetContextStrip,
+                        { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+                      ]}
+                    >
+                      <Text style={[styles.sheetContextLabel, { color: colors.textMuted }]}>
+                        REGISTERED SERVICE CATALOG
+                      </Text>
+                      <Text style={[styles.sheetContextValue, { color: colors.textPrimary }]}>
+                        {detail?.displayName || service.name}
+                      </Text>
+                    </View>
+
+                    {isLoadingSellerDetail ? (
+                      <View style={styles.sheetLoadingBox}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.sheetLoadingText, { color: colors.textSecondary }]}>
+                          Fetching live GeM credentials from mkp.gem.gov.in…
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {/* Verified Projects & Approved Value KPIs */}
+                    {(() => {
+                      const verifiedCount =
+                        sellerDetail?.totalVerifiedProjects ?? selectedSeller.verifiedProjects;
+                      const approvedValueInr =
+                        sellerDetail?.totalProjectValueInr ??
+                        parseNumericProjectValue(selectedSeller.totalValue);
+                      const certificates = sellerDetail?.certificates ?? [];
+
+                      return (
+                        <>
+                          <View style={styles.sheetKpiRow}>
+                            <View
+                              style={[
+                                styles.sheetKpiCard,
+                                {
+                                  backgroundColor: colors.surfaceSubtle,
+                                  borderColor: colors.borderSubtle,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.ruleLabel, { color: colors.textMuted }]}>
+                                VERIFIED PROJECTS
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.sheetKpiValue,
+                                  {
+                                    color:
+                                      verifiedCount > 0 ? colors.success : colors.textPrimary,
+                                  },
+                                ]}
+                              >
+                                {verifiedCount.toLocaleString('en-IN')}
+                              </Text>
+                              <Text style={[styles.sheetKpiSub, { color: colors.textSecondary }]}>
+                                {verifiedCount > 0
+                                  ? 'Approved on GeM'
+                                  : 'None published yet'}
+                              </Text>
+                            </View>
+
+                            <View
+                              style={[
+                                styles.sheetKpiCard,
+                                {
+                                  backgroundColor: colors.surfaceSubtle,
+                                  borderColor: colors.borderSubtle,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.ruleLabel, { color: colors.textMuted }]}>
+                                APPROVED VALUE
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.sheetKpiValue,
+                                  {
+                                    color:
+                                      approvedValueInr > 0 ? colors.primary : colors.textMuted,
+                                  },
+                                ]}
+                              >
+                                {approvedValueInr > 0
+                                  ? formatLakhs(approvedValueInr)
+                                  : 'Not published'}
+                              </Text>
+                              <Text style={[styles.sheetKpiSub, { color: colors.textSecondary }]}>
+                                {approvedValueInr > 0
+                                  ? `₹${formatInr(approvedValueInr)}`
+                                  : 'No value disclosed'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Compliance Certificates */}
+                          <View style={styles.sheetSectionBlock}>
+                            <Text style={[styles.sheetSectionHeading, { color: colors.textPrimary }]}>
+                              Compliance Certificates
+                            </Text>
+                            {certificates.length > 0 ? (
+                              <View style={styles.paramChips}>
+                                {certificates.map((cert) => (
+                                  <View
+                                    key={cert.category}
+                                    style={[
+                                      styles.certChip,
+                                      {
+                                        backgroundColor: colors.primaryTint,
+                                        borderColor: colors.primary,
+                                      },
+                                    ]}
+                                  >
+                                    <Text style={[styles.certChipText, { color: colors.primary }]}>
+                                      {cert.category} ({cert.count})
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={[styles.sheetEmptyNote, { color: colors.textSecondary }]}>
+                                No public compliance certificates are exposed by GeM for this
+                                service provider.
+                              </Text>
+                            )}
+                          </View>
+
+                          {/* Honest Portal Privacy Notice */}
+                          <View
+                            style={[
+                              styles.privacyNoticeBox,
+                              {
+                                backgroundColor: colors.surfaceSubtle,
+                                borderColor: colors.borderSubtle,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.privacyNoticeText, { color: colors.textSecondary }]}>
+                              GeM does not publish provider phone numbers, email addresses, or
+                              street addresses on public endpoints. Sign in on GeM to engage
+                              providers via official direct purchase or bidding.
+                            </Text>
+                          </View>
+                        </>
+                      );
+                    })()}
+                  </ScrollView>
+
+                  <View style={[styles.sheetFooterRow, { borderTopColor: colors.borderSubtle }]}>
+                    <Pressable
+                      onPress={() => handleShareSeller(selectedSeller, sellerDetail)}
+                      style={({ pressed }) => [
+                        styles.sheetSecBtn,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.surfaceSubtle,
+                          opacity: pressed ? 0.8 : 1,
+                        },
+                      ]}
+                      accessibilityLabel="Share provider information"
+                    >
+                      <Text style={[styles.sheetSecBtnText, { color: colors.textPrimary }]}>
+                        Share Info
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => Linking.openURL(portalUrl).catch(() => undefined)}
+                      style={({ pressed }) => [
+                        styles.sheetPriBtn,
+                        { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+                      ]}
+                      accessibilityLabel="Open service catalog on GeM"
+                    >
+                      <Text style={[styles.sheetPriBtnText, { color: colors.textInverse }]}>
+                        Open on GeM ↗
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : null}
           </View>
         </SafeAreaView>
       </Modal>
@@ -589,24 +1188,24 @@ const styles = StyleSheet.create({
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0B3B60',
+    borderBottomWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 9,
     gap: 10,
   },
   headerBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerBackIcon: { color: '#FFFFFF', fontSize: 19, fontWeight: '700' },
-  headerExternalIcon: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  headerBackIcon: { fontSize: 19, fontWeight: '700' },
+  headerExternalIcon: { fontSize: 15, fontWeight: '800' },
   headerCopy: { flex: 1 },
-  headerTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  headerSub: { color: '#BFDBFE', fontSize: 11, marginTop: 1 },
+  headerTitle: { fontSize: 14, fontWeight: '800' },
+  headerSub: { fontSize: 11, marginTop: 1 },
   overviewStrip: {
     borderBottomWidth: 1,
     paddingTop: 12,
@@ -622,17 +1221,15 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 8,
-    backgroundColor: '#E2E8F0',
   },
   serviceHeading: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
   metaPillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   metaPillGreen: {
-    backgroundColor: '#DCFCE7',
     borderRadius: 5,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
-  metaPillGreenText: { color: '#15803D', fontSize: 10, fontWeight: '800' },
+  metaPillGreenText: { fontSize: 10, fontWeight: '800' },
   metaPillSlate: {
     borderRadius: 5,
     paddingHorizontal: 7,
@@ -650,13 +1247,54 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabBtnActive: {
-    borderBottomColor: '#0B3B60',
-  },
   tabText: { fontSize: 12, fontWeight: '600' },
   tabTextActive: { fontWeight: '800' },
   scroll: { flex: 1 },
   scrollContent: { padding: 14, paddingBottom: 32 },
+  providersTabWrap: { flex: 1 },
+  providersEmptyPad: { padding: 14 },
+  providersStickyTop: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  providersListContent: {
+    paddingHorizontal: 14,
+    paddingTop: 2,
+    paddingBottom: 32,
+  },
+  syncProgressBox: {
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  syncProgressTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  syncProgressText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    flex: 1,
+  },
+  syncProgressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  syncProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  syncEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   centerBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   centerTitle: { fontSize: 14, fontWeight: '700', marginTop: 12 },
   centerSub: { fontSize: 12, marginTop: 4, textAlign: 'center', maxWidth: 280 },
@@ -671,13 +1309,48 @@ const styles = StyleSheet.create({
   switchTabCta: {
     marginTop: 12,
     alignSelf: 'flex-start',
-    backgroundColor: '#0B3B60',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 8,
   },
-  switchTabCtaText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
-  listIntro: { fontSize: 11.5, fontWeight: '600', marginBottom: 10 },
+  switchTabCtaText: { fontSize: 12, fontWeight: '800' },
+  listIntroRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  listIntro: { fontSize: 11.5, fontWeight: '600' },
+  sellerSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  sellerSearchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  sellerSearchBtnText: { fontSize: 13, fontWeight: '800' },
+  sellerFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 10,
+  },
+  emptyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  clearFilterBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  clearFilterBtnText: { fontSize: 12, fontWeight: '700' },
   sellerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -691,28 +1364,171 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#EAF2F8',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sellerInitialText: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
+  sellerInitialText: { fontSize: 12, fontWeight: '800' },
   sellerName: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
   sellerMeta: { fontSize: 11, marginTop: 2 },
+  sellerValueRow: { flexDirection: 'row', marginTop: 5 },
+  sellerValuePill: {
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+  },
+  sellerValuePillText: { fontSize: 10.5, fontWeight: '800' },
+  sellerRightCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sellerChevron: { fontSize: 20, fontWeight: '500', marginLeft: 2 },
   verifiedTag: {
-    backgroundColor: '#DCFCE7',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 5,
   },
-  verifiedTagText: { color: '#15803D', fontSize: 9, fontWeight: '900' },
+  verifiedTagText: { fontSize: 9, fontWeight: '900' },
+  sellerPaginationRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
   loadMoreBtn: {
     borderRadius: 10,
     borderWidth: 1,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
     alignItems: 'center',
-    marginTop: 6,
+    justifyContent: 'center',
   },
-  loadMoreText: { fontSize: 13, fontWeight: '700' },
+  loadMoreText: { fontSize: 12.5, fontWeight: '700' },
+  sheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 50,
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+  },
+  sheetSurface: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    maxHeight: '82%',
+    paddingTop: 10,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  sheetSellerName: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
+  sheetIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  sheetSellerId: { fontSize: 11.5, fontWeight: '600' },
+  copyIdPill: {
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  copyIdText: { fontSize: 10.5, fontWeight: '800' },
+  sheetCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCloseText: { fontSize: 15, fontWeight: '700' },
+  sheetScroll: { flexGrow: 0 },
+  sheetScrollContent: { paddingHorizontal: 16, paddingBottom: 14 },
+  sheetContextStrip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 12,
+  },
+  sheetContextLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginBottom: 3 },
+  sheetContextValue: { fontSize: 12.5, fontWeight: '700', lineHeight: 17 },
+  sheetLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  sheetLoadingText: { fontSize: 11.5, fontWeight: '600' },
+  sheetKpiRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  sheetKpiCard: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+  },
+  sheetKpiValue: { fontSize: 18, fontWeight: '800', marginTop: 2 },
+  sheetKpiSub: { fontSize: 11, marginTop: 3 },
+  sheetSectionBlock: { marginBottom: 12 },
+  sheetSectionHeading: { fontSize: 13, fontWeight: '800', marginBottom: 8 },
+  certChip: {
+    borderWidth: 1,
+    borderRadius: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  certChipText: { fontSize: 11.5, fontWeight: '700' },
+  sheetEmptyNote: { fontSize: 12, lineHeight: 17 },
+  privacyNoticeBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 11,
+  },
+  privacyNoticeText: { fontSize: 11.5, lineHeight: 17 },
+  sheetFooterRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+  },
+  sheetSecBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetSecBtnText: { fontSize: 13, fontWeight: '700' },
+  sheetPriBtn: {
+    flex: 1.3,
+    minHeight: 46,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetPriBtnText: { fontSize: 13, fontWeight: '800' },
   tenderCard: {
     borderRadius: 10,
     borderWidth: 1,
@@ -726,7 +1542,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     gap: 8,
   },
-  tenderNum: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
+  tenderNum: { fontSize: 12, fontWeight: '800' },
   tenderClose: { fontSize: 11, fontWeight: '600' },
   tenderTitle: { fontSize: 13.5, fontWeight: '700', lineHeight: 19, marginBottom: 3 },
   tenderDept: { fontSize: 11.5, marginBottom: 10 },
@@ -741,12 +1557,11 @@ const styles = StyleSheet.create({
   tenderSecBtnText: { fontSize: 12, fontWeight: '700' },
   tenderPriBtn: {
     flex: 1.2,
-    backgroundColor: '#0B3B60',
     borderRadius: 8,
     paddingVertical: 9,
     alignItems: 'center',
   },
-  tenderPriBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  tenderPriBtnText: { fontSize: 12, fontWeight: '800' },
   sectionTitle: { fontSize: 13.5, fontWeight: '800', marginBottom: 10 },
   ruleGrid: {
     flexDirection: 'row',
@@ -782,6 +1597,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  slaToggle: { color: '#0B3B60', fontSize: 12, fontWeight: '800' },
+  slaToggle: { fontSize: 12, fontWeight: '800' },
   slaCopy: { fontSize: 11.5, lineHeight: 18 },
 });
