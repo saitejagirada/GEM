@@ -168,6 +168,10 @@ export type UiTextKey =
   | 'tabBids'
   | 'tabAuctions'
   | 'tabMore'
+  | 'userAccountTitle'
+  | 'savedBookmarks'
+  | 'openBookmarks'
+  | 'closedBookmarks'
   | 'findBid'
   | 'portal'
   | 'homeHeroTitle'
@@ -217,7 +221,11 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     tabSearch: 'Search',
     tabBids: 'Bids',
     tabAuctions: 'Auctions',
-    tabMore: 'More',
+    tabMore: 'User Account',
+    userAccountTitle: 'User Account',
+    savedBookmarks: 'Saved Bookmarks',
+    openBookmarks: 'Open',
+    closedBookmarks: 'Closed',
     findBid: 'Find Bid',
     portal: 'Portal ↗',
     homeHeroTitle: 'Procurement, made simpler',
@@ -244,7 +252,7 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     appearanceLabel: 'Appearance',
     appearanceSub: 'Light or dark theme',
     textSizeLabel: 'Text Size',
-    textSizeSub: 'Adjust readability across screens',
+    textSizeSub: 'Default: Medium · Adjust readability across screens',
     openOfficialPortalCta: 'Open Official GeM Portal & Login ↗',
     bidsSearchPlaceholder: 'Search all GeM tenders (e.g. Laptop, Solar, GEM/2026/...)',
     auctionsSearchPlaceholder: 'Live search all GeM reverse auctions (ID, item, dept)',
@@ -266,7 +274,11 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     tabSearch: 'खोजें',
     tabBids: 'निविदाएं',
     tabAuctions: 'नीलामी',
-    tabMore: 'अधिक',
+    tabMore: 'यूज़र अकाउंट',
+    userAccountTitle: 'यूज़र अकाउंट',
+    savedBookmarks: 'सहेजे गए बुकमार्क',
+    openBookmarks: 'खुले',
+    closedBookmarks: 'बंद',
     findBid: 'बिड खोजें',
     portal: 'पोर्टल ↗',
     homeHeroTitle: 'सरकारी खरीद, अब सरल',
@@ -293,7 +305,7 @@ const TRANSLATIONS: Record<AppLanguage, Record<UiTextKey, string>> = {
     appearanceLabel: 'थीम (Appearance)',
     appearanceSub: 'लाइट या डार्क मोड चुनें',
     textSizeLabel: 'फ़ॉन्ट आकार',
-    textSizeSub: 'पढ़ने के अनुसार टेक्स्ट बड़ा या छोटा करें',
+    textSizeSub: 'डिफ़ॉल्ट: मध्यम · पढ़ने के अनुसार टेक्स्ट बदलें',
     openOfficialPortalCta: 'आधिकारिक GeM पोर्टल एवं लॉगिन खोलें ↗',
     bidsSearchPlaceholder: 'सभी GeM टेंडर खोजें (जैसे Laptop, Solar, GEM/2026/...)',
     auctionsSearchPlaceholder: 'लाइव GeM रिवर्स ऑक्शन खोजें (ID, वस्तु, विभाग)',

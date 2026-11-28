@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme, DESIGN_TOKENS } from '../theme/ThemeContext';
-import { AppIcon, type AppIconName } from '../components/AppIcons';
+import { AnimatedProfileIcon, AppIcon, type AppIconName } from '../components/AppIcons';
 import { BusinessProfileModal } from '../components/BusinessProfileModal';
 import { GemGlossaryModal } from '../components/GemGlossaryModal';
 import { BusinessProfileService } from '../services/BusinessProfileService';
@@ -27,6 +27,11 @@ import {
   CompanyDocLockerService,
   type CompanyLockerDocument,
 } from '../services/CompanyDocLockerService';
+import {
+  TenderRadarService,
+  buildSavedBookmarksReview,
+  type TenderRadarState,
+} from '../services/TenderRadarService';
 import type { UserAgentProfile } from '../types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -47,6 +52,7 @@ export interface MoreProfileScreenProps {
   ) => void;
   onOpenPortfolio?: () => void;
   onOpenCompanyLocker?: () => void;
+  onOpenBookmarks?: () => void;
   onOpenOfficialPortal?: () => void;
 }
 
@@ -65,6 +71,7 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   onNavigateTab,
   onOpenPortfolio,
   onOpenCompanyLocker,
+  onOpenBookmarks,
   onOpenOfficialPortal,
 }) => {
   const {
@@ -84,6 +91,9 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
   const [lockerDocs, setLockerDocs] = useState<CompanyLockerDocument[]>(() =>
     CompanyDocLockerService.getDocuments()
   );
+  const [radarState, setRadarState] = useState<TenderRadarState>(() =>
+    TenderRadarService.getState()
+  );
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showGlossaryModal, setShowGlossaryModal] = useState(false);
 
@@ -92,11 +102,16 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
     const unsubProfile = BusinessProfileService.subscribe(setBusinessProfile);
     CompanyDocLockerService.hydrate().then(setLockerDocs).catch(() => undefined);
     const unsubLocker = CompanyDocLockerService.subscribe(setLockerDocs);
+    TenderRadarService.hydrate().then(setRadarState).catch(() => undefined);
+    const unsubRadar = TenderRadarService.subscribe(setRadarState);
     return () => {
       unsubProfile();
       unsubLocker();
+      unsubRadar();
     };
   }, []);
+
+  const bookmarkReview = buildSavedBookmarksReview(radarState.watched);
 
   const openPortal = () => {
     if (onOpenOfficialPortal) onOpenOfficialPortal();
@@ -123,6 +138,27 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       subtitle: BusinessProfileService.formatProfileSummary(businessProfile),
       badge: businessProfile ? 'ACTIVE' : '30s SETUP',
       onPress: () => setShowProfileModal(true),
+    },
+    {
+      id: 'saved-bookmarks',
+      icon: bookmarkReview.totalCount > 0 ? 'bookmarkFilled' : 'bookmark',
+      iconBg: bookmarkReview.totalCount > 0 ? colors.warningTint : colors.primaryTint,
+      iconColor: bookmarkReview.totalCount > 0 ? colors.warning : colors.primary,
+      title: t('savedBookmarks'),
+      subtitle:
+        bookmarkReview.totalCount > 0
+          ? `${bookmarkReview.openCount} Open · ${bookmarkReview.closedCount} Closed · Review status & deadlines`
+          : 'Review saved tenders automatically categorized into Open vs. Closed',
+      badge:
+        bookmarkReview.openCount > 0
+          ? `${bookmarkReview.openCount} OPEN`
+          : bookmarkReview.closedCount > 0
+            ? `${bookmarkReview.closedCount} CLOSED`
+            : undefined,
+      onPress: () => {
+        if (onOpenBookmarks) onOpenBookmarks();
+        else onNavigateTab('BIDS');
+      },
     },
     {
       id: 'company-locker',
@@ -259,9 +295,13 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
                       styles.menuBadge,
                       {
                         backgroundColor:
-                          row.badge === 'ACTIVE' || row.badge === 'LIVE'
+                          row.badge === 'ACTIVE' ||
+                          row.badge === 'LIVE' ||
+                          row.badge.endsWith('OPEN')
                             ? colors.successTint
-                            : colors.primaryTint,
+                            : row.badge.endsWith('CLOSED')
+                              ? colors.surfaceSubtle
+                              : colors.primaryTint,
                       },
                     ]}
                   >
@@ -270,9 +310,13 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
                         styles.menuBadgeText,
                         {
                           color:
-                            row.badge === 'ACTIVE' || row.badge === 'LIVE'
+                            row.badge === 'ACTIVE' ||
+                            row.badge === 'LIVE' ||
+                            row.badge.endsWith('OPEN')
                               ? colors.success
-                              : colors.primary,
+                              : row.badge.endsWith('CLOSED')
+                                ? colors.textSecondary
+                                : colors.primary,
                         },
                       ]}
                     >
@@ -296,6 +340,41 @@ export const MoreProfileScreen: React.FC<MoreProfileScreenProps> = ({
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
+      {/* 0. User Account Title Header with Animated Profile Emblem */}
+      <View style={styles.accountHeaderRow}>
+        <View
+          style={[
+            styles.accountAvatarBadge,
+            {
+              backgroundColor: businessProfile ? colors.successTint : colors.primaryTint,
+              borderColor: businessProfile ? colors.success : colors.primaryTint,
+            },
+          ]}
+        >
+          <AnimatedProfileIcon
+            color={businessProfile ? colors.success : colors.primary}
+            size={26}
+            active={true}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[
+              styles.accountTitle,
+              { color: colors.textPrimary, fontSize: 22 * fontMultiplier },
+            ]}
+            numberOfLines={1}
+          >
+            {t('userAccountTitle')}
+          </Text>
+          <Text style={[styles.accountSub, { color: colors.textSecondary }]} numberOfLines={1}>
+            {businessProfile?.organizationName
+              ? `${businessProfile.organizationName} · ${bookmarkReview.openCount} open bookmarks`
+              : `${bookmarkReview.openCount} Open · ${bookmarkReview.closedCount} Closed bookmarks`}
+          </Text>
+        </View>
+      </View>
+
       {/* 1. Branded GeM Hero Card */}
       <View
         style={[
@@ -559,6 +638,30 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: DESIGN_TOKENS.pagePaddingMobile,
     paddingBottom: 36,
+  },
+  accountHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+    paddingHorizontal: 2,
+  },
+  accountAvatarBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountTitle: {
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  accountSub: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    marginTop: 1,
   },
   heroCard: {
     borderRadius: 14,

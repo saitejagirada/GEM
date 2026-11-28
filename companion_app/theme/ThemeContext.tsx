@@ -26,6 +26,25 @@ export { DESIGN_TOKENS, LIGHT_THEME, DARK_THEME };
 export type ColorMode = 'light' | 'dark';
 export type FontSizeScale = 'small' | 'medium' | 'large';
 
+export const DEFAULT_FONT_SCALE: FontSizeScale = 'medium';
+
+export function resolveFontScale(raw?: string | null): FontSizeScale {
+  if (raw === 'small' || raw === 'medium' || raw === 'large') return raw;
+  return DEFAULT_FONT_SCALE;
+}
+
+export function getFontMultiplier(scale: FontSizeScale): number {
+  switch (scale) {
+    case 'small':
+      return 0.9;
+    case 'large':
+      return 1.15;
+    case 'medium':
+    default:
+      return 1.0;
+  }
+}
+
 interface ThemeContextType {
   colorMode: ColorMode;
   toggleColorMode: () => void;
@@ -53,7 +72,7 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 const COLOR_MODE_STORAGE_KEY = '@gem-mobile-companion/ui-color-mode-v1';
-const FONT_SCALE_STORAGE_KEY = '@gem-mobile-companion/ui-font-scale-v1';
+const FONT_SCALE_STORAGE_KEY = '@gem-mobile-companion/ui-font-scale-v2';
 
 async function loadThemePrefs(): Promise<{ colorMode?: ColorMode; fontScale?: FontSizeScale }> {
   try {
@@ -65,13 +84,10 @@ async function loadThemePrefs(): Promise<{ colorMode?: ColorMode; fontScale?: Fo
     ]);
     return {
       colorMode: savedMode === 'dark' || savedMode === 'light' ? savedMode : undefined,
-      fontScale:
-        savedScale === 'small' || savedScale === 'medium' || savedScale === 'large'
-          ? savedScale
-          : undefined,
+      fontScale: savedScale ? resolveFontScale(savedScale) : DEFAULT_FONT_SCALE,
     };
   } catch {
-    return {};
+    return { fontScale: DEFAULT_FONT_SCALE };
   }
 }
 
@@ -132,17 +148,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [language]
   );
 
-  const fontMultiplier = useMemo(() => {
-    switch (fontScale) {
-      case 'small':
-        return 0.9;
-      case 'large':
-        return 1.15;
-      case 'medium':
-      default:
-        return 1.0;
-    }
-  }, [fontScale]);
+  const fontMultiplier = useMemo(() => getFontMultiplier(fontScale), [fontScale]);
 
   const colors = useMemo(() => (colorMode === 'dark' ? DARK_THEME : LIGHT_THEME), [colorMode]);
 

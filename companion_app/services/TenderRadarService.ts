@@ -49,12 +49,59 @@ export interface TenderRadarConfig {
   highValueOnly: boolean;
 }
 
+export type BookmarkLifecycleCategory = 'OPEN' | 'CLOSED';
+
+export type BookmarkDetailedStatus =
+  | 'ONGOING'
+  | 'LIVE_RA'
+  | 'CLOSING_SOON'
+  | 'CLOSED'
+  | 'CANCELLED';
+
 export interface WatchedTenderRecord {
   bid: DeconstructedBidDoc;
   savedAtUtc: string;
+  schemaVersion?: number;
+  lastReviewedAtUtc?: string;
+  lastKnownStatus?: BookmarkDetailedStatus;
   hasCorrigendum?: boolean;
   hasRepresentation?: boolean;
   corrigendumCheckedAt?: string;
+}
+
+export interface SavedBookmarkReviewItem {
+  schemaVersion: 2;
+  bidNumber: string;
+  title: string;
+  department: string;
+  ministry: string;
+  category: BookmarkLifecycleCategory;
+  detailedStatus: BookmarkDetailedStatus;
+  closingTimeUtc: string;
+  startTimeUtc?: string;
+  remainingLabel: string;
+  timeRemainingMs: number;
+  isReverseAuction: boolean;
+  isService: boolean;
+  quantity?: number;
+  estimatedValueInr?: number;
+  savedAtUtc: string;
+  lastReviewedAtUtc?: string;
+  hasCorrigendum: boolean;
+  hasRepresentation: boolean;
+  corrigendumCheckedAt?: string;
+  bid: DeconstructedBidDoc;
+}
+
+export interface SavedBookmarksReviewSchema {
+  schemaVersion: 2;
+  evaluatedAtUtc: string;
+  totalCount: number;
+  openCount: number;
+  closedCount: number;
+  openBookmarks: SavedBookmarkReviewItem[];
+  closedBookmarks: SavedBookmarkReviewItem[];
+  allBookmarks: SavedBookmarkReviewItem[];
 }
 
 export interface RadarKeywordResult {
@@ -349,6 +396,129 @@ export function buildClosingReminderUrl(bid: DeconstructedBidDoc): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+function formatBookmarkDuration(diffMs: number, isClosed: boolean, isCancelled: boolean): string {
+  if (isCancelled) return 'Cancelled';
+  const absMs = Math.abs(diffMs);
+  const totalMinutes = Math.max(1, Math.floor(absMs / 60000));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const mins = totalMinutes % 60;
+
+  let span: string;
+  if (days > 0) span = `${days}d ${hours}h`;
+  else if (hours > 0) span = `${hours}h ${mins}m`;
+  else span = `${mins}m`;
+
+  return isClosed ? `Closed ${span} ago` : `${span} left`;
+}
+
+/**
+ * Evaluates every saved bookmark against current time and GeM lifecycle rules,
+ * categorizing them cleanly into OPEN (Ongoing / Live RA / Closing Soon) vs.
+ * CLOSED (Closed / Cancelled) with deterministic sorting for User Account review.
+ */
+export function buildSavedBookmarksReview(
+  watched: WatchedTenderRecord[],
+  nowMs: number = Date.now()
+): SavedBookmarksReviewSchema {
+  const openBookmarks: SavedBookmarkReviewItem[] = [];
+  const closedBookmarks: SavedBookmarkReviewItem[] = [];
+
+  for (const record of watched) {
+    if (!record?.bid?.bidNumber) continue;
+    const bid = record.bid;
+    const lifecycle = GeMLiveSyncService.computeLifecycleStatus(bid, new Date(nowMs));
+    const closingTs = bid.closingTimeUtc ? new Date(bid.closingTimeUtc).getTime() : NaN;
+    const hasValidClosing = Number.isFinite(closingTs);
+    const diffMs = hasValidClosing ? closingTs - nowMs : lifecycle === 'ONGOING' || lifecycle === 'BID_TO_RA' ? 1 : -1;
+
+    const isCancelled = lifecycle === 'CANCELLED';
+    const isClosed =
+      isCancelled ||
+      lifecycle === 'CLOSED' ||
+      (hasValidClosing && closingTs <= nowMs);
+    const isReverseAuction = Boolean(bid.isRa || bid.type === 'RA' || lifecycle === 'BID_TO_RA');
+    const isClosingSoon = !isClosed && hasValidClosing && diffMs > 0 && diffMs <= 24 * 3600 * 1000;
+
+    const category: BookmarkLifecycleCategory = isClosed ? 'CLOSED' : 'OPEN';
+    const detailedStatus: BookmarkDetailedStatus = isCancelled
+      ? 'CANCELLED'
+      : isClosed
+        ? 'CLOSED'
+        : isClosingSoon
+          ? 'CLOSING_SOON'
+          : isReverseAuction
+            ? 'LIVE_RA'
+            : 'ONGOING';
+
+    const totalQty =
+      Array.isArray(bid.boqItems) && bid.boqItems.length > 0
+        ? bid.boqItems.reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0)
+        : undefined;
+
+    const item: SavedBookmarkReviewItem = {
+      schemaVersion: 2,
+      bidNumber: bid.bidNumber,
+      title: bid.title || 'GeM Tender',
+      department: bid.department || 'Department not published',
+      ministry: bid.ministry || '',
+      category,
+      detailedStatus,
+      closingTimeUtc: bid.closingTimeUtc || '',
+      startTimeUtc: bid.startTimeUtc,
+      remainingLabel: hasValidClosing
+        ? formatBookmarkDuration(diffMs, isClosed, isCancelled)
+        : isCancelled
+          ? 'Cancelled'
+          : isClosed
+            ? 'Closed'
+            : 'Open',
+      timeRemainingMs: diffMs,
+      isReverseAuction,
+      isService: bid.type === 'SERVICE',
+      quantity: totalQty && totalQty > 0 ? totalQty : undefined,
+      estimatedValueInr:
+        typeof bid.estimatedBidValueInr === 'number' && bid.estimatedBidValueInr > 0
+          ? bid.estimatedBidValueInr
+          : undefined,
+      savedAtUtc: record.savedAtUtc || new Date(nowMs).toISOString(),
+      lastReviewedAtUtc: record.lastReviewedAtUtc,
+      hasCorrigendum: Boolean(record.hasCorrigendum),
+      hasRepresentation: Boolean(record.hasRepresentation),
+      corrigendumCheckedAt: record.corrigendumCheckedAt,
+      bid,
+    };
+
+    if (category === 'OPEN') {
+      openBookmarks.push(item);
+    } else {
+      closedBookmarks.push(item);
+    }
+  }
+
+  // Open tenders: closing soonest on top so urgent deadlines are never missed
+  openBookmarks.sort((a, b) => a.timeRemainingMs - b.timeRemainingMs);
+
+  // Closed tenders: most recently closed (or saved) first
+  closedBookmarks.sort((a, b) => {
+    const aClose = a.closingTimeUtc ? new Date(a.closingTimeUtc).getTime() : 0;
+    const bClose = b.closingTimeUtc ? new Date(b.closingTimeUtc).getTime() : 0;
+    if (bClose !== aClose) return bClose - aClose;
+    return new Date(b.savedAtUtc).getTime() - new Date(a.savedAtUtc).getTime();
+  });
+
+  return {
+    schemaVersion: 2,
+    evaluatedAtUtc: new Date(nowMs).toISOString(),
+    totalCount: openBookmarks.length + closedBookmarks.length,
+    openCount: openBookmarks.length,
+    closedCount: closedBookmarks.length,
+    openBookmarks,
+    closedBookmarks,
+    allBookmarks: [...openBookmarks, ...closedBookmarks],
+  };
+}
+
 export class TenderRadarService {
   private static state: TenderRadarState = {
     hydrated: false,
@@ -578,9 +748,12 @@ export class TenderRadarService {
       nextWatched = this.state.watched.filter((_, idx) => idx !== existingIdx);
       nowWatched = false;
     } else {
+      const reviewOne = buildSavedBookmarksReview([{ bid, savedAtUtc: new Date().toISOString() }]);
       const entry: WatchedTenderRecord = {
         bid,
         savedAtUtc: new Date().toISOString(),
+        schemaVersion: 2,
+        lastKnownStatus: reviewOne.allBookmarks[0]?.detailedStatus,
       };
       nextWatched = [entry, ...this.state.watched].slice(0, MAX_WATCHED_BIDS);
       nowWatched = true;
@@ -607,6 +780,87 @@ export class TenderRadarService {
     };
     this.emit();
     await this.persist();
+  }
+
+  public static getSavedBookmarksReview(nowMs: number = Date.now()): SavedBookmarksReviewSchema {
+    return buildSavedBookmarksReview(this.state.watched, nowMs);
+  }
+
+  /**
+   * Re-verifies every saved bookmark against live GeM portal status + corrigenda,
+   * stamps `lastReviewedAtUtc` & `lastKnownStatus`, and returns the updated Open/Closed schema.
+   */
+  public static async refreshWatchedStatuses(nowMs: number = Date.now()): Promise<SavedBookmarksReviewSchema> {
+    await this.hydrate();
+    const reviewedAt = new Date(nowMs).toISOString();
+
+    // Merge fresher bid metadata if the live portal feed already has updated fields (e.g. closing extension / RA conversion)
+    const liveFeed = GeMLiveSyncService.getLiveBids();
+    const liveByNum = new Map<string, DeconstructedBidDoc>();
+    for (const liveBid of liveFeed) {
+      if (liveBid?.bidNumber) {
+        liveByNum.set(liveBid.bidNumber.trim().toLowerCase(), liveBid);
+      }
+    }
+
+    const updatedWatched = this.state.watched.map((entry) => {
+      const key = entry.bid.bidNumber.trim().toLowerCase();
+      const freshLive = liveByNum.get(key);
+      const mergedBid: DeconstructedBidDoc = freshLive
+        ? {
+            ...entry.bid,
+            ...freshLive,
+            // Preserve previously scanned rich PDF metadata if the feed snapshot lacks it
+            requiredDocuments:
+              freshLive.requiredDocuments && freshLive.requiredDocuments.length > 0
+                ? freshLive.requiredDocuments
+                : entry.bid.requiredDocuments,
+            relatedDocuments:
+              freshLive.relatedDocuments && freshLive.relatedDocuments.length > 0
+                ? freshLive.relatedDocuments
+                : entry.bid.relatedDocuments,
+            estimatedBidValueInr: freshLive.estimatedBidValueInr ?? entry.bid.estimatedBidValueInr,
+            emdAmountInr: freshLive.emdAmountInr ?? entry.bid.emdAmountInr,
+          }
+        : entry.bid;
+
+      const single = buildSavedBookmarksReview([{ ...entry, bid: mergedBid }], nowMs);
+      return {
+        ...entry,
+        bid: mergedBid,
+        schemaVersion: 2,
+        lastReviewedAtUtc: reviewedAt,
+        lastKnownStatus: single.allBookmarks[0]?.detailedStatus,
+      };
+    });
+
+    this.state = { ...this.state, watched: updatedWatched };
+    this.emit();
+    await this.persist();
+
+    // Probe live corrigendum/representation flags on active bookmarks
+    await this.checkWatchedCorrigenda().catch(() => undefined);
+
+    return buildSavedBookmarksReview(this.state.watched, nowMs);
+  }
+
+  /**
+   * Removes all closed/cancelled bookmarks while keeping every Open/Live bookmark intact.
+   */
+  public static async clearClosedBookmarks(nowMs: number = Date.now()): Promise<number> {
+    await this.hydrate();
+    const review = buildSavedBookmarksReview(this.state.watched, nowMs);
+    const openSet = new Set(review.openBookmarks.map((item) => item.bidNumber.trim().toLowerCase()));
+    const removedCount = this.state.watched.length - openSet.size;
+    if (removedCount <= 0) return 0;
+
+    this.state = {
+      ...this.state,
+      watched: this.state.watched.filter((w) => openSet.has(w.bid.bidNumber.trim().toLowerCase())),
+    };
+    this.emit();
+    await this.persist();
+    return removedCount;
   }
 
   private static async probeSingleCorrigendum(bidNumber: string, probeId: string): Promise<void> {

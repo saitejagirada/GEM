@@ -724,7 +724,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
                 style={({ pressed }) => [
                   styles.watchHeaderBtn,
                   {
-                    backgroundColor: isWatched ? colors.warningTint : 'transparent',
+                    backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
+                    borderColor: isWatched ? colors.warning : colors.borderSubtle,
                     opacity: pressed ? 0.65 : 1,
                   },
                 ]}
@@ -734,8 +735,8 @@ export const BidInspectorScreen: React.FC<BidInspectorScreenProps> = ({
               >
                 <AppIcon
                   name={isWatched ? 'bookmarkFilled' : 'bookmark'}
-                  color={isWatched ? colors.warning : colors.textSecondary}
-                  size={17}
+                  color={isWatched ? colors.warning : colors.textPrimary}
+                  size={22}
                 />
               </Pressable>
 
@@ -1655,9 +1656,10 @@ const styles = StyleSheet.create({
   },
   copyChipText: { fontSize: 10.5, fontWeight: '600' },
   watchHeaderBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
   },

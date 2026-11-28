@@ -534,7 +534,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
                 style={({ pressed }) => [
                   styles.watchMiniBtn,
                   {
-                    backgroundColor: isWatched ? colors.warningTint : 'transparent',
+                    backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
+                    borderColor: isWatched ? colors.warning : colors.borderSubtle,
                     opacity: pressed ? 0.65 : 1,
                   },
                 ]}
@@ -542,8 +543,8 @@ export const BidsHubScreen: React.FC<BidsHubScreenProps> = ({
               >
                 <AppIcon
                   name={isWatched ? 'bookmarkFilled' : 'bookmark'}
-                  color={isWatched ? colors.warning : colors.textMuted}
-                  size={15}
+                  color={isWatched ? colors.warning : colors.textSecondary}
+                  size={21}
                 />
               </Pressable>
             </View>
@@ -1178,9 +1179,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   watchMiniBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },

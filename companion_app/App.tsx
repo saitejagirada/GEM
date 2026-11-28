@@ -24,7 +24,7 @@ import {
   View,
 } from 'react-native';
 import { ThemeProvider, useTheme, DESIGN_TOKENS } from './theme/ThemeContext';
-import { AppIcon, type AppIconName } from './components/AppIcons';
+import { AnimatedProfileIcon, AppIcon, type AppIconName } from './components/AppIcons';
 import { HomeScreen, type HomeNavigateParams } from './screens/HomeScreen';
 import { MarketplaceScreen } from './screens/MarketplaceScreen';
 import { BidsHubScreen } from './screens/BidsHubScreen';
@@ -34,6 +34,7 @@ import { CategoriesScreen } from './screens/CategoriesScreen';
 import { PortalRegistrationScreen } from './screens/PortalRegistrationScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { MoreProfileScreen } from './screens/MoreProfileScreen';
+import { SavedBookmarksScreen } from './screens/SavedBookmarksScreen';
 import { BidInspectorScreen } from './screens/BidInspectorScreen';
 import { MyWorkScreen, type PreparationSection } from './screens/MyWorkScreen';
 import { OfficialPortalScreen } from './screens/OfficialPortalScreen';
@@ -56,6 +57,7 @@ export type SubScreen =
   | 'CATEGORIES'
   | 'CONTRACTS'
   | 'PORTFOLIO'
+  | 'BOOKMARKS'
   | 'PORTAL'
   | 'REG_BUYER'
   | 'REG_SELLER'
@@ -70,7 +72,7 @@ const BOTTOM_NAV_ITEMS: {
   { id: 'SEARCH', labelKey: 'tabSearch', icon: 'search' },
   { id: 'BIDS', labelKey: 'tabBids', icon: 'bids' },
   { id: 'AUCTIONS', labelKey: 'tabAuctions', icon: 'auctions' },
-  { id: 'MORE', labelKey: 'tabMore', icon: 'more' },
+  { id: 'MORE', labelKey: 'tabMore', icon: 'profile' },
 ];
 
 const MainAppContent: React.FC = () => {
@@ -81,6 +83,7 @@ const MainAppContent: React.FC = () => {
   const splashOpacity = useRef(new Animated.Value(1)).current;
 
   const [activeTab, setActiveTab] = useState<MainTab>('HOME');
+  const [accountTapCount, setAccountTapCount] = useState<number>(0);
   const [subScreen, setSubScreen] = useState<SubScreen>('NONE');
   const [bids, setBids] = useState<DeconstructedBidDoc[]>([]);
   const [totalPortalBids, setTotalPortalBids] = useState<number>(0);
@@ -303,6 +306,8 @@ const MainAppContent: React.FC = () => {
       setSubScreen('CONTRACTS');
     } else if (target === 'PORTFOLIO') {
       setSubScreen('PORTFOLIO');
+    } else if (target === 'BOOKMARKS') {
+      setSubScreen('BOOKMARKS');
     } else if (target === 'PORTAL') {
       setSubScreen('PORTAL');
     } else if (target === 'CATEGORIES') {
@@ -471,6 +476,17 @@ const MainAppContent: React.FC = () => {
             />
           </View>
         )}
+        {subScreen === 'BOOKMARKS' && (
+          <SavedBookmarksScreen
+            onBack={() => setSubScreen('NONE')}
+            onInspectBid={(bid) => setSelectedBid(bid)}
+            onPrepareDocuments={openPreparation}
+            onBrowseBids={() => {
+              setSubScreen('NONE');
+              setActiveTab('BIDS');
+            }}
+          />
+        )}
         {subScreen === 'REG_BUYER' && (
           <PortalRegistrationScreen initialMode="BUYER" onBack={() => setSubScreen('NONE')} />
         )}
@@ -526,6 +542,7 @@ const MainAppContent: React.FC = () => {
                   setWorkInitialSection('LOCKER');
                   setSubScreen('PORTFOLIO');
                 }}
+                onOpenBookmarks={() => setSubScreen('BOOKMARKS')}
                 onOpenOfficialPortal={() => setSubScreen('PORTAL')}
               />
             )}
@@ -551,6 +568,9 @@ const MainAppContent: React.FC = () => {
               unstable_pressDelay={0}
               android_ripple={{ color: 'rgba(0, 0, 0, 0.08)', borderless: false }}
               onPress={() => {
+                if (item.id === 'MORE') {
+                  setAccountTapCount((c) => c + 1);
+                }
                 setActiveTab(item.id);
                 setSubScreen('NONE');
               }}
@@ -563,19 +583,31 @@ const MainAppContent: React.FC = () => {
               hitSlop={6}
             >
               <View style={styles.navIconWrap}>
-                <AppIcon
-                  name={item.icon}
-                  color={isActive ? colors.primary : colors.textMuted}
-                  size={18}
-                />
+                {item.id === 'MORE' ? (
+                  <AnimatedProfileIcon
+                    color={isActive ? colors.primary : colors.textMuted}
+                    size={21}
+                    active={isActive}
+                    pulseKey={accountTapCount}
+                  />
+                ) : (
+                  <AppIcon
+                    name={item.icon}
+                    color={isActive ? colors.primary : colors.textMuted}
+                    size={18}
+                  />
+                )}
               </View>
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.76}
                 style={[
                   styles.navLabel,
                   {
                     color: isActive ? colors.primary : colors.textMuted,
                     fontWeight: isActive ? '700' : '500',
-                    fontSize: 11 * fontMultiplier,
+                    fontSize: 10.5 * fontMultiplier,
                   },
                 ]}
               >

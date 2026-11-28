@@ -4,8 +4,8 @@
  * relying on external icon-font native linking or decorative emojis.
  */
 
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 export type AppIconName =
   | 'home'
@@ -445,10 +445,11 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
     case 'bookmark':
     case 'bookmarkFilled': {
       const filled = name === 'bookmarkFilled';
-      const bw = Math.round(s * 0.62);
-      const bh = Math.round(s * 0.8);
+      const bw = Math.round(s * 0.68);
+      const bh = Math.round(s * 0.86);
+      const bStroke = Math.max(1.85, s * 0.11);
       if (filled) {
-        const notchH = Math.max(3, Math.round(bh * 0.34));
+        const notchH = Math.max(4, Math.round(bh * 0.34));
         const bodyH = bh - notchH;
         const halfW = bw / 2;
         return (
@@ -458,8 +459,8 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
                 style={{
                   width: bw,
                   height: bodyH + 0.5,
-                  borderTopLeftRadius: 2.5,
-                  borderTopRightRadius: 2.5,
+                  borderTopLeftRadius: 3,
+                  borderTopRightRadius: 3,
                   backgroundColor: color,
                 }}
               />
@@ -489,7 +490,7 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
           </View>
         );
       }
-      const innerW = Math.max(4, bw - stroke * 2);
+      const innerW = Math.max(5, bw - bStroke * 2);
       const diagSide = innerW * 0.74;
       return (
         <View style={[styles.box, { width: s, height: s }]}>
@@ -497,11 +498,11 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
             style={{
               width: bw,
               height: bh,
-              borderTopLeftRadius: 2.5,
-              borderTopRightRadius: 2.5,
-              borderTopWidth: stroke,
-              borderLeftWidth: stroke,
-              borderRightWidth: stroke,
+              borderTopLeftRadius: 3,
+              borderTopRightRadius: 3,
+              borderTopWidth: bStroke,
+              borderLeftWidth: bStroke,
+              borderRightWidth: bStroke,
               borderColor: color,
               overflow: 'hidden',
               alignItems: 'center',
@@ -512,8 +513,8 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
               style={{
                 width: diagSide,
                 height: diagSide,
-                borderTopWidth: stroke,
-                borderLeftWidth: stroke,
+                borderTopWidth: bStroke,
+                borderLeftWidth: bStroke,
                 borderColor: color,
                 transform: [{ translateY: diagSide * 0.5 }, { rotate: '45deg' }],
               }}
@@ -818,6 +819,164 @@ export const AppIcon: React.FC<AppIconProps> = React.memo(({ name, color, size =
       return null;
   }
 });
+
+interface AnimatedProfileIconProps {
+  color: string;
+  size?: number;
+  active?: boolean;
+  pulseKey?: number;
+}
+
+/**
+ * Animated User Account person logo modeled directly on the My Business Profile emblem:
+ * - Circular avatar ring with crisp head & shoulders silhouette
+ * - Smooth breathing scale + subtle floating head motion
+ * - Spring pop + soft halo pulse whenever selected or tapped
+ */
+export const AnimatedProfileIcon: React.FC<AnimatedProfileIconProps> = React.memo(
+  ({ color, size = 20, active = false, pulseKey = 0 }) => {
+    const s = size;
+    const stroke = Math.max(1.6, s * 0.1);
+    const popScale = useRef(new Animated.Value(1)).current;
+    const headFloat = useRef(new Animated.Value(0)).current;
+    const ringPulse = useRef(new Animated.Value(0)).current;
+
+    // Gentle, continuous alive breathing animation for the person logo
+    useEffect(() => {
+      const floatLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(headFloat, {
+            toValue: -1.1,
+            duration: 1350,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(headFloat, {
+            toValue: 0,
+            duration: 1350,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      floatLoop.start();
+      return () => floatLoop.stop();
+    }, [headFloat]);
+
+    // Soft halo pulse when active
+    useEffect(() => {
+      if (!active) {
+        ringPulse.setValue(0);
+        return;
+      }
+      const haloLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringPulse, {
+            toValue: 1,
+            duration: 1700,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringPulse, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+          Animated.delay(500),
+        ])
+      );
+      haloLoop.start();
+      return () => haloLoop.stop();
+    }, [active, ringPulse]);
+
+    // Crisp spring pop when tapped or activated
+    useEffect(() => {
+      if (!active && pulseKey === 0) return;
+      popScale.setValue(0.86);
+      Animated.spring(popScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 190,
+        useNativeDriver: true,
+      }).start();
+    }, [active, pulseKey, popScale]);
+
+    const haloScale = ringPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.92, 1.32],
+    });
+    const haloOpacity = ringPulse.interpolate({
+      inputRange: [0, 0.35, 1],
+      outputRange: [0.34, 0.22, 0],
+    });
+
+    return (
+      <Animated.View
+        style={[
+          styles.box,
+          {
+            width: s,
+            height: s,
+            transform: [{ scale: popScale }],
+          },
+        ]}
+      >
+        {active ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: s * 0.86,
+              height: s * 0.86,
+              borderRadius: s * 0.43,
+              borderWidth: Math.max(1.2, stroke * 0.75),
+              borderColor: color,
+              opacity: haloOpacity,
+              transform: [{ scale: haloScale }],
+            }}
+          />
+        ) : null}
+        <View
+          style={{
+            width: s * 0.84,
+            height: s * 0.84,
+            borderRadius: s * 0.42,
+            borderWidth: stroke,
+            borderColor: color,
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            overflow: 'hidden',
+            paddingTop: s * 0.1,
+          }}
+        >
+          <Animated.View
+            style={{
+              width: s * 0.28,
+              height: s * 0.28,
+              borderRadius: s * 0.14,
+              borderWidth: stroke * 0.92,
+              borderColor: color,
+              marginBottom: s * 0.055,
+              transform: [{ translateY: headFloat }],
+            }}
+          />
+          <View
+            style={{
+              width: s * 0.56,
+              height: s * 0.29,
+              borderTopLeftRadius: s * 0.28,
+              borderTopRightRadius: s * 0.28,
+              borderWidth: stroke * 0.92,
+              borderBottomWidth: 0,
+              borderColor: color,
+              marginBottom: -stroke * 0.5,
+            }}
+          />
+        </View>
+      </Animated.View>
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   box: {

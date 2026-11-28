@@ -26,6 +26,8 @@ describe('LanguageAndGlossaryService - Bilingual EN/HI & GeM Glossary', () => {
     assert.strictEqual(await LanguageAndGlossaryService.loadLanguage(), 'en');
     assert.strictEqual(LanguageAndGlossaryService.translate('en', 'tabBids'), 'Bids');
     assert.strictEqual(LanguageAndGlossaryService.translate('hi', 'tabBids'), 'निविदाएं');
+    assert.strictEqual(LanguageAndGlossaryService.translate('en', 'tabMore'), 'User Account');
+    assert.strictEqual(LanguageAndGlossaryService.translate('en', 'savedBookmarks'), 'Saved Bookmarks');
 
     await LanguageAndGlossaryService.saveLanguage('hi');
     assert.strictEqual(await LanguageAndGlossaryService.loadLanguage(), 'hi');

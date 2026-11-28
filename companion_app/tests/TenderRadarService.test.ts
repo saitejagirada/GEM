@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   TenderRadarService,
   buildClosingReminderUrl,
+  buildSavedBookmarksReview,
   filterRelevantRadarBids,
   pickBestGeMSearchQuery,
   sanitizeRadarKeyword,
@@ -185,5 +186,59 @@ describe('TenderRadarService - Daily Tender Radar & Watchlist', () => {
     assert.ok(url.startsWith('https://calendar.google.com/calendar/render?'));
     assert.ok(url.includes('GEM%2F2026%2FB%2F8120126'));
     assert.ok(url.includes('bidplus.gem.gov.in'));
+  });
+
+  it('categorizes saved bookmarks into Open (urgent-first) vs Closed/Cancelled and clears only closed entries', async () => {
+    const now = Date.now();
+    const urgentOpen = makeBid('GEM/2026/B/9100001', 'Urgent Oxygen Concentrator', 6);
+    const laterOpenRa: DeconstructedBidDoc = {
+      ...makeBid('GEM/2026/R/9100002', 'Live Reverse Auction Cables', 72),
+      type: 'RA',
+      isRa: true,
+    };
+    const closedBid = makeBid('GEM/2026/B/9100003', 'Expired Lab Centrifuge', -10);
+    const cancelledBid: DeconstructedBidDoc = {
+      ...makeBid('GEM/2026/B/9100004', 'Cancelled Security Contract', 24),
+      lifecycleStatus: 'CANCELLED',
+      isCancelled: true,
+    };
+
+    const review = buildSavedBookmarksReview(
+      [
+        { bid: laterOpenRa, savedAtUtc: new Date(now - 5000).toISOString() },
+        { bid: closedBid, savedAtUtc: new Date(now - 4000).toISOString() },
+        { bid: urgentOpen, savedAtUtc: new Date(now - 3000).toISOString() },
+        { bid: cancelledBid, savedAtUtc: new Date(now - 2000).toISOString() },
+      ],
+      now
+    );
+
+    assert.equal(review.schemaVersion, 2);
+    assert.equal(review.totalCount, 4);
+    assert.equal(review.openCount, 2);
+    assert.equal(review.closedCount, 2);
+    // Open sorted soonest closing first
+    assert.equal(review.openBookmarks[0].bidNumber, 'GEM/2026/B/9100001');
+    assert.equal(review.openBookmarks[0].detailedStatus, 'CLOSING_SOON');
+    assert.equal(review.openBookmarks[1].bidNumber, 'GEM/2026/R/9100002');
+    assert.equal(review.openBookmarks[1].detailedStatus, 'LIVE_RA');
+
+    // Closed contains both expired and cancelled tenders with proper labels
+    const closedById = new Map(review.closedBookmarks.map((b) => [b.bidNumber, b]));
+    assert.equal(closedById.get('GEM/2026/B/9100003')?.detailedStatus, 'CLOSED');
+    assert.ok(closedById.get('GEM/2026/B/9100003')?.remainingLabel.includes('Closed'));
+    assert.equal(closedById.get('GEM/2026/B/9100004')?.detailedStatus, 'CANCELLED');
+    assert.equal(closedById.get('GEM/2026/B/9100004')?.remainingLabel, 'Cancelled');
+
+    // Service-level toggle + clearClosedBookmarks keeps Open tenders untouched
+    await TenderRadarService.toggleWatch(urgentOpen);
+    await TenderRadarService.toggleWatch(closedBid);
+    await TenderRadarService.toggleWatch(cancelledBid);
+    const removed = await TenderRadarService.clearClosedBookmarks(now);
+    assert.equal(removed, 2);
+    const remaining = TenderRadarService.getSavedBookmarksReview(now);
+    assert.equal(remaining.openCount, 1);
+    assert.equal(remaining.closedCount, 0);
+    assert.equal(remaining.openBookmarks[0].bidNumber, 'GEM/2026/B/9100001');
   });
 });

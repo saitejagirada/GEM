@@ -368,7 +368,8 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
                   style={({ pressed }) => [
                     styles.watchMiniBtn,
                     {
-                      backgroundColor: isWatched ? colors.warningTint : 'transparent',
+                      backgroundColor: isWatched ? colors.warningTint : colors.surfaceSubtle,
+                      borderColor: isWatched ? colors.warning : colors.borderSubtle,
                       opacity: pressed ? 0.65 : 1,
                     },
                   ]}
@@ -378,8 +379,8 @@ export const AuctionsHubScreen: React.FC<AuctionsHubScreenProps> = ({ onPrepareD
                 >
                   <AppIcon
                     name={isWatched ? 'bookmarkFilled' : 'bookmark'}
-                    color={isWatched ? colors.warning : colors.textMuted}
-                    size={15}
+                    color={isWatched ? colors.warning : colors.textSecondary}
+                    size={21}
                   />
                 </Pressable>
               ) : null}
@@ -776,9 +777,10 @@ const styles = StyleSheet.create({
   countdownDot: { width: 5, height: 5, borderRadius: 2.5 },
   countdownText: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   watchMiniBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },

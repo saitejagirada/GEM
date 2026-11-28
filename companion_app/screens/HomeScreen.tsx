@@ -52,7 +52,16 @@ export interface HomeScreenProps {
   bids: DeconstructedBidDoc[];
   totalPortalBids?: number;
   onNavigateTab: (
-    tab: 'MARKET' | 'BIDS' | 'AUCTIONS' | 'ORDERS' | 'PORTAL' | 'CATEGORIES' | 'HELP' | 'MORE',
+    tab:
+      | 'MARKET'
+      | 'BIDS'
+      | 'AUCTIONS'
+      | 'ORDERS'
+      | 'PORTAL'
+      | 'CATEGORIES'
+      | 'HELP'
+      | 'MORE'
+      | 'BOOKMARKS',
     params?: HomeNavigateParams
   ) => void;
   onSelectBid: (bid: DeconstructedBidDoc) => void;
@@ -369,19 +378,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <View style={styles.sectionTitleRow}>
             <View style={styles.sectionTitleLeft}>
               <View style={[styles.miniIconBadge, { backgroundColor: colors.warningTint }]}>
-                <AppIcon name="bookmarkFilled" color={colors.warning} size={13} />
+                <AppIcon name="bookmarkFilled" color={colors.warning} size={18} />
               </View>
               <Text style={[styles.sectionTitleText, { color: colors.textPrimary }]}>
                 {t('watchedTenders')} ({radar.watched.length})
               </Text>
             </View>
-            <Pressable
-              onPress={() => void TenderRadarService.checkWatchedCorrigenda()}
-              hitSlop={8}
-              style={[styles.tinyActionPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
-            >
-              <Text style={[styles.tinyActionText, { color: colors.primary }]}>Check Updates ↻</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Pressable
+                onPress={() => onNavigateTab('BOOKMARKS')}
+                hitSlop={8}
+                style={[styles.tinyActionPill, { backgroundColor: colors.primaryTint, borderColor: colors.primaryTint }]}
+              >
+                <Text style={[styles.tinyActionText, { color: colors.primary }]}>Review All ›</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void TenderRadarService.checkWatchedCorrigenda()}
+                hitSlop={8}
+                style={[styles.tinyActionPill, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}
+              >
+                <Text style={[styles.tinyActionText, { color: colors.primary }]}>↻</Text>
+              </Pressable>
+            </View>
           </View>
 
           {radar.watched.slice(0, 5).map((entry) => {
@@ -810,16 +828,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         >
                           <AppIcon
                             name={isSaved ? 'bookmarkFilled' : 'bookmark'}
-                            color={isSaved ? colors.warning : colors.textMuted}
-                            size={12}
+                            color={isSaved ? colors.warning : colors.textSecondary}
+                            size={18}
                           />
                           <Text
                             style={[
                               styles.watchStarText,
-                              { color: isSaved ? colors.warning : colors.textSecondary },
+                              { color: isSaved ? colors.warning : colors.textPrimary },
                             ]}
                           >
-                            {isSaved ? 'Watched' : 'Watch'}
+                            {isSaved ? 'Saved' : 'Watch'}
                           </Text>
                         </Pressable>
                       </View>
@@ -1059,16 +1077,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   >
                     <AppIcon
                       name={isSaved ? 'bookmarkFilled' : 'bookmark'}
-                      color={isSaved ? colors.warning : colors.textMuted}
-                      size={11}
+                      color={isSaved ? colors.warning : colors.textSecondary}
+                      size={18}
                     />
                     <Text
                       style={[
                         styles.watchStarText,
-                        { color: isSaved ? colors.warning : colors.textSecondary },
+                        { color: isSaved ? colors.warning : colors.textPrimary },
                       ]}
                     >
-                      {isSaved ? 'Watched' : 'Watch'}
+                      {isSaved ? 'Saved' : 'Watch'}
                     </Text>
                   </Pressable>
                 </View>
@@ -1460,13 +1478,14 @@ const styles = StyleSheet.create({
   watchStarBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     borderWidth: 1,
-    borderRadius: 7,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 10,
+    minHeight: 36,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
   },
-  watchStarText: { fontSize: 10.5, fontWeight: '700' },
+  watchStarText: { fontSize: 12.5, fontWeight: '700' },
   radarBidTitle: { fontSize: 13.5, fontWeight: '700', lineHeight: 18.5, marginBottom: 4 },
   radarBidMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   radarBidDept: { fontSize: 11.5, flex: 1 },
